@@ -67,12 +67,6 @@ const hours = Array.from({ length: 15 }, (_, index) => index + 6);
 const calendarStartMinutes = 6 * 60;
 const calendarEndMinutes = 20 * 60;
 const minuteHeight = 1.1;
-const quarterHourSlots = Array.from({ length: (calendarEndMinutes - calendarStartMinutes) / 15 + 1 }, (_, index) => {
-  const minutes = calendarStartMinutes + index * 15;
-  const hour = Math.floor(minutes / 60).toString().padStart(2, "0");
-  const minute = (minutes % 60).toString().padStart(2, "0");
-  return `${hour}:${minute}`;
-});
 const timeOptions = Array.from({ length: 57 }, (_, index) => {
   const minutes = 6 * 60 + index * 15;
   const hour = Math.floor(minutes / 60).toString().padStart(2, "0");
@@ -143,6 +137,12 @@ function moveItemToDropTarget<T>(items: T[], fromIndex: number, toIndex: number)
 function timeToMinutes(time: string) {
   const [hour, minute] = time.split(":").map(Number);
   return hour * 60 + minute;
+}
+
+function minutesToTime(minutes: number) {
+  const hour = Math.floor(minutes / 60).toString().padStart(2, "0");
+  const minute = (minutes % 60).toString().padStart(2, "0");
+  return `${hour}:${minute}`;
 }
 
 function App() {
@@ -566,6 +566,7 @@ function App() {
                   taskById={taskById}
                   onDrop={handleDrop}
                   onBookingDrag={(bookingId) => setDragPayload({ kind: "booking", bookingId })}
+                  isDragging={dragPayload !== null}
                   onBookingChange={updateBooking}
                   onBookingDelete={deleteBooking}
                   onCapacityChange={(patch) => updateDailyCapacity(date, patch)}
@@ -691,6 +692,7 @@ function DayColumn({
   taskById,
   onDrop,
   onBookingDrag,
+  isDragging,
   onBookingChange,
   onBookingDelete,
   onCapacityChange
@@ -701,6 +703,7 @@ function DayColumn({
   taskById: Map<string, Task>;
   onDrop: (date: string, startTime?: string) => void;
   onBookingDrag: (bookingId: string) => void;
+  isDragging: boolean;
   onBookingChange: (bookingId: string, patch: Partial<Booking>) => void;
   onBookingDelete: (bookingId: string) => void;
   onCapacityChange: (patch: Partial<DailyCapacity>) => void;
@@ -713,6 +716,16 @@ function DayColumn({
   const fillPercent = Math.min(100, (bookedMinutes / capacity.dayCapacityMinutes) * 100);
   const planningPercent = Math.min(100, (capacity.planningCapacityMinutes / capacity.dayCapacityMinutes) * 100);
   const timelineHeight = (calendarEndMinutes - calendarStartMinutes) * minuteHeight;
+  const getTimelineDropTime = (event: React.DragEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const y = Math.max(0, Math.min(rect.height, event.clientY - rect.top));
+    const rawMinutes = calendarStartMinutes + y / minuteHeight;
+    const snappedMinutes = Math.max(
+      calendarStartMinutes,
+      Math.min(calendarEndMinutes, Math.round(rawMinutes / 15) * 15)
+    );
+    return minutesToTime(snappedMinutes);
+  };
 
   return (
     <section className="day-column">
@@ -805,30 +818,28 @@ function DayColumn({
             </div>
           ))}
         </div>
-        <div className="timeline" style={{ height: timelineHeight }}>
+        <div
+          className={`timeline ${isDragging ? "dragging-active" : ""}`}
+          style={{ height: timelineHeight }}
+          onDragOver={(event) => {
+            event.preventDefault();
+            setDropPreview({ area: "time", startTime: getTimelineDropTime(event) });
+          }}
+          onDragLeave={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropPreview(null);
+          }}
+          onDrop={(event) => {
+            event.preventDefault();
+            const startTime = getTimelineDropTime(event);
+            setDropPreview(null);
+            onDrop(date, startTime);
+          }}
+        >
           {hours.map((hour) => (
             <div
               className="timeline-hour-line"
               key={hour}
               style={{ top: (hour * 60 - calendarStartMinutes) * minuteHeight }}
-            />
-          ))}
-          {quarterHourSlots.map((startTime) => (
-            <div
-              className="timeline-drop-slot"
-              key={startTime}
-              style={{ top: (timeToMinutes(startTime) - calendarStartMinutes) * minuteHeight }}
-              onDragOver={(event) => {
-                event.preventDefault();
-                setDropPreview({ area: "time", startTime });
-              }}
-              onDragLeave={(event) => {
-                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropPreview(null);
-              }}
-              onDrop={() => {
-                setDropPreview(null);
-                onDrop(date, startTime);
-              }}
             />
           ))}
           {dropPreview?.area === "time" && dropPreview.startTime && (

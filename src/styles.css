@@ -644,6 +644,10 @@ button:disabled {
   z-index: 20;
 }
 
+.timeline.dragging-active .timeline-drop-slot {
+  z-index: 24;
+}
+
 .scheduled-booking .booking-card {
   height: 100%;
   overflow: hidden;

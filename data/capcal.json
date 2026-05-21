@@ -94,9 +94,7 @@
       "treeOrder": 9
     }
   ],
-  "prioTaskIds": [
-    "task-2"
-  ],
+  "prioTaskIds": [],
   "bookings": [
     {
       "id": "booking-1",
@@ -137,7 +135,7 @@
       "id": "booking-eaft0nni4l9-mpfg1pps",
       "taskId": "task-3",
       "date": "2026-05-22",
-      "startTime": "10:30",
+      "startTime": "11:30",
       "durationMinutes": 30
     },
     {
@@ -157,7 +155,7 @@
       "id": "booking-fii47kogo2-mpfgkgr6",
       "taskId": "task-4v9wagws2k2-mpfc8bkx",
       "date": "2026-05-22",
-      "startTime": "08:00",
+      "startTime": "09:00",
       "durationMinutes": 120
     },
     {
@@ -186,6 +184,20 @@
       "taskId": "task-jhdul0tv6qd-mpfgcyn8",
       "date": "2026-05-22",
       "startTime": "06:30",
+      "durationMinutes": 30
+    },
+    {
+      "id": "booking-bknnc9paydg-mpfgx79l",
+      "taskId": "task-2",
+      "date": "2026-05-23",
+      "startTime": "06:30",
+      "durationMinutes": 30
+    },
+    {
+      "id": "booking-bhhoxgyo8eh-mpfgz49c",
+      "taskId": "task-jhdul0tv6qd-mpfgcyn8",
+      "date": "2026-05-23",
+      "startTime": "10:15",
       "durationMinutes": 30
     }
   ]
