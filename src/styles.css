@@ -191,6 +191,11 @@ button:disabled {
   font-size: 13px;
 }
 
+.save-dirty {
+  border-color: #d99a23;
+  color: #9b6b12;
+}
+
 .save-error {
   border-color: #d55b5b;
   color: #a13535;

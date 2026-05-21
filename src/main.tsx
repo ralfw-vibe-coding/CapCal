@@ -211,7 +211,7 @@ function createTimeOptions(startTime: string, endTime: string) {
 
 function App() {
   const [state, setState] = useState<AppState | null>(null);
-  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [saveState, setSaveState] = useState<"idle" | "dirty" | "saving" | "saved" | "error">("idle");
   const [newTask, setNewTask] = useState({ title: "", dueDate: "", estimateMinutes: 30 });
   const [quickAdd, setQuickAdd] = useState({ prio: "", cal: "" });
   const [dragPayload, setDragPayload] = useState<DragPayload | null>(null);
@@ -219,31 +219,103 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [treeFilters, setTreeFilters] = useState<{ query: string; status: "All" | TaskStatus }>({ query: "", status: "All" });
   const settingsMenuRef = useRef<HTMLDivElement | null>(null);
+  const stateRef = useRef<AppState | null>(null);
+  const dirtyRef = useRef(false);
+  const hasLoadedRef = useRef(false);
+  const saveTimerRef = useRef<number | null>(null);
+  const stateVersionRef = useRef(0);
+  const saveCurrentStateRef = useRef<(options?: { keepalive?: boolean }) => Promise<void>>(async () => undefined);
 
   useEffect(() => {
     fetch("/api/state")
       .then((response) => response.json())
-      .then((loadedState) => setState(normalizeState(loadedState)))
+      .then((loadedState) => {
+        const normalizedState = normalizeState(loadedState);
+        stateRef.current = normalizedState;
+        setState(normalizedState);
+      })
       .catch(() => {
-        setState(normalizeState({ dailyCapacities: {}, tasks: [], prioTaskIds: [], bookings: [] }));
+        const fallbackState = normalizeState({ dailyCapacities: {}, tasks: [], prioTaskIds: [], bookings: [] });
+        stateRef.current = fallbackState;
+        setState(fallbackState);
         setSaveState("error");
       });
   }, []);
 
   useEffect(() => {
     if (!state) return;
+    stateRef.current = state;
+    if (!hasLoadedRef.current) {
+      hasLoadedRef.current = true;
+      setSaveState("saved");
+      return;
+    }
+
+    stateVersionRef.current += 1;
+    dirtyRef.current = true;
+    setSaveState("dirty");
+    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = window.setTimeout(() => {
+      void saveCurrentStateRef.current();
+    }, 5000);
+
+    return () => {
+      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+    };
+  }, [state]);
+
+  async function saveCurrentState(options: { keepalive?: boolean } = {}) {
+    const currentState = stateRef.current;
+    if (!currentState || !dirtyRef.current) return;
+    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+
+    const version = stateVersionRef.current;
     setSaveState("saving");
-    const timeout = window.setTimeout(() => {
-      fetch("/api/state", {
+    try {
+      await fetch("/api/state", {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(state)
-      })
-        .then(() => setSaveState("saved"))
-        .catch(() => setSaveState("error"));
-    }, 250);
-    return () => window.clearTimeout(timeout);
-  }, [state]);
+        body: JSON.stringify(currentState),
+        keepalive: options.keepalive
+      });
+      if (version === stateVersionRef.current) {
+        dirtyRef.current = false;
+        setSaveState("saved");
+      } else {
+        setSaveState("dirty");
+      }
+    } catch {
+      dirtyRef.current = true;
+      setSaveState("error");
+    }
+  }
+
+  saveCurrentStateRef.current = saveCurrentState;
+
+  useEffect(() => {
+    const flush = () => {
+      void saveCurrentStateRef.current({ keepalive: true });
+    };
+    const flushOnHidden = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    const retryOnOnline = () => {
+      if (dirtyRef.current) void saveCurrentStateRef.current();
+    };
+
+    window.addEventListener("beforeunload", flush);
+    window.addEventListener("pagehide", flush);
+    window.addEventListener("blur", flush);
+    window.addEventListener("online", retryOnOnline);
+    document.addEventListener("visibilitychange", flushOnHidden);
+    return () => {
+      window.removeEventListener("beforeunload", flush);
+      window.removeEventListener("pagehide", flush);
+      window.removeEventListener("blur", flush);
+      window.removeEventListener("online", retryOnOnline);
+      document.removeEventListener("visibilitychange", flushOnHidden);
+    };
+  }, []);
 
   const settings = state?.settings ?? defaultSettings;
   const defaultCapacity: DailyCapacity = {
@@ -569,7 +641,13 @@ function App() {
           <Metric icon={Loader} label="Started" value={startedCount} className="status-started" />
           <Metric icon={AlertOctagon} label="Blocked" value={blockedCount} className="status-blocked" />
           <div className={`save-pill save-${saveState}`}>
-            {saveState === "saving" ? "Speichert" : saveState === "error" ? "Speicherfehler" : "Gespeichert"}
+            {saveState === "saving"
+              ? "Speichert"
+              : saveState === "dirty"
+                ? "Ungespeichert"
+                : saveState === "error"
+                  ? "Speicherfehler"
+                  : "Gespeichert"}
           </div>
           <div className="settings-menu" ref={settingsMenuRef}>
             <button className="icon-button" title="Einstellungen" onClick={() => setSettingsOpen((open) => !open)}>

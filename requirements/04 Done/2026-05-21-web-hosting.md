@@ -126,3 +126,18 @@ STATE_PROVIDER=filesystem
 - Soll die Versionshistorie irgendwo in der UI sichtbar sein (z.B. "Wiederherstellen")? Oder rein als Sicherheitsnetz?
 - Soll ein maximales Alter für alte Snapshots gelten (z.B. alles älter als 30 Tage löschen)?
 - Authentifizierung: CapCal ist aktuell ohne Login — soll das so bleiben (URL = Zugriffsschutz) oder ist ein einfaches Passwort sinnvoll?
+
+---
+
+## Umsetzung
+
+Erledigt am 2026-05-21:
+
+- Provider-Abstraktion für `filesystem` und `postgres` ergänzt.
+- Filesystem-Provider speichert den aktuellen Stand in `DATABASE_PATH/capcal.json` und Snapshots getrennt unter `DATABASE_PATH/state-history/`.
+- Postgres-Provider legt `app_state` für den aktuellen Stand und `state_history` für versionierte Snapshots an.
+- Provider-Auswahl, `DATABASE_PATH`, `DATABASE_URL` und `SNAPSHOT_INTERVAL_MINUTES` werden aus `.env`, `.env.local` oder Netlify Environment gelesen.
+- Lokaler API-Server auf TypeScript umgestellt.
+- Netlify Function `GET/PUT /api/state` und `netlify.toml` ergänzt.
+- Frontend speichert automatisch nach 5 Sekunden, zeigt den Speicherzustand an und versucht offene Änderungen vor Reload, Tab-Schließen, Verbergen der Seite, Fensterwechsel und Rückkehr ins Netz zu sichern.
+- TypeScript-Build prüft jetzt auch lokalen Server und Netlify Function.

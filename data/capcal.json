@@ -107,6 +107,13 @@
       "date": "2026-05-23",
       "startTime": "06:00",
       "durationMinutes": 30
+    },
+    {
+      "id": "booking-i0oy8sdo9kb-mpft90ii",
+      "taskId": "task-2ck0924ehso-mpfjncuf",
+      "date": "2026-05-21",
+      "startTime": "05:15",
+      "durationMinutes": 105
     }
   ],
   "settings": {
