@@ -67,6 +67,12 @@ const hours = Array.from({ length: 15 }, (_, index) => index + 6);
 const calendarStartMinutes = 6 * 60;
 const calendarEndMinutes = 20 * 60;
 const minuteHeight = 1.1;
+const quarterHourSlots = Array.from({ length: (calendarEndMinutes - calendarStartMinutes) / 15 + 1 }, (_, index) => {
+  const minutes = calendarStartMinutes + index * 15;
+  const hour = Math.floor(minutes / 60).toString().padStart(2, "0");
+  const minute = (minutes % 60).toString().padStart(2, "0");
+  return `${hour}:${minute}`;
+});
 const timeOptions = Array.from({ length: 57 }, (_, index) => {
   const minutes = 6 * 60 + index * 15;
   const hour = Math.floor(minutes / 60).toString().padStart(2, "0");
@@ -700,6 +706,7 @@ function DayColumn({
   onCapacityChange: (patch: Partial<DailyCapacity>) => void;
 }) {
   const [editingBookingId, setEditingBookingId] = useState<string | null>(null);
+  const [dropPreview, setDropPreview] = useState<{ area: "allocation" | "time"; startTime?: string } | null>(null);
   const allocations = bookings.filter((booking) => !booking.startTime);
   const scheduled = bookings.filter((booking) => booking.startTime).sort((a, b) => a.startTime!.localeCompare(b.startTime!));
   const bookedMinutes = bookings.reduce((sum, booking) => sum + booking.durationMinutes, 0);
@@ -748,7 +755,21 @@ function DayColumn({
           </label>
         </div>
       </div>
-      <div className="allocation-zone" onDragOver={(event) => event.preventDefault()} onDrop={() => onDrop(date)}>
+      <div
+        className="allocation-zone"
+        onDragOver={(event) => {
+          event.preventDefault();
+          setDropPreview({ area: "allocation" });
+        }}
+        onDragLeave={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropPreview(null);
+        }}
+        onDrop={() => {
+          setDropPreview(null);
+          onDrop(date);
+        }}
+      >
+        {dropPreview?.area === "allocation" && <div className="allocation-drop-preview">Hier als Allokation einbuchen</div>}
         {allocations.map((booking) => (
           <div className="booking-shell" key={booking.id}>
             <BookingCard
@@ -790,10 +811,34 @@ function DayColumn({
               className="timeline-hour-line"
               key={hour}
               style={{ top: (hour * 60 - calendarStartMinutes) * minuteHeight }}
-              onDragOver={(event) => event.preventDefault()}
-              onDrop={() => onDrop(date, `${hour.toString().padStart(2, "0")}:00`)}
             />
           ))}
+          {quarterHourSlots.map((startTime) => (
+            <div
+              className="timeline-drop-slot"
+              key={startTime}
+              style={{ top: (timeToMinutes(startTime) - calendarStartMinutes) * minuteHeight }}
+              onDragOver={(event) => {
+                event.preventDefault();
+                setDropPreview({ area: "time", startTime });
+              }}
+              onDragLeave={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropPreview(null);
+              }}
+              onDrop={() => {
+                setDropPreview(null);
+                onDrop(date, startTime);
+              }}
+            />
+          ))}
+          {dropPreview?.area === "time" && dropPreview.startTime && (
+            <div
+              className="timeline-drop-preview"
+              style={{ top: (timeToMinutes(dropPreview.startTime) - calendarStartMinutes) * minuteHeight }}
+            >
+              <span>{dropPreview.startTime}</span>
+            </div>
+          )}
           {scheduled.map((booking) => {
             const startMinutes = timeToMinutes(booking.startTime!);
             const top = Math.max(0, (startMinutes - calendarStartMinutes) * minuteHeight);
