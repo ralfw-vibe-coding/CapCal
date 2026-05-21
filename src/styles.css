@@ -414,6 +414,16 @@ button:disabled {
   font-size: 12px;
 }
 
+.prio-duration {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  height: 32px;
+  padding: 0 7px;
+  width: 88px;
+}
+
 .cal-tools {
   align-items: center;
   border-bottom: 1px solid var(--line);

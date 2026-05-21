@@ -62,8 +62,8 @@
       "id": "task-4v9wagws2k2-mpfc8bkx",
       "title": "Mittagessen",
       "dueDate": "2026-05-21",
-      "estimateMinutes": 30,
-      "status": "Aborted",
+      "estimateMinutes": 120,
+      "status": "Started",
       "done": true,
       "treeOrder": 6
     },
@@ -88,17 +88,15 @@
     {
       "id": "task-d3kh95kuvyk-mpfgbu3c",
       "title": "neu in prio",
-      "estimateMinutes": 30,
-      "status": "Ready",
+      "estimateMinutes": 195,
+      "status": "Started",
       "done": false,
       "treeOrder": 9
     }
   ],
   "prioTaskIds": [
     "task-2",
-    "task-4v9wagws2k2-mpfc8bkx",
     "task-3",
-    "task-d3kh95kuvyk-mpfgbu3c",
     "task-jhdul0tv6qd-mpfgcyn8"
   ],
   "bookings": [
@@ -155,6 +153,20 @@
       "taskId": "task-wjfsryzc3ak-mpfgctk7",
       "date": "2026-05-21",
       "durationMinutes": 30
+    },
+    {
+      "id": "booking-fii47kogo2-mpfgkgr6",
+      "taskId": "task-4v9wagws2k2-mpfc8bkx",
+      "date": "2026-05-22",
+      "startTime": "08:00",
+      "durationMinutes": 120
+    },
+    {
+      "id": "booking-nl40dml4zh-mpfgko1n",
+      "taskId": "task-d3kh95kuvyk-mpfgbu3c",
+      "date": "2026-05-22",
+      "startTime": "16:00",
+      "durationMinutes": 195
     }
   ]
 }

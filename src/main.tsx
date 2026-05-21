@@ -295,7 +295,16 @@ function App() {
       tasks: draft.tasks.map((task) =>
         task.id === taskId && task.status !== "Done" ? { ...task, status: "Started" } : task
       ),
-      bookings: [...draft.bookings, { id: uid("booking"), taskId, date, startTime, durationMinutes: defaultDuration }]
+      bookings: [
+        ...draft.bookings,
+        {
+          id: uid("booking"),
+          taskId,
+          date,
+          startTime,
+          durationMinutes: draft.tasks.find((task) => task.id === taskId)?.estimateMinutes ?? defaultDuration
+        }
+      ]
     }));
   }
 
@@ -477,10 +486,22 @@ function App() {
                   <StatusIcon status={task.status} />
                   <div className="prio-card-main">
                     <strong>{task.title}</strong>
-                    <span>
-                      {formatOptionalDate(task.dueDate)} · {minutesToTimeLabel(task.estimateMinutes)}
-                    </span>
+                    <span>{formatOptionalDate(task.dueDate)}</span>
                   </div>
+                  <select
+                    className="prio-duration"
+                    aria-label="Dauer in Priorisierung"
+                    value={task.estimateMinutes}
+                    onChange={(event) => updateTask(task.id, { estimateMinutes: Number(event.target.value) })}
+                    onClick={(event) => event.stopPropagation()}
+                    onDragStart={(event) => event.preventDefault()}
+                  >
+                    {durationOptions.map((minutes) => (
+                      <option key={minutes} value={minutes}>
+                        {minutesToTimeLabel(minutes)}
+                      </option>
+                    ))}
+                  </select>
                   <button className="icon-button ghost" title="Aus Prio entfernen" onClick={() => removeFromPrio(task.id)}>
                     <Trash2 size={15} />
                   </button>
