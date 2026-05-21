@@ -1,7 +1,3 @@
-- farbe für "Ready" kräftiger.
-- farbe für "Backlog" gellgrau.
-
-
 - filter für tree: die auswahl nach status muss über chips gehen. ich will mehrere status werte auswählen können, zb will ich nur Ready und Blocked sehen.
 - der eingestellte filter soll auch gespeichert werden im app state.
 

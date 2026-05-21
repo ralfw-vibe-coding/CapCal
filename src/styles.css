@@ -947,21 +947,21 @@ button:disabled {
 }
 
 .status-backlog {
-  --status-color: #1f4f82;
-  --status-bg: #f3f7fb;
-  color: #1f4f82;
+  --status-color: #7b838c;
+  --status-bg: #f3f4f6;
+  color: #6b7280;
 }
 
 .status-ready {
-  --status-color: #d6a400;
-  --status-bg: #fff9df;
-  color: #a47b00;
+  --status-color: #c48900;
+  --status-bg: #fff3b8;
+  color: #8f5f00;
 }
 
 .status-started {
-  --status-color: #e07b22;
-  --status-bg: #fff4ea;
-  color: #b85e12;
+  --status-color: #FFA500;
+  --status-bg: #fff0e2;
+  color: #c96f00;
 }
 
 .status-blocked {
@@ -977,7 +977,7 @@ button:disabled {
 }
 
 .status-aborted {
-  --status-color: #7b4f35;
-  --status-bg: #f7f0eb;
-  color: #7b4f35;
+  --status-color: #F4A460;
+  --status-bg: #fdf0e3;
+  color: #9c5c24;
 }
