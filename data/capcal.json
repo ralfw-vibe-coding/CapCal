@@ -5,38 +5,7 @@
       "planningCapacityMinutes": 480
     }
   },
-  "tasks": [
-    {
-      "id": "task-nmkerrbj07-mpfhhkgg",
-      "title": "neue aufgabe",
-      "estimateMinutes": 30,
-      "status": "Started",
-      "done": false,
-      "treeOrder": 0
-    }
-  ],
+  "tasks": [],
   "prioTaskIds": [],
-  "bookings": [
-    {
-      "id": "booking-rn0qo7ymiu-mpfhhnrc",
-      "taskId": "task-nmkerrbj07-mpfhhkgg",
-      "date": "2026-05-21",
-      "startTime": "06:00",
-      "durationMinutes": 105
-    },
-    {
-      "id": "booking-pmgo9czssy-mpfhj5g7",
-      "taskId": "task-nmkerrbj07-mpfhhkgg",
-      "date": "2026-05-21",
-      "startTime": "11:00",
-      "durationMinutes": 210
-    },
-    {
-      "id": "booking-qe8j0hkle7e-mpfhmyjv",
-      "taskId": "task-nmkerrbj07-mpfhhkgg",
-      "date": "2026-05-21",
-      "startTime": "15:00",
-      "durationMinutes": 195
-    }
-  ]
+  "bookings": []
 }

@@ -92,6 +92,7 @@ const defaultCapacity: DailyCapacity = {
 };
 const dayCapacityOptions = Array.from({ length: 17 }, (_, index) => 120 + index * 30);
 const planningCapacityOptions = Array.from({ length: 17 }, (_, index) => 120 + index * 30);
+const visibleDayOptions = [7, 14, 21, 31];
 
 function uid(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
@@ -107,6 +108,11 @@ function formatDate(date: string) {
   return new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" }).format(
     new Date(`${date}T12:00:00`)
   );
+}
+
+function isWeekend(date: string) {
+  const day = new Date(`${date}T12:00:00`).getDay();
+  return day === 0 || day === 6;
 }
 
 function formatOptionalDate(date?: string) {
@@ -156,7 +162,8 @@ function App() {
   const [newTask, setNewTask] = useState({ title: "", dueDate: "", estimateMinutes: 30 });
   const [quickAdd, setQuickAdd] = useState({ prio: "", cal: "" });
   const [dragPayload, setDragPayload] = useState<DragPayload | null>(null);
-  const [visibleDays, setVisibleDays] = useState(8);
+  const [calendarStartDate, setCalendarStartDate] = useState(today);
+  const [visibleDayCount, setVisibleDayCount] = useState(7);
 
   useEffect(() => {
     fetch("/api/state")
@@ -184,7 +191,10 @@ function App() {
   }, [state]);
 
   const taskById = useMemo(() => new Map(state?.tasks.map((task) => [task.id, task]) ?? []), [state?.tasks]);
-  const days = useMemo(() => Array.from({ length: visibleDays }, (_, index) => addDays(today, index)), [visibleDays]);
+  const days = useMemo(
+    () => Array.from({ length: visibleDayCount }, (_, index) => addDays(calendarStartDate, index)),
+    [calendarStartDate, visibleDayCount]
+  );
   const workspaceColumns = [
     collapsed.tree ? "64px" : collapsed.cal ? "minmax(520px, 1.35fr)" : "minmax(360px, 0.95fr)",
     collapsed.prio ? "64px" : "minmax(310px, 0.8fr)",
@@ -552,11 +562,26 @@ function App() {
                 <Plus size={17} />
               </button>
             </div>
-            <button className="soft-button" onClick={() => setVisibleDays((count) => Math.max(4, count - 2))}>
-              <ChevronLeft size={15} /> Weniger
+            <select
+              className="day-count-select"
+              aria-label="Sichtbare Tage"
+              value={visibleDayCount}
+              onChange={(event) => setVisibleDayCount(Number(event.target.value))}
+            >
+              {visibleDayOptions.map((count) => (
+                <option key={count} value={count}>
+                  {count} Tage
+                </option>
+              ))}
+            </select>
+            <button className="soft-button icon-button" title="Zurück blättern" onClick={() => setCalendarStartDate(addDays(calendarStartDate, -visibleDayCount))}>
+              <ChevronLeft size={15} />
             </button>
-            <button className="soft-button" onClick={() => setVisibleDays((count) => count + 2)}>
-              Mehr <ChevronRight size={15} />
+            <button className="soft-button today-button" onClick={() => setCalendarStartDate(today)}>
+              Heute
+            </button>
+            <button className="soft-button icon-button" title="Vorwärts blättern" onClick={() => setCalendarStartDate(addDays(calendarStartDate, visibleDayCount))}>
+              <ChevronRight size={15} />
             </button>
           </div>
           <div className="calendar-scroll">
@@ -792,7 +817,7 @@ function DayColumn({
 
   return (
     <section className="day-column" ref={dayColumnRef}>
-      <header className={date === today ? "today" : ""}>{formatDate(date)}</header>
+      <header className={`${date === today ? "today" : ""} ${isWeekend(date) ? "weekend" : ""}`}>{formatDate(date)}</header>
       <div className="capacity-strip">
         <div className="capacity-label">
           <span>{minutesToLabel(bookedMinutes)} gebucht</span>

@@ -216,6 +216,7 @@ button:disabled {
 .quick-add input,
 .task-meta input,
 .task-meta select,
+.day-count-select,
 .booking-controls select {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -270,6 +271,16 @@ button:disabled {
   color: var(--muted);
   gap: 5px;
   padding: 0 10px;
+}
+
+.today-button {
+  min-width: 64px;
+}
+
+.day-count-select {
+  height: 34px;
+  padding: 0 8px;
+  width: 96px;
 }
 
 .list {
@@ -468,6 +479,16 @@ button:disabled {
 .day-column > header.today {
   background: #dcefe9;
   color: #0e5f54;
+}
+
+.day-column > header.weekend {
+  background: #edf0ea;
+  color: #7b8278;
+}
+
+.day-column > header.today.weekend {
+  background: #d9e1db;
+  color: #626b63;
 }
 
 .capacity-strip {
