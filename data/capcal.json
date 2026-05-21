@@ -1,5 +1,10 @@
 {
-  "dailyCapacities": {},
+  "dailyCapacities": {
+    "2026-05-21": {
+      "dayCapacityMinutes": 600,
+      "planningCapacityMinutes": 480
+    }
+  },
   "tasks": [
     {
       "id": "task-nmkerrbj07-mpfhhkgg",
@@ -17,7 +22,7 @@
       "taskId": "task-nmkerrbj07-mpfhhkgg",
       "date": "2026-05-21",
       "startTime": "06:00",
-      "durationMinutes": 90
+      "durationMinutes": 105
     },
     {
       "id": "booking-pmgo9czssy-mpfhj5g7",

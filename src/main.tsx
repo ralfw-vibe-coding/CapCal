@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Circle,
   CircleDot,
+  Clock3,
   GripVertical,
   ListTree,
   Loader,
@@ -18,6 +19,7 @@ import {
   Sparkles,
   Target,
   Trash2,
+  Timer,
   X
 } from "lucide-react";
 import "./styles.css";
@@ -88,6 +90,8 @@ const defaultCapacity: DailyCapacity = {
   dayCapacityMinutes: 480,
   planningCapacityMinutes: 360
 };
+const dayCapacityOptions = Array.from({ length: 17 }, (_, index) => 120 + index * 30);
+const planningCapacityOptions = Array.from({ length: 17 }, (_, index) => 120 + index * 30);
 
 function uid(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
@@ -806,7 +810,7 @@ function DayColumn({
               value={capacity.dayCapacityMinutes}
               onChange={(event) => onCapacityChange({ dayCapacityMinutes: Number(event.target.value) })}
             >
-              {[240, 300, 360, 420, 480, 540, 600].map((minutes) => (
+              {dayCapacityOptions.map((minutes) => (
                 <option key={minutes} value={minutes}>
                   {minutesToLabel(minutes)}
                 </option>
@@ -819,7 +823,7 @@ function DayColumn({
               value={capacity.planningCapacityMinutes}
               onChange={(event) => onCapacityChange({ planningCapacityMinutes: Number(event.target.value) })}
             >
-              {[180, 240, 300, 360, 420, 480].map((minutes) => (
+              {planningCapacityOptions.map((minutes) => (
                 <option key={minutes} value={minutes}>
                   {minutesToLabel(minutes)}
                 </option>
@@ -979,8 +983,14 @@ function BookingCard({
         <strong>{task.title}</strong>
       </div>
       <div className="booking-read-meta">
-        <span>{booking.startTime ?? "Allokation"}</span>
-        <span>{minutesToTimeLabel(booking.durationMinutes)}</span>
+        <span>
+          {booking.startTime ? <Clock3 size={12} /> : <CalendarDays size={12} />}
+          {booking.startTime ?? "Allokation"}
+        </span>
+        <span>
+          <Timer size={12} />
+          {minutesToTimeLabel(booking.durationMinutes)}
+        </span>
       </div>
       {onResizeStart && <div className="booking-resize-handle" title="Dauer ändern" onPointerDown={onResizeStart} />}
     </article>

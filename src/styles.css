@@ -547,11 +547,11 @@ button:disabled {
 }
 
 .capacity-controls label {
+  align-items: center;
   color: var(--muted);
   display: flex;
-  flex-direction: column;
   font-size: 11px;
-  gap: 3px;
+  gap: 6px;
 }
 
 .capacity-controls select {
@@ -561,6 +561,7 @@ button:disabled {
   color: var(--text);
   height: 30px;
   padding: 0 7px;
+  width: 74px;
 }
 
 .allocation-zone {
@@ -716,9 +717,16 @@ button:disabled {
 }
 
 .booking-read-meta span {
+  align-items: center;
   background: var(--surface-2);
   border-radius: 6px;
+  display: inline-flex;
+  gap: 4px;
   padding: 2px 6px;
+}
+
+.booking-read-meta svg {
+  color: var(--muted);
 }
 
 .booking-resize-handle {
