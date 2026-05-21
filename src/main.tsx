@@ -155,6 +155,16 @@ function formatOptionalDate(date?: string) {
   return date ? formatDate(date) : "Keine Deadline";
 }
 
+function deadlineTone(dueDate?: string) {
+  if (!dueDate) return "";
+  const due = new Date(`${dueDate}T12:00:00`).getTime();
+  const current = new Date(`${today}T12:00:00`).getTime();
+  const daysUntilDue = Math.round((due - current) / 86_400_000);
+  if (daysUntilDue <= 0) return "deadline-due";
+  if (daysUntilDue <= 3) return "deadline-soon";
+  return "";
+}
+
 function minutesToTimeLabel(minutes: number) {
   const h = Math.floor(minutes / 60).toString().padStart(2, "0");
   const m = (minutes % 60).toString().padStart(2, "0");
@@ -1236,7 +1246,7 @@ function TaskCard({
         </div>
         <div className="task-compact-meta">
           <span className={`task-status-pill ${statusMeta[task.status].className}`}>{task.status}</span>
-          {task.dueDate && <span>{formatOptionalDate(task.dueDate)}</span>}
+          {task.dueDate && <span className={`task-deadline-pill ${deadlineTone(task.dueDate)}`}>{formatOptionalDate(task.dueDate)}</span>}
           <span>{minutesToTimeLabel(task.estimateMinutes)}</span>
         </div>
         <button className="icon-button ghost danger" title="Aufgabe löschen" onClick={onDelete}>

@@ -560,6 +560,16 @@ button:disabled {
   color: var(--status-color);
 }
 
+.task-compact-meta .task-deadline-pill.deadline-soon {
+  background: #ffe68a;
+  color: #6f5200;
+}
+
+.task-compact-meta .task-deadline-pill.deadline-due {
+  background: #d94a3a;
+  color: white;
+}
+
 .task-expand-button {
   align-items: center;
   background: transparent;

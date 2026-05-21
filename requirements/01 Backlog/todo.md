@@ -1,1 +1,0 @@
-- aufgaben sollten farblich gekennzeichnet werden, wenn die deadline näher rückt bzw. erreicht ist. zumindest sollte das deadline-datum farblich deutlich unterlegt sein: gelb (3 tage bis deadline), rot (deadline erreicht oder später).
