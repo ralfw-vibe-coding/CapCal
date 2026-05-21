@@ -430,6 +430,12 @@ button:disabled {
   border-radius: 8px;
 }
 
+.task-card.dragging-source,
+.prio-card.dragging-source,
+.booking-card.dragging-source {
+  opacity: 0.28;
+}
+
 .status-card {
   --status-color: var(--line);
   --status-bg: var(--surface);
@@ -755,6 +761,7 @@ button:disabled {
   display: grid;
   grid-template-columns: 48px 1fr;
   overflow: visible;
+  position: relative;
 }
 
 .timeline-labels {
@@ -793,30 +800,28 @@ button:disabled {
 }
 
 .timeline-drop-slot:hover,
-.allocation-zone:hover,
-.prio-panel:hover {
+.allocation-zone:hover {
   background: rgba(25, 110, 98, 0.04);
 }
 
 .timeline-drop-preview {
-  border-top: 2px solid var(--accent-2);
+  border-top: 2px solid #c84237;
   left: 0;
   pointer-events: none;
   position: absolute;
   right: 0;
-  z-index: 18;
+  z-index: 30;
 }
 
 .timeline-drop-preview span {
-  background: var(--accent-2);
-  border-radius: 6px;
-  color: white;
+  background: #fbfcf8;
+  color: #c84237;
   font-size: 11px;
   font-weight: 700;
-  left: 6px;
-  padding: 2px 6px;
+  left: 5px;
+  padding: 0 3px 0 0;
   position: absolute;
-  top: -11px;
+  top: -8px;
 }
 
 .scheduled-booking {

@@ -751,6 +751,7 @@ function App() {
                 key={task.id}
                 task={task}
                 onDragStart={() => setDragPayload({ kind: "tree-task", taskId: task.id })}
+                onDragEnd={() => setDragPayload(null)}
                 onDropOnTask={() => {
                   if (dragPayload?.kind === "tree-task") moveTaskBeforeInTree(dragPayload.taskId, task.id);
                   setDragPayload(null);
@@ -811,7 +812,14 @@ function App() {
                   className={`prio-card status-card ${statusMeta[task.status].className}`}
                   key={task.id}
                   draggable
-                  onDragStart={() => setDragPayload({ kind: "prio-task", taskId: task.id })}
+                  onDragStart={(event) => {
+                    event.currentTarget.classList.add("dragging-source");
+                    setDragPayload({ kind: "prio-task", taskId: task.id });
+                  }}
+                  onDragEnd={(event) => {
+                    event.currentTarget.classList.remove("dragging-source");
+                    setDragPayload(null);
+                  }}
                   onDragOver={(event) => event.preventDefault()}
                   onDrop={(event) => {
                     event.stopPropagation();
@@ -930,6 +938,7 @@ function App() {
                   taskById={taskById}
                   onDrop={handleDrop}
                   onBookingDrag={(bookingId) => setDragPayload({ kind: "booking", bookingId })}
+                  onBookingDragEnd={() => setDragPayload(null)}
                   isDragging={dragPayload !== null}
                   onBookingChange={updateBooking}
                   onBookingDelete={deleteBooking}
@@ -1115,6 +1124,7 @@ function SettingsPanel({
 function TaskCard({
   task,
   onDragStart,
+  onDragEnd,
   onDropOnTask,
   onDone,
   onStatus,
@@ -1124,6 +1134,7 @@ function TaskCard({
 }: {
   task: Task;
   onDragStart: () => void;
+  onDragEnd: () => void;
   onDropOnTask: () => void;
   onDone: (done: boolean) => void;
   onStatus: (status: TaskStatus) => void;
@@ -1135,7 +1146,14 @@ function TaskCard({
     <article
       className={`task-card status-card ${statusMeta[task.status].className}`}
       draggable
-      onDragStart={onDragStart}
+      onDragStart={(event) => {
+        event.currentTarget.classList.add("dragging-source");
+        onDragStart();
+      }}
+      onDragEnd={(event) => {
+        event.currentTarget.classList.remove("dragging-source");
+        onDragEnd();
+      }}
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => {
         event.stopPropagation();
@@ -1192,6 +1210,7 @@ function DayColumn({
   taskById,
   onDrop,
   onBookingDrag,
+  onBookingDragEnd,
   isDragging,
   onBookingChange,
   onBookingDelete,
@@ -1206,6 +1225,7 @@ function DayColumn({
   taskById: Map<string, Task>;
   onDrop: (date: string, startTime?: string) => void;
   onBookingDrag: (bookingId: string) => void;
+  onBookingDragEnd: () => void;
   isDragging: boolean;
   onBookingChange: (bookingId: string, patch: Partial<Booking>) => void;
   onBookingDelete: (bookingId: string) => void;
@@ -1356,6 +1376,7 @@ function DayColumn({
               task={taskById.get(booking.taskId)}
               isEditing={editingBookingId === booking.id}
               onDrag={() => onBookingDrag(booking.id)}
+              onDragEnd={onBookingDragEnd}
               onOpen={() => setEditingBookingId(booking.id)}
             />
             {editingBookingId === booking.id && (
@@ -1410,14 +1431,6 @@ function DayColumn({
               style={{ top: (hour * 60 - calendarStartMinutes) * minuteHeight }}
             />
           ))}
-          {dropPreview?.area === "time" && dropPreview.startTime && (
-            <div
-              className="timeline-drop-preview"
-              style={{ top: (timeToMinutes(dropPreview.startTime) - calendarStartMinutes) * minuteHeight }}
-            >
-              <span>{dropPreview.startTime}</span>
-            </div>
-          )}
           {scheduled.map((booking) => {
             const startMinutes = timeToMinutes(booking.startTime!);
             const top = Math.max(0, (startMinutes - calendarStartMinutes) * minuteHeight);
@@ -1429,6 +1442,7 @@ function DayColumn({
                   task={taskById.get(booking.taskId)}
                   isEditing={editingBookingId === booking.id}
                   onDrag={() => onBookingDrag(booking.id)}
+                  onDragEnd={onBookingDragEnd}
                   onOpen={() => setEditingBookingId(booking.id)}
                   onResizeStart={(event) => {
                     event.preventDefault();
@@ -1452,6 +1466,14 @@ function DayColumn({
             );
           })}
         </div>
+        {dropPreview?.area === "time" && dropPreview.startTime && (
+          <div
+            className="timeline-drop-preview"
+            style={{ top: (timeToMinutes(dropPreview.startTime) - calendarStartMinutes) * minuteHeight }}
+          >
+            <span>{dropPreview.startTime}</span>
+          </div>
+        )}
       </div>
     </section>
   );
@@ -1462,6 +1484,7 @@ function BookingCard({
   task,
   isEditing,
   onDrag,
+  onDragEnd,
   onOpen,
   onResizeStart
 }: {
@@ -1469,6 +1492,7 @@ function BookingCard({
   task?: Task;
   isEditing: boolean;
   onDrag: () => void;
+  onDragEnd: () => void;
   onOpen: () => void;
   onResizeStart?: (event: React.PointerEvent<HTMLDivElement>) => void;
 }) {
@@ -1478,7 +1502,14 @@ function BookingCard({
       className={`booking-card status-card ${statusMeta[task.status].className} ${isEditing ? "editing" : ""}`}
       data-booking-id={booking.id}
       draggable
-      onDragStart={onDrag}
+      onDragStart={(event) => {
+        event.currentTarget.classList.add("dragging-source");
+        onDrag();
+      }}
+      onDragEnd={(event) => {
+        event.currentTarget.classList.remove("dragging-source");
+        onDragEnd();
+      }}
       onClick={onOpen}
       title="Buchung bearbeiten"
     >
