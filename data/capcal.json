@@ -1,0 +1,160 @@
+{
+  "dailyCapacities": {
+    "2026-05-21": {
+      "dayCapacityMinutes": 480,
+      "planningCapacityMinutes": 240
+    }
+  },
+  "tasks": [
+    {
+      "id": "task-jhdul0tv6qd-mpfgcyn8",
+      "title": "neu in prio 2",
+      "estimateMinutes": 30,
+      "status": "Ready",
+      "done": false,
+      "treeOrder": 0
+    },
+    {
+      "id": "task-wjfsryzc3ak-mpfgctk7",
+      "title": "neu in cal 2",
+      "dueDate": "2026-05-21",
+      "estimateMinutes": 30,
+      "status": "Started",
+      "done": false,
+      "treeOrder": 1
+    },
+    {
+      "id": "task-4416l7cr3d-mpfgaj4c",
+      "title": "neue aufgabe für cal",
+      "estimateMinutes": 30,
+      "status": "Started",
+      "done": false,
+      "treeOrder": 2
+    },
+    {
+      "id": "task-bce2iqeutfj-mpfc77jw",
+      "title": "Zeitmanagement Niehaus",
+      "dueDate": "",
+      "estimateMinutes": 120,
+      "status": "Started",
+      "done": false,
+      "treeOrder": 3
+    },
+    {
+      "id": "task-3",
+      "title": "Blocked-Aufgabe sichtbar halten",
+      "dueDate": "2026-05-21",
+      "estimateMinutes": 45,
+      "status": "Started",
+      "done": false,
+      "treeOrder": 4
+    },
+    {
+      "id": "task-2",
+      "title": "Status-Icons prüfen",
+      "dueDate": "2026-05-21",
+      "estimateMinutes": 30,
+      "status": "Started",
+      "done": false,
+      "treeOrder": 5
+    },
+    {
+      "id": "task-4v9wagws2k2-mpfc8bkx",
+      "title": "Mittagessen",
+      "dueDate": "2026-05-21",
+      "estimateMinutes": 30,
+      "status": "Aborted",
+      "done": true,
+      "treeOrder": 6
+    },
+    {
+      "id": "task-1",
+      "title": "CapCal PoC durchspielen",
+      "dueDate": "2026-05-21",
+      "estimateMinutes": 90,
+      "status": "Aborted",
+      "done": true,
+      "treeOrder": 7
+    },
+    {
+      "id": "task-2zd6vf9bsph-mpfgbnlj",
+      "title": "neu im kalender",
+      "dueDate": "2026-05-21",
+      "estimateMinutes": 30,
+      "status": "Started",
+      "done": false,
+      "treeOrder": 8
+    },
+    {
+      "id": "task-d3kh95kuvyk-mpfgbu3c",
+      "title": "neu in prio",
+      "estimateMinutes": 30,
+      "status": "Ready",
+      "done": false,
+      "treeOrder": 9
+    }
+  ],
+  "prioTaskIds": [
+    "task-2",
+    "task-4v9wagws2k2-mpfc8bkx",
+    "task-3",
+    "task-d3kh95kuvyk-mpfgbu3c",
+    "task-jhdul0tv6qd-mpfgcyn8"
+  ],
+  "bookings": [
+    {
+      "id": "booking-1",
+      "taskId": "task-1",
+      "date": "2026-05-21",
+      "startTime": "09:30",
+      "durationMinutes": 90
+    },
+    {
+      "id": "booking-osqar1i1epr-mpfc8j5x",
+      "taskId": "task-4v9wagws2k2-mpfc8bkx",
+      "date": "2026-05-21",
+      "startTime": "12:00",
+      "durationMinutes": 165
+    },
+    {
+      "id": "booking-fu9yyoutaho-mpfcf8my",
+      "taskId": "task-3",
+      "date": "2026-05-21",
+      "durationMinutes": 120,
+      "startTime": "07:30"
+    },
+    {
+      "id": "booking-is2okchvjvo-mpfcj1iq",
+      "taskId": "task-bce2iqeutfj-mpfc77jw",
+      "date": "2026-05-21",
+      "startTime": "06:00",
+      "durationMinutes": 120
+    },
+    {
+      "id": "booking-tonhaq4wdxo-mpffw68t",
+      "taskId": "task-bce2iqeutfj-mpfc77jw",
+      "date": "2026-05-23",
+      "startTime": "07:30",
+      "durationMinutes": 60
+    },
+    {
+      "id": "booking-eaft0nni4l9-mpfg1pps",
+      "taskId": "task-3",
+      "date": "2026-05-22",
+      "startTime": "11:00",
+      "durationMinutes": 30
+    },
+    {
+      "id": "booking-0b8kguqfjlfk-mpfgbnlj",
+      "taskId": "task-2zd6vf9bsph-mpfgbnlj",
+      "date": "2026-05-21",
+      "durationMinutes": 30
+    },
+    {
+      "id": "booking-1pt0ze6hb2i-mpfgctk7",
+      "taskId": "task-wjfsryzc3ak-mpfgctk7",
+      "date": "2026-05-21",
+      "durationMinutes": 30
+    }
+  ]
+}
