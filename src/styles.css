@@ -315,7 +315,7 @@ button:disabled {
   border-bottom: 1px solid var(--line);
   display: grid;
   gap: 8px;
-  grid-template-columns: 1fr 128px 34px;
+  grid-template-columns: 1fr;
   margin: 10px -12px 10px;
   padding: 10px 12px;
 }
@@ -331,7 +331,7 @@ button:disabled {
 }
 
 .filter-control input {
-  padding-right: 30px;
+  padding: 0 9px;
 }
 
 .filter-clear {
@@ -351,6 +351,57 @@ button:disabled {
 
 .tree-filter-reset {
   align-self: center;
+}
+
+.filter-reset-chip {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  display: inline-flex;
+  height: 28px;
+  justify-content: center;
+  padding: 0;
+  width: 28px;
+}
+
+.status-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  grid-column: 1 / -1;
+}
+
+.filter-chip {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 700;
+  gap: 5px;
+  min-height: 28px;
+  padding: 0 9px;
+}
+
+.filter-chip.active {
+  background: #e8f1ed;
+  border-color: rgba(25, 110, 98, 0.35);
+  color: #0e5f54;
+}
+
+.status-filter-chip.active {
+  background: var(--status-bg);
+  border-color: color-mix(in srgb, var(--status-color) 48%, var(--line));
+  color: var(--status-color);
+}
+
+.status-filter-chip .status-icon svg {
+  height: 12px;
+  width: 12px;
 }
 
 .icon-button,

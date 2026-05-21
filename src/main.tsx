@@ -51,6 +51,11 @@ type DailyCapacity = {
   planningCapacityMinutes: number;
 };
 
+type TreeFilterSettings = {
+  query: string;
+  statuses: TaskStatus[];
+};
+
 type AppSettings = {
   defaultTreeDurationMinutes: number;
   defaultPrioDurationMinutes: number;
@@ -60,6 +65,7 @@ type AppSettings = {
   calendarEndTime: string;
   showWeekends: boolean;
   visibleDayCount: number;
+  treeFilters: TreeFilterSettings;
   panelsCollapsed: {
     tree: boolean;
     prio: boolean;
@@ -104,6 +110,10 @@ const defaultSettings: AppSettings = {
   calendarEndTime: "20:00",
   showWeekends: false,
   visibleDayCount: 7,
+  treeFilters: {
+    query: "",
+    statuses: []
+  },
   panelsCollapsed: {
     tree: false,
     prio: false,
@@ -183,12 +193,20 @@ function durationForPlanning(taskDurationMinutes: number | undefined, defaultPri
   return taskDurationMinutes && taskDurationMinutes <= 120 ? taskDurationMinutes : defaultPrioDurationMinutes;
 }
 
+function normalizeTreeFilters(filters?: Partial<TreeFilterSettings> | null): TreeFilterSettings {
+  return {
+    query: filters?.query ?? "",
+    statuses: (filters?.statuses ?? []).filter((status): status is TaskStatus => statuses.includes(status as TaskStatus))
+  };
+}
+
 function normalizeState(rawState: AppState): AppState {
   return {
     ...rawState,
     settings: {
       ...defaultSettings,
       ...(rawState.settings ?? {}),
+      treeFilters: normalizeTreeFilters(rawState.settings?.treeFilters),
       panelsCollapsed: {
         ...defaultSettings.panelsCollapsed,
         ...(rawState.settings?.panelsCollapsed ?? {})
@@ -217,7 +235,6 @@ function App() {
   const [dragPayload, setDragPayload] = useState<DragPayload | null>(null);
   const [calendarStartDate, setCalendarStartDate] = useState(today);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [treeFilters, setTreeFilters] = useState<{ query: string; status: "All" | TaskStatus }>({ query: "", status: "All" });
   const settingsMenuRef = useRef<HTMLDivElement | null>(null);
   const stateRef = useRef<AppState | null>(null);
   const dirtyRef = useRef(false);
@@ -329,14 +346,15 @@ function App() {
     [settings.calendarEndTime, settings.calendarStartTime]
   );
   const taskById = useMemo(() => new Map(state?.tasks.map((task) => [task.id, task]) ?? []), [state?.tasks]);
+  const treeFilters = settings.treeFilters;
   const filteredTreeTasks = useMemo(() => {
     const query = treeFilters.query.trim().toLowerCase();
     return sortedTasks(state?.tasks ?? []).filter((task) => {
       const matchesQuery = !query || task.title.toLowerCase().includes(query);
-      const matchesStatus = treeFilters.status === "All" || task.status === treeFilters.status;
+      const matchesStatus = treeFilters.statuses.length === 0 || treeFilters.statuses.includes(task.status);
       return matchesQuery && matchesStatus;
     });
-  }, [state?.tasks, treeFilters.query, treeFilters.status]);
+  }, [state?.tasks, treeFilters.query, treeFilters.statuses]);
   const days = useMemo(
     () => {
       const nextDays: string[] = [];
@@ -393,6 +411,10 @@ function App() {
         ...defaultSettings,
         ...(draft.settings ?? defaultSettings),
         ...patch,
+        treeFilters: normalizeTreeFilters({
+          ...(draft.settings?.treeFilters ?? defaultSettings.treeFilters),
+          ...(patch.treeFilters ?? {})
+        }),
         panelsCollapsed: {
           ...defaultSettings.panelsCollapsed,
           ...(draft.settings?.panelsCollapsed ?? defaultSettings.panelsCollapsed),
@@ -624,6 +646,16 @@ function App() {
     });
   }
 
+  function toggleTreeFilterStatus(status: TaskStatus) {
+    const selected = treeFilters.statuses.includes(status);
+    updateSettings({
+      treeFilters: {
+        ...treeFilters,
+        statuses: selected ? treeFilters.statuses.filter((candidate) => candidate !== status) : [...treeFilters.statuses, status]
+      }
+    });
+  }
+
   const startedCount = state.tasks.filter((task) => task.status === "Started").length;
   const blockedCount = state.tasks.filter((task) => task.status === "Blocked").length;
 
@@ -679,41 +711,39 @@ function App() {
                 aria-label="Aufgaben suchen"
                 placeholder="Suchen"
                 value={treeFilters.query}
-                onChange={(event) => setTreeFilters((current) => ({ ...current, query: event.target.value }))}
+                onChange={(event) => updateSettings({ treeFilters: { ...treeFilters, query: event.target.value } })}
               />
-              {treeFilters.query && (
+            </div>
+            <div className="status-filter-chips" aria-label="Status filtern">
+              <button
+                className={`filter-chip ${treeFilters.statuses.length === 0 ? "active" : ""}`}
+                onClick={() => updateSettings({ treeFilters: { ...treeFilters, statuses: [] } })}
+              >
+                Alle
+              </button>
+              {statuses.map((status) => {
+                const active = treeFilters.statuses.includes(status);
+                return (
+                  <button
+                    className={`filter-chip status-filter-chip ${active ? `active ${statusMeta[status].className}` : ""}`}
+                    key={status}
+                    onClick={() => toggleTreeFilterStatus(status)}
+                  >
+                    <StatusIcon status={status} />
+                    {status}
+                  </button>
+                );
+              })}
+              {(treeFilters.query || treeFilters.statuses.length > 0) && (
                 <button
-                  className="filter-clear"
-                  title="Suche zurücksetzen"
-                  onClick={() => setTreeFilters((current) => ({ ...current, query: "" }))}
+                  className="filter-reset-chip"
+                  title="Filter zurücksetzen"
+                  onClick={() => updateSettings({ treeFilters: { query: "", statuses: [] } })}
                 >
                   <X size={13} />
                 </button>
               )}
             </div>
-            <div className="filter-control">
-              <select
-                aria-label="Status filtern"
-                value={treeFilters.status}
-                onChange={(event) => setTreeFilters((current) => ({ ...current, status: event.target.value as "All" | TaskStatus }))}
-              >
-                <option value="All">Alle Status</option>
-                {statuses.map((status) => (
-                  <option key={status} value={status}>
-                    {status}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {(treeFilters.query || treeFilters.status !== "All") && (
-              <button
-                className="icon-button ghost tree-filter-reset"
-                title="Filter zurücksetzen"
-                onClick={() => setTreeFilters({ query: "", status: "All" })}
-              >
-                <X size={14} />
-              </button>
-            )}
           </div>
           <div className="task-form">
             <input
