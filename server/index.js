@@ -6,54 +6,11 @@ import { fileURLToPath } from "node:url";
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const dataPath = join(root, "data", "capcal.json");
 
-const today = new Date().toISOString().slice(0, 10);
-
-const seedData = {
-  dailyCapacities: {
-    [today]: {
-      dayCapacityMinutes: 480,
-      planningCapacityMinutes: 360
-    }
-  },
-  tasks: [
-    {
-      id: "task-1",
-      title: "CapCal PoC durchspielen",
-      dueDate: today,
-      estimateMinutes: 90,
-      status: "Started",
-      done: false,
-      treeOrder: 0
-    },
-    {
-      id: "task-2",
-      title: "Status-Icons prüfen",
-      dueDate: today,
-      estimateMinutes: 30,
-      status: "Ready",
-      done: false,
-      treeOrder: 1
-    },
-    {
-      id: "task-3",
-      title: "Blocked-Aufgabe sichtbar halten",
-      dueDate: today,
-      estimateMinutes: 45,
-      status: "Blocked",
-      done: false,
-      treeOrder: 2
-    }
-  ],
-  prioTaskIds: ["task-2", "task-3"],
-  bookings: [
-    {
-      id: "booking-1",
-      taskId: "task-1",
-      date: today,
-      startTime: "09:00",
-      durationMinutes: 60
-    }
-  ]
+const emptyState = {
+  dailyCapacities: {},
+  tasks: [],
+  prioTaskIds: [],
+  bookings: []
 };
 
 async function ensureDataFile() {
@@ -61,8 +18,8 @@ async function ensureDataFile() {
   try {
     return JSON.parse(await readFile(dataPath, "utf8"));
   } catch {
-    await writeFile(dataPath, JSON.stringify(seedData, null, 2));
-    return seedData;
+    await writeFile(dataPath, JSON.stringify(emptyState, null, 2));
+    return emptyState;
   }
 }
 

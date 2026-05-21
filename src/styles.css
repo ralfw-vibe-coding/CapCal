@@ -497,13 +497,39 @@ button:disabled {
   background: #e5eae1;
   border-radius: 999px;
   height: 12px;
-  overflow: hidden;
+  overflow: visible;
   position: relative;
 }
 
 .capacity-fill {
-  background: linear-gradient(90deg, #196e62, #f0a43c);
+  border-radius: 999px;
   height: 100%;
+}
+
+.capacity-bar.under-plan .capacity-fill,
+.capacity-bar.under-plan .capacity-overflow {
+  background: #168456;
+}
+
+.capacity-bar.near-plan .capacity-fill,
+.capacity-bar.near-plan .capacity-overflow {
+  background: #d99a23;
+}
+
+.capacity-bar.over-plan .capacity-fill,
+.capacity-bar.over-plan .capacity-overflow {
+  background: #c84237;
+}
+
+.capacity-overflow {
+  border-radius: 999px;
+  box-shadow: 0 0 0 2px #fbfcf8;
+  height: 16px;
+  right: 0;
+  opacity: 0.88;
+  position: absolute;
+  top: -2px;
+  width: 28px;
 }
 
 .planning-marker {

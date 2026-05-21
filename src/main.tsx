@@ -718,6 +718,15 @@ function DayColumn({
   const bookedMinutes = bookings.reduce((sum, booking) => sum + booking.durationMinutes, 0);
   const fillPercent = Math.min(100, (bookedMinutes / capacity.dayCapacityMinutes) * 100);
   const planningPercent = Math.min(100, (capacity.planningCapacityMinutes / capacity.dayCapacityMinutes) * 100);
+  const redCapacityThreshold =
+    capacity.planningCapacityMinutes + (capacity.dayCapacityMinutes - capacity.planningCapacityMinutes) * 0.8;
+  const capacityLevel =
+    bookedMinutes >= redCapacityThreshold
+      ? "over-plan"
+      : bookedMinutes >= capacity.planningCapacityMinutes * 0.8
+        ? "near-plan"
+        : "under-plan";
+  const isOverflowingDay = bookedMinutes > capacity.dayCapacityMinutes;
   const timelineHeight = (calendarEndMinutes - calendarStartMinutes) * minuteHeight;
   const getTimelineDropTime = (event: React.DragEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -785,8 +794,9 @@ function DayColumn({
           <span>{minutesToLabel(bookedMinutes)} gebucht</span>
           <strong>{minutesToLabel(capacity.dayCapacityMinutes)}</strong>
         </div>
-        <div className="capacity-bar" title={`Planungskapazität: ${minutesToLabel(capacity.planningCapacityMinutes)}`}>
+        <div className={`capacity-bar ${capacityLevel} ${isOverflowingDay ? "overflowing" : ""}`} title={`Planungskapazität: ${minutesToLabel(capacity.planningCapacityMinutes)}`}>
           <div className="capacity-fill" style={{ width: `${fillPercent}%` }} />
+          {isOverflowingDay && <div className={`capacity-overflow ${capacityLevel}`} />}
           <div className="planning-marker" style={{ left: `${planningPercent}%` }} />
         </div>
         <div className="capacity-controls">
