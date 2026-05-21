@@ -661,6 +661,7 @@ button:disabled {
   border-color: rgba(25, 110, 98, 0.32);
   cursor: pointer;
   padding: 7px;
+  position: relative;
 }
 
 .booking-card.editing {
@@ -692,6 +693,26 @@ button:disabled {
   background: var(--surface-2);
   border-radius: 6px;
   padding: 2px 6px;
+}
+
+.booking-resize-handle {
+  bottom: 0;
+  cursor: ns-resize;
+  height: 10px;
+  left: 0;
+  position: absolute;
+  right: 0;
+}
+
+.booking-resize-handle::after {
+  background: rgba(25, 110, 98, 0.4);
+  border-radius: 999px;
+  bottom: 3px;
+  content: "";
+  height: 2px;
+  left: 32%;
+  position: absolute;
+  right: 32%;
 }
 
 .booking-editor {

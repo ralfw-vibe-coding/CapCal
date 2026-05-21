@@ -21,7 +21,7 @@ import {
   X
 } from "lucide-react";
 import "./styles.css";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type TaskStatus = "Backlog" | "Ready" | "Started" | "Blocked" | "Done" | "Aborted";
 
@@ -710,6 +710,9 @@ function DayColumn({
 }) {
   const [editingBookingId, setEditingBookingId] = useState<string | null>(null);
   const [dropPreview, setDropPreview] = useState<{ area: "allocation" | "time"; startTime?: string } | null>(null);
+  const [resizingBooking, setResizingBooking] = useState<{ bookingId: string; startMinutes: number } | null>(null);
+  const timelineRef = useRef<HTMLDivElement | null>(null);
+  const dayColumnRef = useRef<HTMLElement | null>(null);
   const allocations = bookings.filter((booking) => !booking.startTime);
   const scheduled = bookings.filter((booking) => booking.startTime).sort((a, b) => a.startTime!.localeCompare(b.startTime!));
   const bookedMinutes = bookings.reduce((sum, booking) => sum + booking.durationMinutes, 0);
@@ -727,8 +730,55 @@ function DayColumn({
     return minutesToTime(snappedMinutes);
   };
 
+  useEffect(() => {
+    if (!resizingBooking) return;
+    const activeResize = resizingBooking;
+
+    function handlePointerMove(event: PointerEvent) {
+      const timeline = timelineRef.current;
+      if (!timeline) return;
+      const rect = timeline.getBoundingClientRect();
+      const y = Math.max(0, Math.min(rect.height, event.clientY - rect.top));
+      const rawEndMinutes = calendarStartMinutes + y / minuteHeight;
+      const snappedEndMinutes = Math.round(rawEndMinutes / 15) * 15;
+      const durationMinutes = Math.max(30, Math.min(240, snappedEndMinutes - activeResize.startMinutes));
+      onBookingChange(activeResize.bookingId, { durationMinutes });
+    }
+
+    function handlePointerUp() {
+      setResizingBooking(null);
+    }
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp, { once: true });
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+  }, [onBookingChange, resizingBooking]);
+
+  useEffect(() => {
+    if (!editingBookingId) return;
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      const currentDay = dayColumnRef.current;
+      if (!currentDay?.contains(target)) {
+        setEditingBookingId(null);
+        return;
+      }
+      const clickedEditor = (target as Element).closest(".booking-editor");
+      const clickedOpenBooking = (target as Element).closest(`[data-booking-id="${editingBookingId}"]`);
+      if (!clickedEditor && !clickedOpenBooking) setEditingBookingId(null);
+    }
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    return () => window.removeEventListener("pointerdown", handlePointerDown);
+  }, [editingBookingId]);
+
   return (
-    <section className="day-column">
+    <section className="day-column" ref={dayColumnRef}>
       <header className={date === today ? "today" : ""}>{formatDate(date)}</header>
       <div className="capacity-strip">
         <div className="capacity-label">
@@ -820,6 +870,7 @@ function DayColumn({
         </div>
         <div
           className={`timeline ${isDragging ? "dragging-active" : ""}`}
+          ref={timelineRef}
           style={{ height: timelineHeight }}
           onDragOver={(event) => {
             event.preventDefault();
@@ -862,6 +913,11 @@ function DayColumn({
                   isEditing={editingBookingId === booking.id}
                   onDrag={() => onBookingDrag(booking.id)}
                   onOpen={() => setEditingBookingId(booking.id)}
+                  onResizeStart={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setResizingBooking({ bookingId: booking.id, startMinutes });
+                  }}
                 />
                 {editingBookingId === booking.id && (
                   <BookingEditor
@@ -888,18 +944,21 @@ function BookingCard({
   task,
   isEditing,
   onDrag,
-  onOpen
+  onOpen,
+  onResizeStart
 }: {
   booking: Booking;
   task?: Task;
   isEditing: boolean;
   onDrag: () => void;
   onOpen: () => void;
+  onResizeStart?: (event: React.PointerEvent<HTMLDivElement>) => void;
 }) {
   if (!task) return null;
   return (
     <article
       className={`booking-card ${isEditing ? "editing" : ""}`}
+      data-booking-id={booking.id}
       draggable
       onDragStart={onDrag}
       onClick={onOpen}
@@ -913,6 +972,7 @@ function BookingCard({
         <span>{booking.startTime ?? "Allokation"}</span>
         <span>{minutesToTimeLabel(booking.durationMinutes)}</span>
       </div>
+      {onResizeStart && <div className="booking-resize-handle" title="Dauer ändern" onPointerDown={onResizeStart} />}
     </article>
   );
 }

@@ -135,8 +135,8 @@
       "id": "booking-eaft0nni4l9-mpfg1pps",
       "taskId": "task-3",
       "date": "2026-05-22",
-      "startTime": "11:30",
-      "durationMinutes": 30
+      "startTime": "10:30",
+      "durationMinutes": 75
     },
     {
       "id": "booking-0b8kguqfjlfk-mpfgbnlj",
@@ -155,8 +155,8 @@
       "id": "booking-fii47kogo2-mpfgkgr6",
       "taskId": "task-4v9wagws2k2-mpfc8bkx",
       "date": "2026-05-22",
-      "startTime": "09:00",
-      "durationMinutes": 120
+      "startTime": "08:45",
+      "durationMinutes": 75
     },
     {
       "id": "booking-nl40dml4zh-mpfgko1n",
