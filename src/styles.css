@@ -270,13 +270,15 @@ button:disabled {
 
 .task-form {
   border-bottom: 1px solid var(--line);
-  margin: 10px -12px 10px;
+  margin: 0 -12px 10px;
   padding: 0 12px 12px;
 }
 
 .task-form input,
 .task-form select,
 .quick-add input,
+.tree-filters input,
+.tree-filters select,
 .task-meta input,
 .task-meta select,
 .day-count-select,
@@ -302,6 +304,48 @@ button:disabled {
 
 .task-form select {
   width: 92px;
+}
+
+.tree-filters {
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr 128px 34px;
+  margin: 10px -12px 10px;
+  padding: 10px 12px;
+}
+
+.filter-control {
+  position: relative;
+}
+
+.filter-control input,
+.filter-control select {
+  min-height: 32px;
+  width: 100%;
+}
+
+.filter-control input {
+  padding-right: 30px;
+}
+
+.filter-clear {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  display: flex;
+  height: 24px;
+  justify-content: center;
+  padding: 0;
+  position: absolute;
+  right: 5px;
+  top: 4px;
+  width: 24px;
+}
+
+.tree-filter-reset {
+  align-self: center;
 }
 
 .icon-button,
@@ -381,17 +425,20 @@ button:disabled {
   border-radius: 8px;
 }
 
+.status-card {
+  --status-color: var(--line);
+  --status-bg: var(--surface);
+  background: var(--status-bg);
+  border-color: color-mix(in srgb, var(--status-color) 35%, var(--line));
+  box-shadow: inset 4px 0 0 var(--status-color);
+}
+
 .task-card {
   align-items: flex-start;
   display: flex;
   gap: 7px;
   justify-content: space-between;
   padding: 7px;
-}
-
-.task-card.attention {
-  border-color: rgba(200, 66, 55, 0.55);
-  box-shadow: inset 4px 0 0 rgba(200, 66, 55, 0.85);
 }
 
 .task-main {
@@ -895,25 +942,37 @@ button:disabled {
 }
 
 .status-backlog {
-  color: #768077;
+  --status-color: #1f4f82;
+  --status-bg: #f3f7fb;
+  color: #1f4f82;
 }
 
 .status-ready {
-  color: #316dc2;
+  --status-color: #d6a400;
+  --status-bg: #fff9df;
+  color: #a47b00;
 }
 
 .status-started {
-  color: #b26b00;
+  --status-color: #e07b22;
+  --status-bg: #fff4ea;
+  color: #b85e12;
 }
 
 .status-blocked {
+  --status-color: #c84237;
+  --status-bg: #fff0ef;
   color: #c84237;
 }
 
 .status-done {
+  --status-color: #168456;
+  --status-bg: #eef9f3;
   color: #168456;
 }
 
 .status-aborted {
-  color: #7b5668;
+  --status-color: #7b4f35;
+  --status-bg: #f7f0eb;
+  color: #7b4f35;
 }

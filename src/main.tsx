@@ -217,6 +217,7 @@ function App() {
   const [dragPayload, setDragPayload] = useState<DragPayload | null>(null);
   const [calendarStartDate, setCalendarStartDate] = useState(today);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [treeFilters, setTreeFilters] = useState<{ query: string; status: "All" | TaskStatus }>({ query: "", status: "All" });
   const settingsMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -256,6 +257,14 @@ function App() {
     [settings.calendarEndTime, settings.calendarStartTime]
   );
   const taskById = useMemo(() => new Map(state?.tasks.map((task) => [task.id, task]) ?? []), [state?.tasks]);
+  const filteredTreeTasks = useMemo(() => {
+    const query = treeFilters.query.trim().toLowerCase();
+    return sortedTasks(state?.tasks ?? []).filter((task) => {
+      const matchesQuery = !query || task.title.toLowerCase().includes(query);
+      const matchesStatus = treeFilters.status === "All" || task.status === treeFilters.status;
+      return matchesQuery && matchesStatus;
+    });
+  }, [state?.tasks, treeFilters.query, treeFilters.status]);
   const days = useMemo(
     () => {
       const nextDays: string[] = [];
@@ -586,6 +595,48 @@ function App() {
           onToggle={() => togglePanel("tree")}
           className="tree-panel"
         >
+          <div className="tree-filters">
+            <div className="filter-control">
+              <input
+                aria-label="Aufgaben suchen"
+                placeholder="Suchen"
+                value={treeFilters.query}
+                onChange={(event) => setTreeFilters((current) => ({ ...current, query: event.target.value }))}
+              />
+              {treeFilters.query && (
+                <button
+                  className="filter-clear"
+                  title="Suche zurücksetzen"
+                  onClick={() => setTreeFilters((current) => ({ ...current, query: "" }))}
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+            <div className="filter-control">
+              <select
+                aria-label="Status filtern"
+                value={treeFilters.status}
+                onChange={(event) => setTreeFilters((current) => ({ ...current, status: event.target.value as "All" | TaskStatus }))}
+              >
+                <option value="All">Alle Status</option>
+                {statuses.map((status) => (
+                  <option key={status} value={status}>
+                    {status}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {(treeFilters.query || treeFilters.status !== "All") && (
+              <button
+                className="icon-button ghost tree-filter-reset"
+                title="Filter zurücksetzen"
+                onClick={() => setTreeFilters({ query: "", status: "All" })}
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
           <div className="task-form">
             <input
               aria-label="Aufgabentitel"
@@ -617,7 +668,7 @@ function App() {
           </div>
 
           <div className="list">
-            {sortedTasks(state.tasks).map((task) => (
+            {filteredTreeTasks.map((task) => (
               <TaskCard
                 key={task.id}
                 task={task}
@@ -679,7 +730,7 @@ function App() {
                 state.prioDurations?.[task.id] ?? durationForPlanning(task.estimateMinutes, settings.defaultPrioDurationMinutes);
               return (
                 <div
-                  className="prio-card"
+                  className={`prio-card status-card ${statusMeta[task.status].className}`}
                   key={task.id}
                   draggable
                   onDragStart={() => setDragPayload({ kind: "prio-task", taskId: task.id })}
@@ -1004,7 +1055,7 @@ function TaskCard({
 }) {
   return (
     <article
-      className={`task-card ${task.status === "Blocked" ? "attention" : ""}`}
+      className={`task-card status-card ${statusMeta[task.status].className}`}
       draggable
       onDragStart={onDragStart}
       onDragOver={(event) => event.preventDefault()}
@@ -1346,7 +1397,7 @@ function BookingCard({
   if (!task) return null;
   return (
     <article
-      className={`booking-card ${isEditing ? "editing" : ""}`}
+      className={`booking-card status-card ${statusMeta[task.status].className} ${isEditing ? "editing" : ""}`}
       data-booking-id={booking.id}
       draggable
       onDragStart={onDrag}

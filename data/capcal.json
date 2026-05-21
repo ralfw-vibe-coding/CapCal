@@ -15,12 +15,20 @@
   },
   "tasks": [
     {
+      "id": "task-2ck0924ehso-mpfjncuf",
+      "title": "aufgabe 1.1",
+      "estimateMinutes": 30,
+      "status": "Done",
+      "done": true,
+      "treeOrder": 0
+    },
+    {
       "id": "task-pm8paeeerv8-mpfjg9ql",
       "title": "yyy2",
       "estimateMinutes": 45,
       "status": "Ready",
       "done": false,
-      "treeOrder": 0
+      "treeOrder": 1
     },
     {
       "id": "task-0y8msvqfllp-mpfjg31v",
@@ -29,31 +37,31 @@
       "estimateMinutes": 45,
       "status": "Started",
       "done": false,
-      "treeOrder": 1
+      "treeOrder": 2
     },
     {
       "id": "task-ogm24ndifrk-mpfi5n3f",
       "title": "aufgabe 3",
       "estimateMinutes": 30,
-      "status": "Started",
+      "status": "Blocked",
       "done": false,
-      "treeOrder": 2
+      "treeOrder": 3
     },
     {
       "id": "task-i8l5z290sz-mpfi5ksp",
       "title": "aufgabe 2",
       "estimateMinutes": 105,
-      "status": "Started",
+      "status": "Blocked",
       "done": false,
-      "treeOrder": 3
+      "treeOrder": 4
     },
     {
       "id": "task-9iw0q8t2qbm-mpfi5jcs",
       "title": "aufgabe 1",
       "estimateMinutes": 240,
-      "status": "Started",
-      "done": false,
-      "treeOrder": 4
+      "status": "Done",
+      "done": true,
+      "treeOrder": 5
     }
   ],
   "prioTaskIds": [],
@@ -92,6 +100,13 @@
       "date": "2026-05-22",
       "startTime": "07:00",
       "durationMinutes": 60
+    },
+    {
+      "id": "booking-9j479haf4ho-mpfjwfaq",
+      "taskId": "task-2ck0924ehso-mpfjncuf",
+      "date": "2026-05-23",
+      "startTime": "06:00",
+      "durationMinutes": 30
     }
   ],
   "settings": {
