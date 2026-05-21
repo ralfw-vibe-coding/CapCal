@@ -1,1 +1,1 @@
-- beschreibung für aufgaben. auch aufgaben brauchen am besten ein aufklappbares panel wie die termine. dann kann der eintrag für eine aufgabe im tree auch noch kompakter sein. das panel könnte aufgeklappt werden, wenn man ein ">" beim eintrag klickt. es könnte also im tree stehen und die anderen aufgaben nach unten drücken.
+- aufgaben sollten farblich gekennzeichnet werden, wenn die deadline näher rückt bzw. erreicht ist. zumindest sollte das deadline-datum farblich deutlich unterlegt sein: gelb (3 tage bis deadline), rot (deadline erreicht oder später).

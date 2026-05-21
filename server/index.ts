@@ -19,30 +19,30 @@ function send(response: ServerResponse, status: number, payload: unknown) {
 }
 
 const server = createServer(async (request, response) => {
-  const provider = createStateProvider();
+  try {
+    const provider = createStateProvider();
 
-  if (request.method === "OPTIONS") {
-    send(response, 204, {});
-    return;
-  }
+    if (request.method === "OPTIONS") {
+      send(response, 204, {});
+      return;
+    }
 
-  if (request.url === "/api/state" && request.method === "GET") {
-    send(response, 200, await provider.load());
-    return;
-  }
+    if (request.url === "/api/state" && request.method === "GET") {
+      send(response, 200, await provider.load());
+      return;
+    }
 
-  if (request.url === "/api/state" && request.method === "PUT") {
-    try {
+    if (request.url === "/api/state" && request.method === "PUT") {
       const state = JSON.parse(await readBody(request));
       await provider.save(state);
       send(response, 200, state);
-    } catch (error) {
-      send(response, 400, { error: error instanceof Error ? error.message : "Invalid payload" });
+      return;
     }
-    return;
-  }
 
-  send(response, 404, { error: "Not found" });
+    send(response, 404, { error: "Not found" });
+  } catch (error) {
+    send(response, 500, { error: error instanceof Error ? error.message : "State provider failed" });
+  }
 });
 
 server.listen(3001, "127.0.0.1", () => {

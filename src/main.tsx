@@ -5,6 +5,7 @@ import {
   ArchiveX,
   CalendarDays,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Circle,
@@ -31,6 +32,7 @@ type TaskStatus = "Backlog" | "Ready" | "Started" | "Blocked" | "Done" | "Aborte
 type Task = {
   id: string;
   title: string;
+  description?: string;
   dueDate?: string;
   estimateMinutes: number;
   status: TaskStatus;
@@ -235,6 +237,8 @@ function App() {
   const [dragPayload, setDragPayload] = useState<DragPayload | null>(null);
   const [calendarStartDate, setCalendarStartDate] = useState(today);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [expandedTaskIds, setExpandedTaskIds] = useState<Set<string>>(() => new Set());
+  const [changedTaskId, setChangedTaskId] = useState<string | null>(null);
   const settingsMenuRef = useRef<HTMLDivElement | null>(null);
   const stateRef = useRef<AppState | null>(null);
   const dirtyRef = useRef(false);
@@ -280,6 +284,10 @@ function App() {
       if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
     };
   }, [state]);
+
+  useEffect(() => {
+    if (saveState === "saved") setChangedTaskId(null);
+  }, [saveState]);
 
   async function saveCurrentState(options: { keepalive?: boolean } = {}) {
     const currentState = stateRef.current;
@@ -459,6 +467,7 @@ function App() {
     const task: Task = {
       id: uid("task"),
       title: trimmed,
+      description: "",
       dueDate: target === "cal" ? date : undefined,
       estimateMinutes,
       status: target === "cal" ? "Started" : "Ready",
@@ -505,6 +514,7 @@ function App() {
   }
 
   function updateTask(taskId: string, patch: Partial<Task>) {
+    setChangedTaskId(taskId);
     updateState((draft) => ({
       ...draft,
       tasks: draft.tasks.map((task) => (task.id === taskId ? { ...task, ...patch } : task))
@@ -656,6 +666,15 @@ function App() {
     });
   }
 
+  function toggleTaskDetails(taskId: string) {
+    setExpandedTaskIds((current) => {
+      const next = new Set(current);
+      if (next.has(taskId)) next.delete(taskId);
+      else next.add(taskId);
+      return next;
+    });
+  }
+
   const startedCount = state.tasks.filter((task) => task.status === "Started").length;
   const blockedCount = state.tasks.filter((task) => task.status === "Blocked").length;
 
@@ -780,6 +799,9 @@ function App() {
               <TaskCard
                 key={task.id}
                 task={task}
+                expanded={expandedTaskIds.has(task.id)}
+                showUnsavedDot={changedTaskId === task.id && saveState !== "saved" && saveState !== "idle"}
+                onToggleExpanded={() => toggleTaskDetails(task.id)}
                 onDragStart={() => setDragPayload({ kind: "tree-task", taskId: task.id })}
                 onDragEnd={() => setDragPayload(null)}
                 onDropOnTask={() => {
@@ -790,6 +812,7 @@ function App() {
                 onStatus={(status) => updateTask(task.id, { status, done: status === "Done" || status === "Aborted" })}
                 onEstimate={(estimateMinutes) => updateTask(task.id, { estimateMinutes })}
                 onDueDate={(dueDate) => updateTask(task.id, { dueDate: dueDate || undefined })}
+                onDescription={(description) => updateTask(task.id, { description })}
                 onDelete={() => deleteTask(task.id)}
               />
             ))}
@@ -1153,6 +1176,9 @@ function SettingsPanel({
 
 function TaskCard({
   task,
+  expanded,
+  showUnsavedDot,
+  onToggleExpanded,
   onDragStart,
   onDragEnd,
   onDropOnTask,
@@ -1160,9 +1186,13 @@ function TaskCard({
   onStatus,
   onEstimate,
   onDueDate,
+  onDescription,
   onDelete
 }: {
   task: Task;
+  expanded: boolean;
+  showUnsavedDot: boolean;
+  onToggleExpanded: () => void;
   onDragStart: () => void;
   onDragEnd: () => void;
   onDropOnTask: () => void;
@@ -1170,6 +1200,7 @@ function TaskCard({
   onStatus: (status: TaskStatus) => void;
   onEstimate: (estimate: number) => void;
   onDueDate: (date: string) => void;
+  onDescription: (description: string) => void;
   onDelete: () => void;
 }) {
   return (
@@ -1190,42 +1221,68 @@ function TaskCard({
         onDropOnTask();
       }}
     >
-      <GripVertical className="drag-handle" size={15} />
-      <div className="task-main">
+      <div className="task-row">
+        <GripVertical className="drag-handle" size={15} />
+        <button className="task-expand-button" title={expanded ? "Details schließen" : "Details öffnen"} onClick={onToggleExpanded}>
+          {expanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+        </button>
         <button className={`check-button ${task.done ? "checked" : ""}`} title="Erledigt" onClick={() => onDone(!task.done)}>
           {task.done && <Check size={14} />}
         </button>
-        <div>
-          <div className="task-title">
-            <StatusIcon status={task.status} />
-            <strong>{task.title}</strong>
-          </div>
-          <div className="task-meta">
-            <input type="date" value={task.dueDate ?? ""} onChange={(event) => onDueDate(event.target.value)} />
-            <select value={task.status} onChange={(event) => onStatus(event.target.value as TaskStatus)}>
-              {statuses.map((status) => (
-                <option key={status}>{status}</option>
-              ))}
-            </select>
-            <select
-              aria-label="Aufwand"
-              value={task.estimateMinutes}
-              onChange={(event) => onEstimate(Number(event.target.value))}
-            >
-              {durationOptions.map((minutes) => (
-                <option key={minutes} value={minutes}>
-                  {minutesToTimeLabel(minutes)}
-                </option>
-              ))}
-            </select>
-          </div>
+        <div className="task-main">
+          <StatusIcon status={task.status} />
+          <strong>{task.title}</strong>
+          {showUnsavedDot && <span className="task-unsaved-dot" title="Ungespeicherte Änderung" />}
         </div>
-      </div>
-      <div className="task-actions">
+        <div className="task-compact-meta">
+          <span className={`task-status-pill ${statusMeta[task.status].className}`}>{task.status}</span>
+          {task.dueDate && <span>{formatOptionalDate(task.dueDate)}</span>}
+          <span>{minutesToTimeLabel(task.estimateMinutes)}</span>
+        </div>
         <button className="icon-button ghost danger" title="Aufgabe löschen" onClick={onDelete}>
           <Trash2 size={15} />
         </button>
       </div>
+      {expanded && (
+        <div className="task-detail-panel">
+          <label>
+            <textarea
+              placeholder="Beschreibung"
+              value={task.description ?? ""}
+              onChange={(event) => onDescription(event.target.value)}
+              onDragStart={(event) => event.preventDefault()}
+            />
+          </label>
+          <div className="task-detail-grid">
+            <label>
+              Deadline
+              <input type="date" value={task.dueDate ?? ""} onChange={(event) => onDueDate(event.target.value)} />
+            </label>
+            <label>
+              Status
+              <select value={task.status} onChange={(event) => onStatus(event.target.value as TaskStatus)}>
+                {statuses.map((status) => (
+                  <option key={status}>{status}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Aufwand
+              <select
+                aria-label="Aufwand"
+                value={task.estimateMinutes}
+                onChange={(event) => onEstimate(Number(event.target.value))}
+              >
+                {durationOptions.map((minutes) => (
+                  <option key={minutes} value={minutes}>
+                    {minutesToTimeLabel(minutes)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </div>
+      )}
     </article>
   );
 }

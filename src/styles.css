@@ -496,74 +496,128 @@ button:disabled {
 }
 
 .task-card {
-  align-items: flex-start;
-  display: flex;
-  gap: 7px;
-  justify-content: space-between;
-  padding: 7px;
+  display: block;
+  padding: 6px 7px;
 }
 
-.task-main {
-  display: flex;
-  flex: 1;
-  gap: 7px;
-  min-width: 0;
-}
-
-.task-main > div {
-  min-width: 0;
-}
-
-.task-title {
+.task-row {
   align-items: center;
   display: flex;
   gap: 6px;
-  margin-bottom: 6px;
   min-width: 0;
 }
 
-.task-title strong {
-  font-size: 14px;
-  line-height: 1.2;
+.task-main {
+  align-items: center;
+  display: flex;
+  flex: 1;
+  gap: 6px;
+  min-width: 0;
 }
 
-.task-title strong,
+.task-main strong {
+  font-size: 13px;
+  line-height: 1.2;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-main strong,
 .prio-card-main strong,
 .booking-head strong {
   overflow-wrap: anywhere;
 }
 
-.task-meta {
+.task-unsaved-dot {
+  background: var(--status-color);
+  border-radius: 999px;
+  flex-shrink: 0;
+  height: 6px;
+  opacity: 0.75;
+  width: 6px;
+}
+
+.task-compact-meta {
   display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-}
-
-.task-meta input[type="date"] {
-  width: 118px;
-}
-
-.task-meta select {
-  width: 96px;
-}
-
-.task-meta input,
-.task-meta select {
-  min-height: 30px;
-  padding: 0 7px;
-}
-
-.task-actions {
-  display: flex;
-  flex-direction: column;
   flex-shrink: 0;
   gap: 4px;
+}
+
+.task-compact-meta span {
+  background: rgba(255, 255, 255, 0.65);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 7px;
+}
+
+.task-compact-meta .task-status-pill {
+  background: var(--status-bg);
+  border: 1px solid var(--status-color);
+  color: var(--status-color);
+}
+
+.task-expand-button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  display: flex;
+  flex-shrink: 0;
+  height: 24px;
+  justify-content: center;
+  padding: 0;
+  width: 20px;
+}
+
+.task-detail-panel {
+  border-top: 1px solid color-mix(in srgb, var(--status-color) 22%, var(--line));
+  display: grid;
+  gap: 8px;
+  margin: 7px 0 1px 43px;
+  padding-top: 8px;
+}
+
+.task-detail-panel label {
+  color: var(--muted);
+  display: grid;
+  font-size: 12px;
+  gap: 4px;
+}
+
+.task-detail-panel textarea {
+  min-height: 74px;
+  resize: vertical;
+}
+
+.task-detail-grid {
+  display: grid;
+  gap: 7px;
+  grid-template-columns: 1fr 1fr 92px;
+}
+
+.task-detail-panel input,
+.task-detail-panel select,
+.task-detail-panel textarea {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  min-height: 32px;
+  padding: 0 8px;
+  width: 100%;
+}
+
+.task-detail-panel textarea {
+  padding: 8px;
 }
 
 .drag-handle {
   color: var(--muted);
   flex-shrink: 0;
-  margin-top: 6px;
 }
 
 .danger {
@@ -580,7 +634,6 @@ button:disabled {
   flex-shrink: 0;
   height: 24px;
   justify-content: center;
-  margin-top: 1px;
   width: 24px;
 }
 

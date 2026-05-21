@@ -13,23 +13,23 @@ function jsonResponse(payload: unknown, init?: ResponseInit) {
 }
 
 export default async (request: Request) => {
-  const provider = createStateProvider();
+  try {
+    const provider = createStateProvider();
 
-  if (request.method === "GET") {
-    return jsonResponse(await provider.load());
-  }
+    if (request.method === "GET") {
+      return jsonResponse(await provider.load());
+    }
 
-  if (request.method === "PUT") {
-    try {
+    if (request.method === "PUT") {
       const state = (await request.json()) as AppState;
       await provider.save(state);
       return jsonResponse(state);
-    } catch (error) {
-      return jsonResponse({ error: error instanceof Error ? error.message : "Invalid payload" }, { status: 400 });
     }
-  }
 
-  return jsonResponse({ error: "Method not allowed" }, { status: 405 });
+    return jsonResponse({ error: "Method not allowed" }, { status: 405 });
+  } catch (error) {
+    return jsonResponse({ error: error instanceof Error ? error.message : "State provider failed" }, { status: 500 });
+  }
 };
 
 export const config: Config = {
