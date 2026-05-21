@@ -1,11 +1,58 @@
 {
   "dailyCapacities": {
     "2026-05-21": {
-      "dayCapacityMinutes": 600,
-      "planningCapacityMinutes": 480
+      "dayCapacityMinutes": 480,
+      "planningCapacityMinutes": 360
     }
   },
-  "tasks": [],
+  "tasks": [
+    {
+      "id": "task-ogm24ndifrk-mpfi5n3f",
+      "title": "aufgabe 3",
+      "estimateMinutes": 30,
+      "status": "Started",
+      "done": false,
+      "treeOrder": 0
+    },
+    {
+      "id": "task-i8l5z290sz-mpfi5ksp",
+      "title": "aufgabe 2",
+      "estimateMinutes": 105,
+      "status": "Started",
+      "done": false,
+      "treeOrder": 1
+    },
+    {
+      "id": "task-9iw0q8t2qbm-mpfi5jcs",
+      "title": "aufgabe 1",
+      "estimateMinutes": 150,
+      "status": "Started",
+      "done": false,
+      "treeOrder": 2
+    }
+  ],
   "prioTaskIds": [],
-  "bookings": []
+  "bookings": [
+    {
+      "id": "booking-gmez6opy6wa-mpfi5z9c",
+      "taskId": "task-9iw0q8t2qbm-mpfi5jcs",
+      "date": "2026-05-21",
+      "startTime": "10:00",
+      "durationMinutes": 240
+    },
+    {
+      "id": "booking-53ymroc2gx2-mpfi644b",
+      "taskId": "task-i8l5z290sz-mpfi5ksp",
+      "date": "2026-05-22",
+      "startTime": "10:00",
+      "durationMinutes": 195
+    },
+    {
+      "id": "booking-vhd2lhou11e-mpfi78ui",
+      "taskId": "task-ogm24ndifrk-mpfi5n3f",
+      "date": "2026-05-21",
+      "startTime": "08:00",
+      "durationMinutes": 90
+    }
+  ]
 }

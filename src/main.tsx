@@ -115,6 +115,10 @@ function isWeekend(date: string) {
   return day === 0 || day === 6;
 }
 
+function isMonday(date: string) {
+  return new Date(`${date}T12:00:00`).getDay() === 1;
+}
+
 function formatOptionalDate(date?: string) {
   return date ? formatDate(date) : "Keine Deadline";
 }
@@ -164,6 +168,7 @@ function App() {
   const [dragPayload, setDragPayload] = useState<DragPayload | null>(null);
   const [calendarStartDate, setCalendarStartDate] = useState(today);
   const [visibleDayCount, setVisibleDayCount] = useState(7);
+  const [showWeekends, setShowWeekends] = useState(true);
 
   useEffect(() => {
     fetch("/api/state")
@@ -192,8 +197,16 @@ function App() {
 
   const taskById = useMemo(() => new Map(state?.tasks.map((task) => [task.id, task]) ?? []), [state?.tasks]);
   const days = useMemo(
-    () => Array.from({ length: visibleDayCount }, (_, index) => addDays(calendarStartDate, index)),
-    [calendarStartDate, visibleDayCount]
+    () => {
+      const nextDays: string[] = [];
+      let cursor = calendarStartDate;
+      while (nextDays.length < visibleDayCount) {
+        if (showWeekends || !isWeekend(cursor)) nextDays.push(cursor);
+        cursor = addDays(cursor, 1);
+      }
+      return nextDays;
+    },
+    [calendarStartDate, showWeekends, visibleDayCount]
   );
   const workspaceColumns = [
     collapsed.tree ? "64px" : collapsed.cal ? "minmax(520px, 1.35fr)" : "minmax(360px, 0.95fr)",
@@ -574,6 +587,13 @@ function App() {
                 </option>
               ))}
             </select>
+            <button
+              className={`weekend-chip ${showWeekends ? "active" : ""}`}
+              onClick={() => setShowWeekends((current) => !current)}
+              aria-pressed={showWeekends}
+            >
+              Wochenende
+            </button>
             <button className="soft-button icon-button" title="Zurück blättern" onClick={() => setCalendarStartDate(addDays(calendarStartDate, -visibleDayCount))}>
               <ChevronLeft size={15} />
             </button>
@@ -816,7 +836,7 @@ function DayColumn({
   }, [editingBookingId]);
 
   return (
-    <section className="day-column" ref={dayColumnRef}>
+    <section className={`day-column ${isMonday(date) ? "week-start" : ""}`} ref={dayColumnRef}>
       <header className={`${date === today ? "today" : ""} ${isWeekend(date) ? "weekend" : ""}`}>{formatDate(date)}</header>
       <div className="capacity-strip">
         <div className="capacity-label">

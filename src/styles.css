@@ -283,6 +283,23 @@ button:disabled {
   width: 96px;
 }
 
+.weekend-chip {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  display: inline-flex;
+  height: 34px;
+  padding: 0 12px;
+}
+
+.weekend-chip.active {
+  background: #dcefe9;
+  border-color: rgba(25, 110, 98, 0.35);
+  color: #0e5f54;
+}
+
 .list {
   display: flex;
   flex-direction: column;
@@ -461,6 +478,11 @@ button:disabled {
   min-height: 100%;
   overflow: visible;
   position: relative;
+}
+
+.day-column.week-start {
+  border-left-color: #899287;
+  border-left-width: 3px;
 }
 
 .day-column > header {
