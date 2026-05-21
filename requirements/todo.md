@@ -1,2 +1,3 @@
+- filter für tree nach suchwort und/oder status
 
-
+- wie kann ich die anwendung einfach ins web deployen? wo werden die daten gespeichert? könnte ich postgres benutzen mit 1 zeile für die datenbank eines anwenders? änderungen können ja sehr einfach jederzeit auch dort gespeichert werden. das geht auch im hintergrund. es könnte sogar versioniert gespeichert werden, dann gibt es mehrere einträge pro user, aber nur der letzte enthält den aktuellen stand.

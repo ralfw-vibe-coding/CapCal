@@ -7,9 +7,25 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const dataPath = join(root, "data", "capcal.json");
 
 const emptyState = {
+  settings: {
+    defaultTreeDurationMinutes: 30,
+    defaultPrioDurationMinutes: 30,
+    defaultDayCapacityMinutes: 480,
+    defaultPlanningCapacityMinutes: 360,
+    calendarStartTime: "06:00",
+    calendarEndTime: "20:00",
+    showWeekends: false,
+    visibleDayCount: 7,
+    panelsCollapsed: {
+      tree: false,
+      prio: false,
+      cal: false
+    }
+  },
   dailyCapacities: {},
   tasks: [],
   prioTaskIds: [],
+  prioDurations: {},
   bookings: []
 };
 

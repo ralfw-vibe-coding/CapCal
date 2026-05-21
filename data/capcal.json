@@ -3,16 +3,41 @@
     "2026-05-21": {
       "dayCapacityMinutes": 480,
       "planningCapacityMinutes": 360
+    },
+    "2026-05-22": {
+      "dayCapacityMinutes": 480,
+      "planningCapacityMinutes": 360
+    },
+    "2026-05-25": {
+      "dayCapacityMinutes": 420,
+      "planningCapacityMinutes": 300
     }
   },
   "tasks": [
+    {
+      "id": "task-pm8paeeerv8-mpfjg9ql",
+      "title": "yyy2",
+      "estimateMinutes": 45,
+      "status": "Ready",
+      "done": false,
+      "treeOrder": 0
+    },
+    {
+      "id": "task-0y8msvqfllp-mpfjg31v",
+      "title": "yyy",
+      "dueDate": "2026-05-21",
+      "estimateMinutes": 45,
+      "status": "Started",
+      "done": false,
+      "treeOrder": 1
+    },
     {
       "id": "task-ogm24ndifrk-mpfi5n3f",
       "title": "aufgabe 3",
       "estimateMinutes": 30,
       "status": "Started",
       "done": false,
-      "treeOrder": 0
+      "treeOrder": 2
     },
     {
       "id": "task-i8l5z290sz-mpfi5ksp",
@@ -20,15 +45,15 @@
       "estimateMinutes": 105,
       "status": "Started",
       "done": false,
-      "treeOrder": 1
+      "treeOrder": 3
     },
     {
       "id": "task-9iw0q8t2qbm-mpfi5jcs",
       "title": "aufgabe 1",
-      "estimateMinutes": 150,
+      "estimateMinutes": 240,
       "status": "Started",
       "done": false,
-      "treeOrder": 2
+      "treeOrder": 4
     }
   ],
   "prioTaskIds": [],
@@ -53,6 +78,36 @@
       "date": "2026-05-21",
       "startTime": "08:00",
       "durationMinutes": 90
+    },
+    {
+      "id": "booking-57ghonnmy7-mpfjfpnx",
+      "taskId": "task-9iw0q8t2qbm-mpfi5jcs",
+      "date": "2026-05-22",
+      "startTime": "05:15",
+      "durationMinutes": 60
+    },
+    {
+      "id": "booking-i163rfe9rda-mpfjfu4k",
+      "taskId": "task-9iw0q8t2qbm-mpfi5jcs",
+      "date": "2026-05-22",
+      "startTime": "07:00",
+      "durationMinutes": 60
     }
-  ]
+  ],
+  "settings": {
+    "defaultTreeDurationMinutes": 30,
+    "defaultPrioDurationMinutes": 60,
+    "defaultDayCapacityMinutes": 540,
+    "defaultPlanningCapacityMinutes": 300,
+    "calendarStartTime": "05:00",
+    "calendarEndTime": "22:00",
+    "showWeekends": true,
+    "visibleDayCount": 21,
+    "panelsCollapsed": {
+      "tree": false,
+      "prio": false,
+      "cal": false
+    }
+  },
+  "prioDurations": {}
 }

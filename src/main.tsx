@@ -16,6 +16,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
+  SlidersHorizontal,
   Sparkles,
   Target,
   Trash2,
@@ -50,10 +51,28 @@ type DailyCapacity = {
   planningCapacityMinutes: number;
 };
 
+type AppSettings = {
+  defaultTreeDurationMinutes: number;
+  defaultPrioDurationMinutes: number;
+  defaultDayCapacityMinutes: number;
+  defaultPlanningCapacityMinutes: number;
+  calendarStartTime: string;
+  calendarEndTime: string;
+  showWeekends: boolean;
+  visibleDayCount: number;
+  panelsCollapsed: {
+    tree: boolean;
+    prio: boolean;
+    cal: boolean;
+  };
+};
+
 type AppState = {
+  settings?: AppSettings;
   dailyCapacities?: Record<string, DailyCapacity>;
   tasks: Task[];
   prioTaskIds: string[];
+  prioDurations?: Record<string, number>;
   bookings: Booking[];
 };
 
@@ -63,18 +82,8 @@ type DragPayload =
   | { kind: "booking"; bookingId: string };
 
 const statuses: TaskStatus[] = ["Backlog", "Ready", "Started", "Blocked", "Done", "Aborted"];
-const defaultDuration = 30;
 const durationOptions = Array.from({ length: 15 }, (_, index) => 30 + index * 15);
-const hours = Array.from({ length: 15 }, (_, index) => index + 6);
-const calendarStartMinutes = 6 * 60;
-const calendarEndMinutes = 20 * 60;
 const minuteHeight = 1.1;
-const timeOptions = Array.from({ length: 57 }, (_, index) => {
-  const minutes = 6 * 60 + index * 15;
-  const hour = Math.floor(minutes / 60).toString().padStart(2, "0");
-  const minute = (minutes % 60).toString().padStart(2, "0");
-  return `${hour}:${minute}`;
-});
 
 const statusMeta: Record<TaskStatus, { label: string; icon: typeof Circle; className: string }> = {
   Backlog: { label: "Backlog", icon: Circle, className: "status-backlog" },
@@ -86,9 +95,20 @@ const statusMeta: Record<TaskStatus, { label: string; icon: typeof Circle; class
 };
 
 const today = new Date().toISOString().slice(0, 10);
-const defaultCapacity: DailyCapacity = {
-  dayCapacityMinutes: 480,
-  planningCapacityMinutes: 360
+const defaultSettings: AppSettings = {
+  defaultTreeDurationMinutes: 30,
+  defaultPrioDurationMinutes: 30,
+  defaultDayCapacityMinutes: 480,
+  defaultPlanningCapacityMinutes: 360,
+  calendarStartTime: "06:00",
+  calendarEndTime: "20:00",
+  showWeekends: false,
+  visibleDayCount: 7,
+  panelsCollapsed: {
+    tree: false,
+    prio: false,
+    cal: false
+  }
 };
 const dayCapacityOptions = Array.from({ length: 17 }, (_, index) => 120 + index * 30);
 const planningCapacityOptions = Array.from({ length: 17 }, (_, index) => 120 + index * 30);
@@ -159,23 +179,52 @@ function minutesToTime(minutes: number) {
   return `${hour}:${minute}`;
 }
 
+function durationForPlanning(taskDurationMinutes: number | undefined, defaultPrioDurationMinutes: number) {
+  return taskDurationMinutes && taskDurationMinutes <= 120 ? taskDurationMinutes : defaultPrioDurationMinutes;
+}
+
+function normalizeState(rawState: AppState): AppState {
+  return {
+    ...rawState,
+    settings: {
+      ...defaultSettings,
+      ...(rawState.settings ?? {}),
+      panelsCollapsed: {
+        ...defaultSettings.panelsCollapsed,
+        ...(rawState.settings?.panelsCollapsed ?? {})
+      }
+    },
+    dailyCapacities: rawState.dailyCapacities ?? {},
+    tasks: rawState.tasks ?? [],
+    prioTaskIds: rawState.prioTaskIds ?? [],
+    prioDurations: rawState.prioDurations ?? {},
+    bookings: rawState.bookings ?? []
+  };
+}
+
+function createTimeOptions(startTime: string, endTime: string) {
+  const startMinutes = timeToMinutes(startTime);
+  const endMinutes = timeToMinutes(endTime);
+  const count = Math.max(1, Math.floor((endMinutes - startMinutes) / 15) + 1);
+  return Array.from({ length: count }, (_, index) => minutesToTime(startMinutes + index * 15));
+}
+
 function App() {
   const [state, setState] = useState<AppState | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [collapsed, setCollapsed] = useState({ tree: false, prio: false, cal: false });
   const [newTask, setNewTask] = useState({ title: "", dueDate: "", estimateMinutes: 30 });
   const [quickAdd, setQuickAdd] = useState({ prio: "", cal: "" });
   const [dragPayload, setDragPayload] = useState<DragPayload | null>(null);
   const [calendarStartDate, setCalendarStartDate] = useState(today);
-  const [visibleDayCount, setVisibleDayCount] = useState(7);
-  const [showWeekends, setShowWeekends] = useState(true);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     fetch("/api/state")
       .then((response) => response.json())
-      .then(setState)
+      .then((loadedState) => setState(normalizeState(loadedState)))
       .catch(() => {
-        setState({ dailyCapacities: {}, tasks: [], prioTaskIds: [], bookings: [] });
+        setState(normalizeState({ dailyCapacities: {}, tasks: [], prioTaskIds: [], bookings: [] }));
         setSaveState("error");
       });
   }, []);
@@ -195,24 +244,53 @@ function App() {
     return () => window.clearTimeout(timeout);
   }, [state]);
 
+  const settings = state?.settings ?? defaultSettings;
+  const defaultCapacity: DailyCapacity = {
+    dayCapacityMinutes: settings.defaultDayCapacityMinutes,
+    planningCapacityMinutes: settings.defaultPlanningCapacityMinutes
+  };
+  const calendarStartMinutes = timeToMinutes(settings.calendarStartTime);
+  const calendarEndMinutes = timeToMinutes(settings.calendarEndTime);
+  const timeOptions = useMemo(
+    () => createTimeOptions(settings.calendarStartTime, settings.calendarEndTime),
+    [settings.calendarEndTime, settings.calendarStartTime]
+  );
   const taskById = useMemo(() => new Map(state?.tasks.map((task) => [task.id, task]) ?? []), [state?.tasks]);
   const days = useMemo(
     () => {
       const nextDays: string[] = [];
       let cursor = calendarStartDate;
-      while (nextDays.length < visibleDayCount) {
-        if (showWeekends || !isWeekend(cursor)) nextDays.push(cursor);
+      while (nextDays.length < settings.visibleDayCount) {
+        if (settings.showWeekends || !isWeekend(cursor)) nextDays.push(cursor);
         cursor = addDays(cursor, 1);
       }
       return nextDays;
     },
-    [calendarStartDate, showWeekends, visibleDayCount]
+    [calendarStartDate, settings.showWeekends, settings.visibleDayCount]
   );
   const workspaceColumns = [
-    collapsed.tree ? "64px" : collapsed.cal ? "minmax(520px, 1.35fr)" : "minmax(360px, 0.95fr)",
-    collapsed.prio ? "64px" : "minmax(310px, 0.8fr)",
-    collapsed.cal ? "64px" : "minmax(520px, 1.45fr)"
+    settings.panelsCollapsed.tree ? "64px" : settings.panelsCollapsed.cal ? "minmax(520px, 1.35fr)" : "minmax(360px, 0.95fr)",
+    settings.panelsCollapsed.prio ? "64px" : "minmax(310px, 0.8fr)",
+    settings.panelsCollapsed.cal ? "64px" : "minmax(520px, 1.45fr)"
   ].join(" ");
+
+  useEffect(() => {
+    setNewTask((current) =>
+      current.title.trim() ? current : { ...current, estimateMinutes: settings.defaultTreeDurationMinutes }
+    );
+  }, [settings.defaultTreeDurationMinutes]);
+
+  useEffect(() => {
+    if (!settingsOpen) return;
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target;
+      if (target instanceof Node && !settingsMenuRef.current?.contains(target)) setSettingsOpen(false);
+    }
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    return () => window.removeEventListener("pointerdown", handlePointerDown);
+  }, [settingsOpen]);
 
   if (!state) {
     return (
@@ -227,14 +305,59 @@ function App() {
     setState((current) => (current ? mutator(current) : current));
   }
 
+  function updateSettings(patch: Partial<AppSettings>) {
+    updateState((draft) => ({
+      ...draft,
+      settings: {
+        ...defaultSettings,
+        ...(draft.settings ?? defaultSettings),
+        ...patch,
+        panelsCollapsed: {
+          ...defaultSettings.panelsCollapsed,
+          ...(draft.settings?.panelsCollapsed ?? defaultSettings.panelsCollapsed),
+          ...(patch.panelsCollapsed ?? {})
+        }
+      }
+    }));
+  }
+
+  function updateCapacityDefaults(patch: Pick<Partial<AppSettings>, "defaultDayCapacityMinutes" | "defaultPlanningCapacityMinutes">) {
+    updateState((draft) => {
+      const currentSettings = { ...defaultSettings, ...(draft.settings ?? {}) };
+      const currentDefaultCapacity = {
+        dayCapacityMinutes: currentSettings.defaultDayCapacityMinutes,
+        planningCapacityMinutes: currentSettings.defaultPlanningCapacityMinutes
+      };
+      const bookedDates = new Set(draft.bookings.map((booking) => booking.date));
+      const dailyCapacities = { ...(draft.dailyCapacities ?? {}) };
+      for (const date of bookedDates) {
+        if (!dailyCapacities[date]) dailyCapacities[date] = currentDefaultCapacity;
+      }
+      const nextSettings = {
+        ...currentSettings,
+        ...patch
+      };
+      if (nextSettings.defaultPlanningCapacityMinutes > nextSettings.defaultDayCapacityMinutes) {
+        nextSettings.defaultPlanningCapacityMinutes = nextSettings.defaultDayCapacityMinutes;
+      }
+      return {
+        ...draft,
+        dailyCapacities,
+        settings: nextSettings
+      };
+    });
+  }
+
   function upsertTask(title: string, target?: "prio" | "cal", date = today): Task | null {
     const trimmed = title.trim();
     if (!trimmed) return null;
+    const estimateMinutes = settings.defaultTreeDurationMinutes;
+    const planningDurationMinutes = durationForPlanning(estimateMinutes, settings.defaultPrioDurationMinutes);
     const task: Task = {
       id: uid("task"),
       title: trimmed,
       dueDate: target === "cal" ? date : undefined,
-      estimateMinutes: 30,
+      estimateMinutes,
       status: target === "cal" ? "Started" : "Ready",
       done: false,
       treeOrder: 0
@@ -250,11 +373,18 @@ function App() {
         ...draft,
         tasks,
         prioTaskIds: [...draft.prioTaskIds],
+        prioDurations: { ...(draft.prioDurations ?? {}) },
         bookings: [...draft.bookings]
       };
-      if (target === "prio") next.prioTaskIds.push(task.id);
+      if (target === "prio") {
+        next.prioTaskIds.push(task.id);
+        next.prioDurations = {
+          ...(next.prioDurations ?? {}),
+          [task.id]: planningDurationMinutes
+        };
+      }
       if (target === "cal") {
-        next.bookings.push({ id: uid("booking"), taskId: task.id, date, durationMinutes: defaultDuration });
+        next.bookings.push({ id: uid("booking"), taskId: task.id, date, durationMinutes: planningDurationMinutes });
       }
       return next;
     });
@@ -268,7 +398,7 @@ function App() {
       dueDate: newTask.dueDate || undefined,
       estimateMinutes: newTask.estimateMinutes
     });
-    setNewTask({ title: "", dueDate: "", estimateMinutes: 30 });
+    setNewTask({ title: "", dueDate: "", estimateMinutes: settings.defaultTreeDurationMinutes });
   }
 
   function updateTask(taskId: string, patch: Partial<Task>) {
@@ -292,21 +422,44 @@ function App() {
   }
 
   function addToPrio(taskId: string) {
-    updateState((draft) =>
-      draft.prioTaskIds.includes(taskId) ? draft : { ...draft, prioTaskIds: [...draft.prioTaskIds, taskId] }
-    );
+    updateState((draft) => {
+      if (draft.prioTaskIds.includes(taskId)) return draft;
+      const task = draft.tasks.find((candidate) => candidate.id === taskId);
+      return {
+        ...draft,
+        prioTaskIds: [...draft.prioTaskIds, taskId],
+        prioDurations: {
+          ...(draft.prioDurations ?? {}),
+          [taskId]: durationForPlanning(task?.estimateMinutes, settings.defaultPrioDurationMinutes)
+        }
+      };
+    });
   }
 
   function removeFromPrio(taskId: string) {
-    updateState((draft) => ({ ...draft, prioTaskIds: draft.prioTaskIds.filter((id) => id !== taskId) }));
+    updateState((draft) => {
+      const { [taskId]: _removed, ...prioDurations } = draft.prioDurations ?? {};
+      return { ...draft, prioTaskIds: draft.prioTaskIds.filter((id) => id !== taskId), prioDurations };
+    });
   }
 
   function moveBeforeInPrio(sourceTaskId: string, targetTaskId: string) {
     updateState((draft) => {
+      const sourceWasNew = !draft.prioTaskIds.includes(sourceTaskId);
+      const sourceTask = draft.tasks.find((task) => task.id === sourceTaskId);
       const prioTaskIds = draft.prioTaskIds.includes(sourceTaskId) ? [...draft.prioTaskIds] : [...draft.prioTaskIds, sourceTaskId];
       const sourceIndex = prioTaskIds.indexOf(sourceTaskId);
       const targetIndex = prioTaskIds.indexOf(targetTaskId);
-      return { ...draft, prioTaskIds: moveItemToDropTarget(prioTaskIds, sourceIndex, targetIndex) };
+      return {
+        ...draft,
+        prioDurations: sourceWasNew
+          ? {
+              ...(draft.prioDurations ?? {}),
+              [sourceTaskId]: durationForPlanning(sourceTask?.estimateMinutes, settings.defaultPrioDurationMinutes)
+            }
+          : draft.prioDurations,
+        prioTaskIds: moveItemToDropTarget(prioTaskIds, sourceIndex, targetIndex)
+      };
     });
   }
 
@@ -317,28 +470,29 @@ function App() {
         .filter((task) => task.id !== taskId)
         .map((task, treeOrder) => ({ ...task, treeOrder })),
       prioTaskIds: draft.prioTaskIds.filter((id) => id !== taskId),
+      prioDurations: Object.fromEntries(Object.entries(draft.prioDurations ?? {}).filter(([id]) => id !== taskId)),
       bookings: draft.bookings.filter((booking) => booking.taskId !== taskId)
     }));
   }
 
-  function bookTask(taskId: string, date: string, startTime?: string) {
-    updateState((draft) => ({
-      ...draft,
-      prioTaskIds: draft.prioTaskIds.filter((id) => id !== taskId),
-      tasks: draft.tasks.map((task) =>
-        task.id === taskId && task.status !== "Done" ? { ...task, status: "Started" } : task
-      ),
-      bookings: [
-        ...draft.bookings,
-        {
-          id: uid("booking"),
-          taskId,
-          date,
-          startTime,
-          durationMinutes: draft.tasks.find((task) => task.id === taskId)?.estimateMinutes ?? defaultDuration
-        }
-      ]
-    }));
+  function bookTask(taskId: string, date: string, startTime?: string, source: "tree" | "prio" = "tree") {
+    updateState((draft) => {
+      const task = draft.tasks.find((candidate) => candidate.id === taskId);
+      const durationMinutes =
+        source === "prio"
+          ? (draft.prioDurations?.[taskId] ?? durationForPlanning(task?.estimateMinutes, settings.defaultPrioDurationMinutes))
+          : durationForPlanning(task?.estimateMinutes, settings.defaultPrioDurationMinutes);
+      const { [taskId]: _removed, ...prioDurations } = draft.prioDurations ?? {};
+      return {
+        ...draft,
+        prioTaskIds: draft.prioTaskIds.filter((id) => id !== taskId),
+        prioDurations,
+        tasks: draft.tasks.map((candidate) =>
+          candidate.id === taskId && candidate.status !== "Done" ? { ...candidate, status: "Started" } : candidate
+        ),
+        bookings: [...draft.bookings, { id: uid("booking"), taskId, date, startTime, durationMinutes }]
+      };
+    });
   }
 
   function updateBooking(bookingId: string, patch: Partial<Booking>) {
@@ -375,12 +529,18 @@ function App() {
   function handleDrop(date: string, startTime?: string) {
     if (!dragPayload) return;
     if (dragPayload.kind === "booking") updateBooking(dragPayload.bookingId, { date, startTime });
-    if (dragPayload.kind === "tree-task" || dragPayload.kind === "prio-task") bookTask(dragPayload.taskId, date, startTime);
+    if (dragPayload.kind === "tree-task") bookTask(dragPayload.taskId, date, startTime, "tree");
+    if (dragPayload.kind === "prio-task") bookTask(dragPayload.taskId, date, startTime, "prio");
     setDragPayload(null);
   }
 
-  function togglePanel(panel: keyof typeof collapsed) {
-    setCollapsed((current) => ({ ...current, [panel]: !current[panel] }));
+  function togglePanel(panel: keyof AppSettings["panelsCollapsed"]) {
+    updateSettings({
+      panelsCollapsed: {
+        ...settings.panelsCollapsed,
+        [panel]: !settings.panelsCollapsed[panel]
+      }
+    });
   }
 
   const startedCount = state.tasks.filter((task) => task.status === "Started").length;
@@ -402,6 +562,19 @@ function App() {
           <div className={`save-pill save-${saveState}`}>
             {saveState === "saving" ? "Speichert" : saveState === "error" ? "Speicherfehler" : "Gespeichert"}
           </div>
+          <div className="settings-menu" ref={settingsMenuRef}>
+            <button className="icon-button" title="Einstellungen" onClick={() => setSettingsOpen((open) => !open)}>
+              <SlidersHorizontal size={16} />
+            </button>
+            {settingsOpen && (
+              <SettingsPanel
+                settings={settings}
+                onSettingsChange={updateSettings}
+                onCapacityDefaultsChange={updateCapacityDefaults}
+                onClose={() => setSettingsOpen(false)}
+              />
+            )}
+          </div>
         </div>
       </header>
 
@@ -409,7 +582,7 @@ function App() {
         <Panel
           title="Aufgaben"
           icon={ListTree}
-          collapsed={collapsed.tree}
+          collapsed={settings.panelsCollapsed.tree}
           onToggle={() => togglePanel("tree")}
           className="tree-panel"
         >
@@ -466,7 +639,7 @@ function App() {
         <Panel
           title="Priorisierung"
           icon={Target}
-          collapsed={collapsed.prio}
+          collapsed={settings.panelsCollapsed.prio}
           onToggle={() => togglePanel("prio")}
           className="prio-panel"
           onDrop={() => {
@@ -502,6 +675,8 @@ function App() {
             {state.prioTaskIds.map((taskId) => {
               const task = taskById.get(taskId);
               if (!task) return null;
+              const prioDuration =
+                state.prioDurations?.[task.id] ?? durationForPlanning(task.estimateMinutes, settings.defaultPrioDurationMinutes);
               return (
                 <div
                   className="prio-card"
@@ -524,8 +699,16 @@ function App() {
                   <select
                     className="prio-duration"
                     aria-label="Dauer in Priorisierung"
-                    value={task.estimateMinutes}
-                    onChange={(event) => updateTask(task.id, { estimateMinutes: Number(event.target.value) })}
+                    value={prioDuration}
+                    onChange={(event) =>
+                      updateState((draft) => ({
+                        ...draft,
+                        prioDurations: {
+                          ...(draft.prioDurations ?? {}),
+                          [task.id]: Number(event.target.value)
+                        }
+                      }))
+                    }
                     onClick={(event) => event.stopPropagation()}
                     onDragStart={(event) => event.preventDefault()}
                   >
@@ -547,7 +730,7 @@ function App() {
         <Panel
           title="Kalender"
           icon={CalendarDays}
-          collapsed={collapsed.cal}
+          collapsed={settings.panelsCollapsed.cal}
           onToggle={() => togglePanel("cal")}
           className="cal-panel"
         >
@@ -578,8 +761,8 @@ function App() {
             <select
               className="day-count-select"
               aria-label="Sichtbare Tage"
-              value={visibleDayCount}
-              onChange={(event) => setVisibleDayCount(Number(event.target.value))}
+              value={settings.visibleDayCount}
+              onChange={(event) => updateSettings({ visibleDayCount: Number(event.target.value) })}
             >
               {visibleDayOptions.map((count) => (
                 <option key={count} value={count}>
@@ -588,19 +771,19 @@ function App() {
               ))}
             </select>
             <button
-              className={`weekend-chip ${showWeekends ? "active" : ""}`}
-              onClick={() => setShowWeekends((current) => !current)}
-              aria-pressed={showWeekends}
+              className={`weekend-chip ${settings.showWeekends ? "active" : ""}`}
+              onClick={() => updateSettings({ showWeekends: !settings.showWeekends })}
+              aria-pressed={settings.showWeekends}
             >
               Wochenende
             </button>
-            <button className="soft-button icon-button" title="Zurück blättern" onClick={() => setCalendarStartDate(addDays(calendarStartDate, -visibleDayCount))}>
+            <button className="soft-button icon-button" title="Zurück blättern" onClick={() => setCalendarStartDate(addDays(calendarStartDate, -settings.visibleDayCount))}>
               <ChevronLeft size={15} />
             </button>
             <button className="soft-button today-button" onClick={() => setCalendarStartDate(today)}>
               Heute
             </button>
-            <button className="soft-button icon-button" title="Vorwärts blättern" onClick={() => setCalendarStartDate(addDays(calendarStartDate, visibleDayCount))}>
+            <button className="soft-button icon-button" title="Vorwärts blättern" onClick={() => setCalendarStartDate(addDays(calendarStartDate, settings.visibleDayCount))}>
               <ChevronRight size={15} />
             </button>
           </div>
@@ -612,6 +795,9 @@ function App() {
                   date={date}
                   bookings={state.bookings.filter((booking) => booking.date === date)}
                   capacity={state.dailyCapacities?.[date] ?? defaultCapacity}
+                  calendarStartMinutes={calendarStartMinutes}
+                  calendarEndMinutes={calendarEndMinutes}
+                  timeOptions={timeOptions}
                   taskById={taskById}
                   onDrop={handleDrop}
                   onBookingDrag={(bookingId) => setDragPayload({ kind: "booking", bookingId })}
@@ -661,6 +847,139 @@ function Panel({
       </header>
       {!collapsed && children}
     </section>
+  );
+}
+
+function SettingsPanel({
+  settings,
+  onSettingsChange,
+  onCapacityDefaultsChange,
+  onClose
+}: {
+  settings: AppSettings;
+  onSettingsChange: (patch: Partial<AppSettings>) => void;
+  onCapacityDefaultsChange: (patch: Pick<Partial<AppSettings>, "defaultDayCapacityMinutes" | "defaultPlanningCapacityMinutes">) => void;
+  onClose: () => void;
+}) {
+  const fullDayOptions = createTimeOptions("00:00", "23:45");
+
+  function updateCalendarTime(patch: Pick<Partial<AppSettings>, "calendarStartTime" | "calendarEndTime">) {
+    const nextStart = patch.calendarStartTime ?? settings.calendarStartTime;
+    const nextEnd = patch.calendarEndTime ?? settings.calendarEndTime;
+    if (timeToMinutes(nextEnd) <= timeToMinutes(nextStart)) return;
+    onSettingsChange(patch);
+  }
+
+  return (
+    <div className="settings-panel">
+      <div className="settings-header">
+        <h2>Einstellungen</h2>
+        <button className="icon-button ghost" title="Einstellungen schließen" onClick={onClose}>
+          <X size={14} />
+        </button>
+      </div>
+      <div className="settings-section">
+        <h3>Aufwand/Dauer</h3>
+        <label>
+          Aufgaben
+          <select
+            value={settings.defaultTreeDurationMinutes}
+            onChange={(event) => onSettingsChange({ defaultTreeDurationMinutes: Number(event.target.value) })}
+          >
+            {durationOptions.map((minutes) => (
+              <option key={minutes} value={minutes}>
+                {minutesToTimeLabel(minutes)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Priorisierung
+          <select
+            value={settings.defaultPrioDurationMinutes}
+            onChange={(event) => onSettingsChange({ defaultPrioDurationMinutes: Number(event.target.value) })}
+          >
+            {durationOptions.map((minutes) => (
+              <option key={minutes} value={minutes}>
+                {minutesToTimeLabel(minutes)}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div className="settings-section">
+        <h3>Kapazität</h3>
+        <label>
+          Tag
+          <select
+            value={settings.defaultDayCapacityMinutes}
+            onChange={(event) => onCapacityDefaultsChange({ defaultDayCapacityMinutes: Number(event.target.value) })}
+          >
+            {dayCapacityOptions.map((minutes) => (
+              <option key={minutes} value={minutes}>
+                {minutesToLabel(minutes)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Plan
+          <select
+            value={settings.defaultPlanningCapacityMinutes}
+            onChange={(event) => onCapacityDefaultsChange({ defaultPlanningCapacityMinutes: Number(event.target.value) })}
+          >
+            {planningCapacityOptions.map((minutes) => (
+              <option key={minutes} value={minutes}>
+                {minutesToLabel(minutes)}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div className="settings-section">
+        <h3>Kalender</h3>
+        <label>
+          Von
+          <select value={settings.calendarStartTime} onChange={(event) => updateCalendarTime({ calendarStartTime: event.target.value })}>
+            {fullDayOptions.map((time) => (
+              <option key={time} value={time}>
+                {time}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Bis
+          <select value={settings.calendarEndTime} onChange={(event) => updateCalendarTime({ calendarEndTime: event.target.value })}>
+            {fullDayOptions.map((time) => (
+              <option key={time} value={time}>
+                {time}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Tage
+          <select value={settings.visibleDayCount} onChange={(event) => onSettingsChange({ visibleDayCount: Number(event.target.value) })}>
+            {visibleDayOptions.map((count) => (
+              <option key={count} value={count}>
+                {count}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="settings-check">
+          <input
+            type="checkbox"
+            checked={settings.showWeekends}
+            onChange={(event) => onSettingsChange({ showWeekends: event.target.checked })}
+          />
+          Wochenenden anzeigen
+        </label>
+      </div>
+    </div>
   );
 }
 
@@ -738,6 +1057,9 @@ function DayColumn({
   date,
   bookings,
   capacity,
+  calendarStartMinutes,
+  calendarEndMinutes,
+  timeOptions,
   taskById,
   onDrop,
   onBookingDrag,
@@ -749,6 +1071,9 @@ function DayColumn({
   date: string;
   bookings: Booking[];
   capacity: DailyCapacity;
+  calendarStartMinutes: number;
+  calendarEndMinutes: number;
+  timeOptions: string[];
   taskById: Map<string, Task>;
   onDrop: (date: string, startTime?: string) => void;
   onBookingDrag: (bookingId: string) => void;
@@ -777,6 +1102,9 @@ function DayColumn({
         : "under-plan";
   const isOverflowingDay = bookedMinutes > capacity.dayCapacityMinutes;
   const timelineHeight = (calendarEndMinutes - calendarStartMinutes) * minuteHeight;
+  const firstHour = Math.ceil(calendarStartMinutes / 60);
+  const lastHour = Math.floor(calendarEndMinutes / 60);
+  const hours = Array.from({ length: Math.max(0, lastHour - firstHour + 1) }, (_, index) => firstHour + index);
   const getTimelineDropTime = (event: React.DragEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
     const y = Math.max(0, Math.min(rect.height, event.clientY - rect.top));
@@ -813,7 +1141,7 @@ function DayColumn({
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", handlePointerUp);
     };
-  }, [onBookingChange, resizingBooking]);
+  }, [calendarStartMinutes, onBookingChange, resizingBooking]);
 
   useEffect(() => {
     if (!editingBookingId) return;
@@ -904,6 +1232,7 @@ function DayColumn({
             {editingBookingId === booking.id && (
               <BookingEditor
                 booking={booking}
+                timeOptions={timeOptions}
                 onChange={onBookingChange}
                 onDelete={(bookingId) => {
                   onBookingDelete(bookingId);
@@ -981,6 +1310,7 @@ function DayColumn({
                 {editingBookingId === booking.id && (
                   <BookingEditor
                     booking={booking}
+                    timeOptions={timeOptions}
                     onChange={onBookingChange}
                     onDelete={(bookingId) => {
                       onBookingDelete(bookingId);
@@ -1044,11 +1374,13 @@ function BookingCard({
 
 function BookingEditor({
   booking,
+  timeOptions,
   onChange,
   onDelete,
   onClose
 }: {
   booking: Booking;
+  timeOptions: string[];
   onChange: (bookingId: string, patch: Partial<Booking>) => void;
   onDelete: (bookingId: string) => void;
   onClose: () => void;

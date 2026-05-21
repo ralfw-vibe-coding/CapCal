@@ -102,6 +102,69 @@ button:disabled {
   gap: 10px;
 }
 
+.settings-menu {
+  position: relative;
+}
+
+.settings-panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 12px;
+  min-width: 330px;
+  padding: 12px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 80;
+}
+
+.settings-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.settings-header h2 {
+  font-size: 16px;
+  margin: 0;
+}
+
+.settings-section {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.settings-section h3 {
+  color: var(--muted);
+  font-size: 11px;
+  grid-column: 1 / -1;
+  letter-spacing: 0.04em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.settings-section label {
+  color: var(--muted);
+  display: grid;
+  font-size: 12px;
+  gap: 4px;
+}
+
+.settings-check {
+  align-items: center;
+  display: flex !important;
+  gap: 7px !important;
+  grid-column: 1 / -1;
+}
+
+.settings-check input {
+  accent-color: var(--accent);
+}
+
 .metric,
 .save-pill {
   align-items: center;
@@ -217,6 +280,7 @@ button:disabled {
 .task-meta input,
 .task-meta select,
 .day-count-select,
+.settings-panel select,
 .booking-controls select {
   background: var(--surface);
   border: 1px solid var(--line);
