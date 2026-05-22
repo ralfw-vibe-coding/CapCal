@@ -715,6 +715,7 @@ button:disabled {
 }
 
 .task-card {
+  container-type: inline-size;
   display: block;
   padding: 6px 7px;
 }
@@ -722,6 +723,7 @@ button:disabled {
 .task-row {
   align-items: center;
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   min-width: 0;
 }
@@ -731,6 +733,7 @@ button:disabled {
   display: flex;
   flex: 1;
   gap: 6px;
+  min-inline-size: min(180px, 100%);
   min-width: 0;
 }
 
@@ -760,8 +763,10 @@ button:disabled {
 
 .task-compact-meta {
   display: flex;
-  flex-shrink: 0;
+  flex: 0 1 auto;
+  flex-wrap: nowrap;
   gap: 4px;
+  min-width: max-content;
 }
 
 .task-compact-meta span,
@@ -1087,8 +1092,19 @@ button:disabled {
 
 .task-card-board .task-compact-meta {
   flex-wrap: wrap;
-  grid-column: 4 / 6;
+  grid-column: 3 / 6;
   grid-row: 2;
+}
+
+@container (max-width: 640px) {
+  .task-card-list .task-compact-meta,
+  .task-card-hierarchy .task-compact-meta {
+    flex-basis: 100%;
+    flex-wrap: wrap;
+    margin-left: 47px;
+    min-width: 0;
+    order: 10;
+  }
 }
 
 .task-card-board .task-row > .icon-button {
