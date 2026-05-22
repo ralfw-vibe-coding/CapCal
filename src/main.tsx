@@ -13,6 +13,7 @@ import {
   Circle,
   CircleDot,
   Clock3,
+  Copy,
   Download,
   FolderTree,
   GripVertical,
@@ -24,11 +25,13 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
+  RotateCcw,
   SlidersHorizontal,
   Target,
   Trash2,
   Timer,
   Upload,
+  User,
   X
 } from "lucide-react";
 import "./styles.css";
@@ -37,6 +40,14 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 type TaskStatus = "Backlog" | "Ready" | "Started" | "Blocked" | "Done" | "Aborted";
 type TreeViewMode = "list" | "board" | "hierarchy";
 type AuthUser = { id: number; email: string };
+type UserProfile = { name?: string; initials?: string; timezone?: string };
+type UserSettingsState = {
+  user: AuthUser;
+  profile: UserProfile;
+  apiKeyMasked?: string;
+  apiKeyLastUsedAt?: string;
+  apiKey?: string;
+};
 
 type Task = {
   id: string;
@@ -156,6 +167,10 @@ const defaultSettings: AppSettings = {
 const dayCapacityOptions = Array.from({ length: 17 }, (_, index) => 120 + index * 30);
 const planningCapacityOptions = Array.from({ length: 17 }, (_, index) => 120 + index * 30);
 const visibleDayOptions = [7, 14, 21, 31];
+const utcOffsetOptions = Array.from({ length: 27 }, (_, index) => index - 12).map((offset) => {
+  const sign = offset >= 0 ? "+" : "-";
+  return `UTC${sign}${Math.abs(offset).toString().padStart(2, "0")}:00`;
+});
 
 function uid(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
@@ -351,6 +366,28 @@ function createTimeOptions(startTime: string, endTime: string) {
   return Array.from({ length: count }, (_, index) => minutesToTime(startMinutes + index * 15));
 }
 
+function browserUtcOffset() {
+  const offsetMinutes = -new Date().getTimezoneOffset();
+  const sign = offsetMinutes >= 0 ? "+" : "-";
+  const absoluteMinutes = Math.abs(offsetMinutes);
+  const hours = Math.floor(absoluteMinutes / 60).toString().padStart(2, "0");
+  return `UTC${sign}${hours}:00`;
+}
+
+function maskVisibleApiKey(apiKey: string) {
+  return `••••••••••••••••${apiKey.slice(-5)}`;
+}
+
+async function apiErrorMessage(response: Response) {
+  const text = await response.text();
+  try {
+    const payload = JSON.parse(text) as { error?: unknown };
+    return typeof payload.error === "string" ? payload.error : text;
+  } catch {
+    return text;
+  }
+}
+
 function App() {
   const [state, setState] = useState<AppState | null>(null);
   const [authRequired, setAuthRequired] = useState(false);
@@ -379,6 +416,9 @@ function App() {
   const [dragPayload, setDragPayload] = useState<DragPayload | null>(null);
   const [calendarStartDate, setCalendarStartDate] = useState(today);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [userSettingsOpen, setUserSettingsOpen] = useState(false);
+  const [userSettings, setUserSettings] = useState<UserSettingsState | null>(null);
+  const [userSettingsError, setUserSettingsError] = useState("");
   const [expandedTaskIds, setExpandedTaskIds] = useState<Set<string>>(() => new Set());
   const [collapsedHierarchyTaskIds, setCollapsedHierarchyTaskIds] = useState<Set<string>>(() => new Set());
   const [hierarchySortTargetId, setHierarchySortTargetId] = useState<string | null>(null);
@@ -387,6 +427,7 @@ function App() {
   const [childTaskTitles, setChildTaskTitles] = useState<Record<string, string>>({});
   const [changedTaskId, setChangedTaskId] = useState<string | null>(null);
   const settingsMenuRef = useRef<HTMLDivElement | null>(null);
+  const userMenuRef = useRef<HTMLDivElement | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const stateRef = useRef<AppState | null>(null);
   const dirtyRef = useRef(false);
@@ -519,6 +560,47 @@ function App() {
     setAuthRequired(false);
     setAuthOtp("");
     await loadState();
+  }
+
+  async function loadUserSettings() {
+    setUserSettingsError("");
+    try {
+      const response = await fetch("/api/user-settings", { credentials: "same-origin" });
+      if (!response.ok) throw new Error(await apiErrorMessage(response));
+      setUserSettings((await response.json()) as UserSettingsState);
+    } catch (error) {
+      setUserSettingsError(error instanceof Error ? error.message : "User Settings konnten nicht geladen werden.");
+    }
+  }
+
+  async function saveUserProfile(profile: UserProfile) {
+    setUserSettingsError("");
+    try {
+      const response = await fetch("/api/user-settings", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ profile })
+      });
+      if (!response.ok) throw new Error(await apiErrorMessage(response));
+      setUserSettings((await response.json()) as UserSettingsState);
+    } catch (error) {
+      setUserSettingsError(error instanceof Error ? error.message : "Profil konnte nicht gespeichert werden.");
+    }
+  }
+
+  async function rotateUserApiKey() {
+    setUserSettingsError("");
+    try {
+      const response = await fetch("/api/user-settings/api-key", {
+        method: "POST",
+        credentials: "same-origin"
+      });
+      if (!response.ok) throw new Error(await apiErrorMessage(response));
+      setUserSettings((await response.json()) as UserSettingsState);
+    } catch (error) {
+      setUserSettingsError(error instanceof Error ? error.message : "API-Key konnte nicht erneuert werden.");
+    }
   }
 
   async function logout() {
@@ -687,6 +769,19 @@ function App() {
     return () => window.removeEventListener("pointerdown", handlePointerDown);
   }, [settingsOpen]);
 
+  useEffect(() => {
+    if (!userSettingsOpen) return;
+    void loadUserSettings();
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target;
+      if (target instanceof Node && !userMenuRef.current?.contains(target)) setUserSettingsOpen(false);
+    }
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    return () => window.removeEventListener("pointerdown", handlePointerDown);
+  }, [userSettingsOpen]);
+
   if (authRequired) {
     return (
       <main className="login-screen">
@@ -708,7 +803,7 @@ function App() {
                 }}
               />
               <button className="primary" onClick={() => void requestLoginOtp()}>
-                Code senden
+                Login/Signup
               </button>
             </>
           ) : (
@@ -1538,6 +1633,23 @@ function App() {
             )}
           </div>
           {authUser && (
+            <div className="settings-menu" ref={userMenuRef}>
+              <button className="icon-button ghost user-button" title="Benutzereinstellungen" onClick={() => setUserSettingsOpen((open) => !open)}>
+                {userSettings?.profile.initials ? <span>{userSettings.profile.initials}</span> : <User size={16} />}
+              </button>
+              {userSettingsOpen && (
+                <UserSettingsPanel
+                  authUser={authUser}
+                  userSettings={userSettings}
+                  error={userSettingsError}
+                  onProfileChange={saveUserProfile}
+                  onRotateApiKey={rotateUserApiKey}
+                  onClose={() => setUserSettingsOpen(false)}
+                />
+              )}
+            </div>
+          )}
+          {authUser && (
             <button className="icon-button ghost" title={`Logout ${authUser.email}`} onClick={() => void logout()}>
               <LogOut size={16} />
             </button>
@@ -2022,6 +2134,113 @@ function EstimateSelect({
       ))}
       {allowUnknown && <option value="">?</option>}
     </select>
+  );
+}
+
+function UserSettingsPanel({
+  authUser,
+  userSettings,
+  error,
+  onProfileChange,
+  onRotateApiKey,
+  onClose
+}: {
+  authUser: AuthUser;
+  userSettings: UserSettingsState | null;
+  error: string;
+  onProfileChange: (profile: UserProfile) => Promise<void>;
+  onRotateApiKey: () => Promise<void>;
+  onClose: () => void;
+}) {
+  const [profile, setProfile] = useState<UserProfile>({});
+  const profileSaveTimerRef = useRef<number | null>(null);
+  const pendingProfileRef = useRef<UserProfile | null>(null);
+  const onProfileChangeRef = useRef(onProfileChange);
+
+  onProfileChangeRef.current = onProfileChange;
+
+  useEffect(() => {
+    if (userSettings?.profile) setProfile(userSettings.profile);
+  }, [userSettings?.profile]);
+
+  useEffect(() => {
+    return () => {
+      if (profileSaveTimerRef.current) window.clearTimeout(profileSaveTimerRef.current);
+      if (pendingProfileRef.current) void onProfileChangeRef.current(pendingProfileRef.current);
+    };
+  }, []);
+
+  function queueProfileChange(nextProfile: UserProfile) {
+    setProfile(nextProfile);
+    pendingProfileRef.current = nextProfile;
+    if (profileSaveTimerRef.current) window.clearTimeout(profileSaveTimerRef.current);
+    profileSaveTimerRef.current = window.setTimeout(() => {
+      const pendingProfile = pendingProfileRef.current;
+      pendingProfileRef.current = null;
+      if (pendingProfile) void onProfileChangeRef.current(pendingProfile);
+    }, 800);
+  }
+
+  return (
+    <div className="settings-panel user-settings-panel">
+      <div className="settings-header">
+        <h2>Benutzereinstellungen</h2>
+        <button className="icon-button ghost" title="Profil schließen" onClick={onClose}>
+          <X size={14} />
+        </button>
+      </div>
+      <div className="settings-section user-profile-section">
+        <h3>Profil</h3>
+        <label>
+          Name
+          <input value={profile.name ?? ""} onChange={(event) => queueProfileChange({ ...profile, name: event.target.value })} />
+        </label>
+        <label>
+          Kürzel
+          <input
+            value={profile.initials ?? ""}
+            maxLength={3}
+            onChange={(event) => queueProfileChange({ ...profile, initials: event.target.value.toUpperCase() })}
+          />
+        </label>
+        <label>
+          E-Mail
+          <input value={userSettings?.user.email ?? authUser.email} readOnly />
+        </label>
+        <label>
+          Zeitzone
+          <select
+            value={profile.timezone && profile.timezone.startsWith("UTC") ? profile.timezone : browserUtcOffset()}
+            onChange={(event) => queueProfileChange({ ...profile, timezone: event.target.value })}
+          >
+            {utcOffsetOptions.map((offset) => (
+              <option key={offset} value={offset}>
+                {offset}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <div className="settings-section user-api-section">
+        <h3>API-Key</h3>
+        <div className="api-key-display">
+          <code>{userSettings?.apiKey ? maskVisibleApiKey(userSettings.apiKey) : (userSettings?.apiKeyMasked ?? "Noch kein API-Key")}</code>
+          {userSettings?.apiKey && (
+            <button className="icon-button ghost" title="API-Key kopieren" onClick={() => void navigator.clipboard?.writeText(userSettings.apiKey!)}>
+              <Copy size={14} />
+            </button>
+          )}
+          <button className="icon-button ghost" title="API-Key erneuern" onClick={() => void onRotateApiKey()}>
+            <RotateCcw size={14} />
+          </button>
+        </div>
+        {userSettings?.apiKey && <p className="api-key-hint">Der neue Key kann jetzt kopiert werden.</p>}
+        <p className="api-key-hint">
+          Zuletzt verwendet: {userSettings?.apiKeyLastUsedAt ? new Date(userSettings.apiKeyLastUsedAt).toLocaleString("de-DE") : "noch nie"}
+        </p>
+      </div>
+      {error && <div className="login-error">{error}</div>}
+    </div>
   );
 }
 

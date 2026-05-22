@@ -2,10 +2,13 @@ import { createServer } from "node:http";
 import type { ServerResponse } from "node:http";
 import {
   clearSessionCookie,
+  getUserSettings,
   getSessionUser,
   isAuthRequired,
   requestOtp,
+  rotateApiKey,
   sessionCookie,
+  updateUserProfile,
   verifyOtp
 } from "../src/server/auth";
 import { createStateProvider } from "../src/server/storage";
@@ -69,6 +72,34 @@ const server = createServer(async (request, response) => {
     const user = getSessionUser(request.headers.cookie);
     if (isAuthRequired() && !user) {
       send(response, 401, { error: "Unauthorized" });
+      return;
+    }
+
+    if (url.pathname === "/api/user-settings" && request.method === "GET") {
+      if (!user) {
+        send(response, 401, { error: "Unauthorized" });
+        return;
+      }
+      send(response, 200, await getUserSettings(user));
+      return;
+    }
+
+    if (url.pathname === "/api/user-settings" && request.method === "PUT") {
+      if (!user) {
+        send(response, 401, { error: "Unauthorized" });
+        return;
+      }
+      const body = JSON.parse(await readBody(request));
+      send(response, 200, await updateUserProfile(user, body.profile ?? {}));
+      return;
+    }
+
+    if (url.pathname === "/api/user-settings/api-key" && request.method === "POST") {
+      if (!user) {
+        send(response, 401, { error: "Unauthorized" });
+        return;
+      }
+      send(response, 200, await rotateApiKey(user));
       return;
     }
 

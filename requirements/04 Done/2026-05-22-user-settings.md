@@ -96,3 +96,30 @@ Modal, getrennt von den Taskspace Settings:
 │                    [Speichern]   │
 └──────────────────────────────────┘
 ```
+
+## Stufe 1 Zuschnitt
+
+Umgesetzt wird zunaechst die Single-User-/Single-Taskspace-Variante:
+
+- User Settings gelten fuer den eingeloggten User.
+- Profil liegt in `users.profile`.
+- Ein User hat genau einen API-Key.
+- API-Key wird nur gehasht gespeichert.
+- Klartext-Key wird nur direkt nach Erzeugung/Erneuerung angezeigt.
+- Zeitzone wird gespeichert, hat aber noch keine fachliche Wirkung auf Kalender/Synchronisation.
+- Der eigentliche API-Zugriff auf Taskspace-Export/-Import wird separat in `api-access.md` umgesetzt.
+
+## Umsetzung
+
+Umgesetzt am 2026-05-22:
+
+- `users.profile`, `users.api_key_hash`, `users.api_key_last_used_at` werden per Schema-Migration ergaenzt.
+- Backend-Endpunkte:
+  - `GET /api/user-settings`
+  - `PUT /api/user-settings`
+  - `POST /api/user-settings/api-key`
+- Netlify Function fuer `/api/user-settings*` ergaenzt.
+- User-Button oben rechts neben den Taskspace Settings ergaenzt.
+- Dialog `Mein Profil` mit Name, Kuerzel, E-Mail read-only und Zeitzone.
+- API-Key-Anzeige maskiert, Klartext nur nach `Key erneuern`.
+- Kopierbutton fuer den frisch erzeugten Klartext-Key.

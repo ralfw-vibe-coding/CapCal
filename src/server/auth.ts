@@ -1,10 +1,23 @@
-import { createHmac, randomInt, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, randomInt, randomUUID, timingSafeEqual } from "node:crypto";
 import { neon } from "@neondatabase/serverless";
 import { getEnv } from "./storage/env";
 
 export type AuthUser = {
   id: number;
   email: string;
+};
+
+export type UserProfile = {
+  name?: string;
+  initials?: string;
+  timezone?: string;
+};
+
+export type UserSettings = {
+  user: AuthUser;
+  profile: UserProfile;
+  apiKeyMasked?: string;
+  apiKeyLastUsedAt?: string;
 };
 
 const sessionCookieName = "capcal_session";
@@ -29,6 +42,10 @@ export async function ensureAuthSchema() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `;
+  await db`ALTER TABLE users ADD COLUMN IF NOT EXISTS profile JSONB NOT NULL DEFAULT '{}'`;
+  await db`ALTER TABLE users ADD COLUMN IF NOT EXISTS api_key_hash TEXT UNIQUE`;
+  await db`ALTER TABLE users ADD COLUMN IF NOT EXISTS api_key_suffix TEXT`;
+  await db`ALTER TABLE users ADD COLUMN IF NOT EXISTS api_key_last_used_at TIMESTAMPTZ`;
   await db`
     CREATE TABLE IF NOT EXISTS auth_tokens (
       id SERIAL PRIMARY KEY,
@@ -39,6 +56,77 @@ export async function ensureAuthSchema() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `;
+}
+
+function hashApiKey(apiKey: string) {
+  return createHmac("sha256", sessionSecret()).update(apiKey).digest("hex");
+}
+
+function maskApiKey(apiKeyHash?: string | null, apiKeySuffix?: string | null) {
+  if (!apiKeyHash) return undefined;
+  return apiKeySuffix ? `••••••••••••••••${apiKeySuffix}` : "••••••••••••••••";
+}
+
+function normalizeProfile(profile: unknown): UserProfile {
+  const raw = profile && typeof profile === "object" ? (profile as Record<string, unknown>) : {};
+  return {
+    name: typeof raw.name === "string" ? raw.name : "",
+    initials: typeof raw.initials === "string" ? raw.initials : "",
+    timezone: typeof raw.timezone === "string" ? raw.timezone : ""
+  };
+}
+
+export async function getUserSettings(user: AuthUser): Promise<UserSettings> {
+  await ensureAuthSchema();
+  const db = sql();
+  const rows = (await db`
+    SELECT id, email, profile, api_key_hash, api_key_suffix, api_key_last_used_at
+    FROM users
+    WHERE id = ${user.id}
+    LIMIT 1
+  `) as {
+    id: number;
+    email: string;
+    profile: unknown;
+    api_key_hash?: string | null;
+    api_key_suffix?: string | null;
+    api_key_last_used_at?: Date | string | null;
+  }[];
+  const row = rows[0];
+  if (!row) throw new Error("User not found");
+  return {
+    user: { id: row.id, email: row.email },
+    profile: normalizeProfile(row.profile),
+    apiKeyMasked: maskApiKey(row.api_key_hash, row.api_key_suffix),
+    apiKeyLastUsedAt: row.api_key_last_used_at ? new Date(row.api_key_last_used_at).toISOString() : undefined
+  };
+}
+
+export async function updateUserProfile(user: AuthUser, profileInput: UserProfile): Promise<UserSettings> {
+  await ensureAuthSchema();
+  const profile = normalizeProfile(profileInput);
+  const db = sql();
+  await db`
+    UPDATE users
+    SET profile = ${JSON.stringify(profile)}::jsonb
+    WHERE id = ${user.id}
+  `;
+  return getUserSettings(user);
+}
+
+export async function rotateApiKey(user: AuthUser) {
+  await ensureAuthSchema();
+  const apiKey = `capcal_${randomBytes(24).toString("base64url")}`;
+  const db = sql();
+  await db`
+    UPDATE users
+    SET api_key_hash = ${hashApiKey(apiKey)}, api_key_suffix = ${apiKey.slice(-5)}, api_key_last_used_at = NULL
+    WHERE id = ${user.id}
+  `;
+  return {
+    ...(await getUserSettings(user)),
+    apiKey
+  };
 }
 
 function normalizeEmail(email: string) {

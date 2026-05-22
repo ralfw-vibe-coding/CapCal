@@ -211,6 +211,71 @@ button:disabled {
   gap: 4px;
 }
 
+.settings-section input,
+.settings-section select {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  font: inherit;
+  min-height: 34px;
+  padding: 0 8px;
+  width: 100%;
+}
+
+.settings-section input[readonly] {
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+.user-button span {
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.user-settings-panel {
+  min-width: 360px;
+}
+
+.user-profile-section,
+.user-api-section {
+  grid-template-columns: 1fr 1fr;
+}
+
+.profile-save-button,
+.user-api-section,
+.api-key-display,
+.api-key-hint {
+  grid-column: 1 / -1;
+}
+
+.api-key-display {
+  align-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: flex;
+  gap: 8px;
+  min-height: 36px;
+  padding: 5px 7px;
+}
+
+.api-key-display code {
+  flex: 1;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.api-key-hint {
+  color: var(--muted);
+  font-size: 11px;
+  margin: -4px 0 0;
+}
+
+.api-key-display + .api-key-hint {
+  margin-top: -6px;
+}
+
 .settings-check {
   align-items: center;
   display: flex !important;
@@ -535,8 +600,19 @@ button:disabled {
 
 .primary {
   background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
   border-color: var(--accent);
   color: white;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  min-height: 34px;
+  padding: 0 12px;
+}
+
+.login-panel .primary {
+  min-height: 38px;
 }
 
 .ghost {
