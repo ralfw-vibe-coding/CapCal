@@ -768,6 +768,18 @@ button:disabled {
   color: #4f5a50;
 }
 
+.task-compact-meta .task-booking-chip {
+  align-items: center;
+  background: #e8f1f5;
+  color: #416271;
+  display: inline-flex;
+  gap: 3px;
+}
+
+.task-compact-meta .task-booking-chip svg {
+  color: currentColor;
+}
+
 .task-deadline-pill.deadline-soon {
   background: #ffe68a;
   color: #6f5200;
@@ -1377,9 +1389,18 @@ button:disabled {
 }
 
 .booking-editor-title strong {
+  flex: 1;
   font-size: 14px;
   line-height: 1.2;
   overflow-wrap: anywhere;
+}
+
+.booking-task-link {
+  height: 26px;
+  min-width: 26px;
+  left: 6px;
+  position: absolute;
+  top: 6px;
 }
 
 .booking-editor-meta {

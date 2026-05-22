@@ -10,24 +10,21 @@ Migration zwischen Instanzen.
 
 ## API-Key
 
-- Pro Taskspace können ein oder mehrere API-Keys angelegt werden (in den Settings)
-- Jeder Key hat eine Berechtigung: `readonly` oder `readwrite`
-- Keys können benannt werden (z.B. "Backup-Skript", "Trello-Sync")
-- Keys können jederzeit widerrufen werden
-- Key wird nur einmal angezeigt (beim Anlegen) — nicht wiederherstellbar
+Der API-Key ist **pro User** — nicht pro Taskspace.
+Er authentifiziert den User und gewährt Zugriff auf alle Taskspaces,
+auf die der User Zugriff hat (eigene + geteilte).
+
+Der Key wird in den **User Settings** verwaltet (→ user-settings.md):
+- Aktuellen Key anzeigen (einmalig nach Erzeugung, danach nur noch maskiert)
+- Key erneuern (invalidiert den alten sofort)
 
 Datenmodell:
 ```sql
-CREATE TABLE api_keys (
-  id           SERIAL PRIMARY KEY,
-  taskspace_id INTEGER NOT NULL REFERENCES taskspaces(id),
-  name         TEXT NOT NULL,
-  key_hash     TEXT NOT NULL UNIQUE,   -- nur Hash gespeichert, nie der Klartext
-  permission   TEXT NOT NULL,          -- 'readonly' | 'readwrite'
-  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  last_used_at TIMESTAMPTZ
-);
+ALTER TABLE users ADD COLUMN
+  api_key_hash TEXT UNIQUE;  -- nur Hash gespeichert, nie der Klartext
 ```
+
+Ein User hat genau einen API-Key. Einfach, ausreichend für eine persönliche App.
 
 Verwendung im Request:
 ```

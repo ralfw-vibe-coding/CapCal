@@ -507,6 +507,11 @@ function App() {
     [settings.calendarEndTime, settings.calendarStartTime]
   );
   const taskById = useMemo(() => new Map(state?.tasks.map((task) => [task.id, task]) ?? []), [state?.tasks]);
+  const bookingCountByTaskId = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const booking of state?.bookings ?? []) counts.set(booking.taskId, (counts.get(booking.taskId) ?? 0) + 1);
+    return counts;
+  }, [state?.bookings]);
   const treeFilters = settings.treeFilters;
   const availableTags = useMemo(
     () => Array.from(new Set((state?.tasks ?? []).flatMap((task) => task.tags ?? []))).sort((a, b) => a.localeCompare(b, "de")),
@@ -962,12 +967,25 @@ function App() {
     });
   }
 
+  function scrollToTask(taskId: string) {
+    updateSettings({ panelsCollapsed: { ...settings.panelsCollapsed, tree: false } });
+    setExpandedTaskIds((current) => {
+      const next = new Set(current);
+      next.add(taskId);
+      return next;
+    });
+    window.setTimeout(() => {
+      document.querySelector(`[data-task-id="${taskId}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 0);
+  }
+
   function renderTreeTaskCard(task: Task, options?: { boardStatus?: TaskStatus }) {
     return (
       <TaskCard
         key={task.id}
         task={task}
         allTags={availableTags}
+        bookingCount={bookingCountByTaskId.get(task.id) ?? 0}
         variant={options?.boardStatus ? "board" : "list"}
         expanded={expandedTaskIds.has(task.id)}
         showUnsavedDot={changedTaskId === task.id && saveState !== "saved" && saveState !== "idle"}
@@ -1414,6 +1432,7 @@ function App() {
                   isDragging={dragPayload !== null}
                   onBookingChange={updateBooking}
                   onBookingDelete={deleteBooking}
+                  onOpenTask={scrollToTask}
                   onCapacityChange={(patch) => updateDailyCapacity(date, patch)}
                 />
               ))}
@@ -1628,6 +1647,7 @@ function SettingsPanel({
 function TaskCard({
   task,
   allTags,
+  bookingCount,
   variant = "list",
   expanded,
   showUnsavedDot,
@@ -1646,6 +1666,7 @@ function TaskCard({
 }: {
   task: Task;
   allTags: string[];
+  bookingCount: number;
   variant?: "list" | "board";
   expanded: boolean;
   showUnsavedDot: boolean;
@@ -1665,6 +1686,7 @@ function TaskCard({
   return (
     <article
       className={`task-card task-card-${variant} status-card ${statusMeta[task.status].className}`}
+      data-task-id={task.id}
       draggable
       onDragStart={(event) => {
         event.currentTarget.classList.add("dragging-source");
@@ -1697,6 +1719,12 @@ function TaskCard({
           <span className={`task-status-pill ${statusMeta[task.status].className}`}>{task.status}</span>
           {task.dueDate && <span className={`task-deadline-pill ${deadlineTone(task.dueDate)}`}>{formatOptionalDate(task.dueDate)}</span>}
           <span>{estimateToLabel(task.estimateMinutes)}</span>
+          {bookingCount > 0 && (
+            <span className="task-booking-chip" title={`${bookingCount} Buchung${bookingCount === 1 ? "" : "en"} im Kalender`}>
+              <CalendarDays size={11} />
+              {bookingCount}
+            </span>
+          )}
           {(task.tags ?? []).map((tag) => (
             <span className="task-tag-chip" key={tag}>
               {tag}
@@ -1819,6 +1847,7 @@ function DayColumn({
   isDragging,
   onBookingChange,
   onBookingDelete,
+  onOpenTask,
   onCapacityChange
 }: {
   date: string;
@@ -1834,6 +1863,7 @@ function DayColumn({
   isDragging: boolean;
   onBookingChange: (bookingId: string, patch: Partial<Booking>) => void;
   onBookingDelete: (bookingId: string) => void;
+  onOpenTask: (taskId: string) => void;
   onCapacityChange: (patch: Partial<DailyCapacity>) => void;
 }) {
   const [editingBookingId, setEditingBookingId] = useState<string | null>(null);
@@ -1990,6 +2020,7 @@ function DayColumn({
                 task={taskById.get(booking.taskId)}
                 timeOptions={timeOptions}
                 onChange={onBookingChange}
+                onOpenTask={() => onOpenTask(booking.taskId)}
                 onDelete={(bookingId) => {
                   onBookingDelete(bookingId);
                   setEditingBookingId(null);
@@ -2062,6 +2093,7 @@ function DayColumn({
                     task={taskById.get(booking.taskId)}
                     timeOptions={timeOptions}
                     onChange={onBookingChange}
+                    onOpenTask={() => onOpenTask(booking.taskId)}
                     onDelete={(bookingId) => {
                       onBookingDelete(bookingId);
                       setEditingBookingId(null);
@@ -2134,6 +2166,7 @@ function BookingEditor({
   task,
   timeOptions,
   onChange,
+  onOpenTask,
   onDelete,
   onClose
 }: {
@@ -2141,11 +2174,15 @@ function BookingEditor({
   task?: Task;
   timeOptions: string[];
   onChange: (bookingId: string, patch: Partial<Booking>) => void;
+  onOpenTask: () => void;
   onDelete: (bookingId: string) => void;
   onClose: () => void;
 }) {
   return (
     <aside className="booking-editor" onClick={(event) => event.stopPropagation()}>
+      <button className="icon-button ghost booking-task-link" title="Zur Aufgabe scrollen" onClick={onOpenTask}>
+        <ListTree size={14} />
+      </button>
       <button className="icon-button ghost editor-close" title="Editor schließen" onClick={onClose}>
         <X size={14} />
       </button>
