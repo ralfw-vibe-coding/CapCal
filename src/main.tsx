@@ -15,6 +15,7 @@ import {
   GripVertical,
   ListTree,
   Loader,
+  LogOut,
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
@@ -302,6 +303,17 @@ function App() {
   const stateVersionRef = useRef(0);
   const saveCurrentStateRef = useRef<(options?: { keepalive?: boolean }) => Promise<void>>(async () => undefined);
 
+  async function refreshAuthUser() {
+    try {
+      const response = await fetch("/api/auth/me", { credentials: "same-origin" });
+      if (!response.ok) return;
+      const payload = (await response.json()) as { user: AuthUser };
+      setAuthUser(payload.user);
+    } catch {
+      // Auth status is optional for filesystem mode and should not block loading.
+    }
+  }
+
   async function loadState() {
     try {
       const response = await fetch("/api/state", { credentials: "same-origin" });
@@ -315,6 +327,7 @@ function App() {
       setState(normalizedState);
       setLoadError("");
       setAuthRequired(false);
+      void refreshAuthUser();
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : "State konnte nicht geladen werden.");
       setSaveState("error");
@@ -414,6 +427,28 @@ function App() {
     setAuthRequired(false);
     setAuthOtp("");
     await loadState();
+  }
+
+  async function logout() {
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "same-origin"
+      });
+    } finally {
+      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+      stateRef.current = null;
+      dirtyRef.current = false;
+      hasLoadedRef.current = false;
+      setState(null);
+      setAuthUser(null);
+      setAuthRequired(true);
+      setAuthStep("email");
+      setAuthOtp("");
+      setSaveError("");
+      setLoadError("");
+      setSaveState("idle");
+    }
   }
 
   useEffect(() => {
@@ -989,6 +1024,11 @@ function App() {
             <button className="icon-button ghost" title="Taskspace importieren" onClick={() => importInputRef.current?.click()}>
               <Upload size={16} />
             </button>
+            {authUser && (
+              <button className="icon-button ghost" title={`Logout ${authUser.email}`} onClick={() => void logout()}>
+                <LogOut size={16} />
+              </button>
+            )}
             <input
               ref={importInputRef}
               className="file-input"
