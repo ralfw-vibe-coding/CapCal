@@ -39,7 +39,7 @@ type Task = {
   description?: string;
   tags?: string[];
   dueDate?: string;
-  estimateMinutes: number;
+  estimateMinutes?: number;
   status: TaskStatus;
   done: boolean;
   treeOrder: number;
@@ -99,6 +99,12 @@ type DragPayload =
 
 const statuses: TaskStatus[] = ["Backlog", "Ready", "Started", "Blocked", "Done", "Aborted"];
 const durationOptions = Array.from({ length: 15 }, (_, index) => 30 + index * 15);
+const estimateOptionGroups = [
+  { label: "Klein", options: [30, 60, 90, 120] },
+  { label: "Mittel", options: [150, 180, 210, 240] },
+  { label: "Groß", options: [300, 360, 420, 480] }
+];
+const estimateOptions = estimateOptionGroups.flatMap((group) => group.options);
 const minuteHeight = 1.1;
 
 const statusMeta: Record<TaskStatus, { label: string; icon: typeof Circle; className: string }> = {
@@ -187,6 +193,15 @@ function minutesToLabel(minutes: number) {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
   return m ? `${h}h ${m}m` : `${h}h`;
+}
+
+function estimateToLabel(minutes?: number) {
+  if (!minutes) return "?";
+  const dayMinutes = 8 * 60;
+  const weekMinutes = 5 * dayMinutes;
+  if (minutes >= weekMinutes * 2 && minutes % weekMinutes === 0) return `${minutes / weekMinutes}w`;
+  if (minutes >= dayMinutes * 2 && minutes % dayMinutes === 0) return `${minutes / dayMinutes}d`;
+  return minutesToTimeLabel(minutes);
 }
 
 function sortedTasks(tasks: Task[]) {
@@ -279,7 +294,11 @@ function App() {
   const [saveState, setSaveState] = useState<"idle" | "dirty" | "saving" | "saved" | "error">("idle");
   const [loadError, setLoadError] = useState("");
   const [saveError, setSaveError] = useState("");
-  const [newTask, setNewTask] = useState({ title: "", dueDate: "", estimateMinutes: 30 });
+  const [newTask, setNewTask] = useState<{ title: string; dueDate: string; estimateMinutes?: number }>({
+    title: "",
+    dueDate: "",
+    estimateMinutes: 30
+  });
   const [boardQuickAdd, setBoardQuickAdd] = useState<Record<TaskStatus, string>>({
     Backlog: "",
     Ready: "",
@@ -1142,17 +1161,12 @@ function App() {
               value={newTask.dueDate}
               onChange={(event) => setNewTask({ ...newTask, dueDate: event.target.value })}
             />
-            <select
+            <EstimateSelect
               aria-label="Aufwand in Minuten"
               value={newTask.estimateMinutes}
-              onChange={(event) => setNewTask({ ...newTask, estimateMinutes: Number(event.target.value) })}
-            >
-              {durationOptions.map((minutes) => (
-                <option key={minutes} value={minutes}>
-                  {minutesToTimeLabel(minutes)}
-                </option>
-              ))}
-            </select>
+              allowUnknown
+              onValueChange={(estimateMinutes) => setNewTask({ ...newTask, estimateMinutes })}
+            />
             <button className="primary icon-button" title="Aufgabe anlegen" onClick={addTreeTask}>
               <Plus size={17} />
             </button>
@@ -1449,6 +1463,39 @@ function Panel({
   );
 }
 
+function EstimateSelect({
+  value,
+  onValueChange,
+  "aria-label": ariaLabel,
+  allowUnknown = false
+}: {
+  value?: number;
+  onValueChange: (value: number | undefined) => void;
+  "aria-label"?: string;
+  allowUnknown?: boolean;
+}) {
+  const hasCustomValue = value !== undefined && !estimateOptions.includes(value);
+  return (
+    <select
+      aria-label={ariaLabel}
+      value={value ?? ""}
+      onChange={(event) => onValueChange(event.target.value ? Number(event.target.value) : undefined)}
+    >
+      {hasCustomValue && <option value={value}>{estimateToLabel(value)}</option>}
+      {estimateOptionGroups.map((group) => (
+        <optgroup key={group.label} label={group.label}>
+          {group.options.map((minutes) => (
+            <option key={minutes} value={minutes}>
+              {estimateToLabel(minutes)}
+            </option>
+          ))}
+        </optgroup>
+      ))}
+      {allowUnknown && <option value="">?</option>}
+    </select>
+  );
+}
+
 function SettingsPanel({
   settings,
   onSettingsChange,
@@ -1481,16 +1528,12 @@ function SettingsPanel({
         <h3>Aufwand/Dauer</h3>
         <label>
           Aufgaben
-          <select
+          <EstimateSelect
             value={settings.defaultTreeDurationMinutes}
-            onChange={(event) => onSettingsChange({ defaultTreeDurationMinutes: Number(event.target.value) })}
-          >
-            {durationOptions.map((minutes) => (
-              <option key={minutes} value={minutes}>
-                {minutesToTimeLabel(minutes)}
-              </option>
-            ))}
-          </select>
+            onValueChange={(defaultTreeDurationMinutes) => {
+              if (defaultTreeDurationMinutes) onSettingsChange({ defaultTreeDurationMinutes });
+            }}
+          />
         </label>
         <label>
           Priorisierung
@@ -1613,7 +1656,7 @@ function TaskCard({
   onDone: (done: boolean) => void;
   onTitle: (title: string) => void;
   onStatus: (status: TaskStatus) => void;
-  onEstimate: (estimate: number) => void;
+  onEstimate: (estimate: number | undefined) => void;
   onDueDate: (date: string) => void;
   onDescription: (description: string) => void;
   onTags: (tags: string[]) => void;
@@ -1653,7 +1696,7 @@ function TaskCard({
         <div className="task-compact-meta">
           <span className={`task-status-pill ${statusMeta[task.status].className}`}>{task.status}</span>
           {task.dueDate && <span className={`task-deadline-pill ${deadlineTone(task.dueDate)}`}>{formatOptionalDate(task.dueDate)}</span>}
-          <span>{minutesToTimeLabel(task.estimateMinutes)}</span>
+          <span>{estimateToLabel(task.estimateMinutes)}</span>
           {(task.tags ?? []).map((tag) => (
             <span className="task-tag-chip" key={tag}>
               {tag}
@@ -1693,17 +1736,12 @@ function TaskCard({
             </label>
             <label>
               Aufwand
-              <select
+              <EstimateSelect
                 aria-label="Aufwand"
                 value={task.estimateMinutes}
-                onChange={(event) => onEstimate(Number(event.target.value))}
-              >
-                {durationOptions.map((minutes) => (
-                  <option key={minutes} value={minutes}>
-                    {minutesToTimeLabel(minutes)}
-                  </option>
-                ))}
-              </select>
+                allowUnknown
+                onValueChange={onEstimate}
+              />
             </label>
           </div>
         </div>
