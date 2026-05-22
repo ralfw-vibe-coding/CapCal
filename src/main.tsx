@@ -46,6 +46,8 @@ type Task = {
   status: TaskStatus;
   done: boolean;
   treeOrder: number;
+  listOrder: number;
+  boardOrder: number;
 };
 
 type Booking = {
@@ -207,8 +209,20 @@ function estimateToLabel(minutes?: number) {
   return minutesToTimeLabel(minutes);
 }
 
+function sortByOrder<T extends { id: string }>(items: T[], order: (item: T) => number | undefined) {
+  return [...items].sort((a, b) => (order(a) ?? 0) - (order(b) ?? 0) || a.id.localeCompare(b.id));
+}
+
 function sortedTasks(tasks: Task[]) {
-  return [...tasks].sort((a, b) => a.treeOrder - b.treeOrder);
+  return sortByOrder(tasks, (task) => task.treeOrder);
+}
+
+function sortedListTasks(tasks: Task[]) {
+  return sortByOrder(tasks, (task) => task.listOrder);
+}
+
+function sortedBoardTasks(tasks: Task[]) {
+  return sortByOrder(tasks, (task) => task.boardOrder);
 }
 
 function moveItemToDropTarget<T>(items: T[], fromIndex: number, toIndex: number) {
@@ -259,19 +273,36 @@ function normalizeTags(rawTags?: unknown[] | string | null): string[] {
 
 function normalizeTasks(tasks: Task[]): Task[] {
   const taskIds = new Set(tasks.map((task) => task.id));
-  const cleanedTasks = tasks.map((task) => ({
+  const cleanedTasks = tasks.map((task, index) => {
+    const legacyOrder = task.treeOrder ?? index;
+    return {
     ...task,
     parentId: task.parentId && task.parentId !== task.id && taskIds.has(task.parentId) ? task.parentId : undefined,
-    tags: normalizeTags(task.tags)
-  }));
+    tags: normalizeTags(task.tags),
+    treeOrder: task.treeOrder ?? legacyOrder,
+    listOrder: task.listOrder ?? legacyOrder,
+    boardOrder: task.boardOrder ?? legacyOrder
+  };
+  });
   const byParent = new Map<string, Task[]>();
   for (const task of sortedTasks(cleanedTasks)) {
     const parentKey = task.parentId ?? "";
     byParent.set(parentKey, [...(byParent.get(parentKey) ?? []), task]);
   }
+  const byStatus = new Map<TaskStatus, Task[]>();
+  for (const task of sortedBoardTasks(cleanedTasks)) {
+    byStatus.set(task.status, [...(byStatus.get(task.status) ?? []), task]);
+  }
+  const byList = sortedListTasks(cleanedTasks);
   return cleanedTasks.map((task) => {
     const siblings = byParent.get(task.parentId ?? "") ?? [];
-    return { ...task, treeOrder: siblings.findIndex((sibling) => sibling.id === task.id) };
+    const statusSiblings = byStatus.get(task.status) ?? [];
+    return {
+      ...task,
+      treeOrder: siblings.findIndex((sibling) => sibling.id === task.id),
+      listOrder: byList.findIndex((candidate) => candidate.id === task.id),
+      boardOrder: statusSiblings.findIndex((candidate) => candidate.id === task.id)
+    };
   });
 }
 
@@ -337,6 +368,7 @@ function App() {
   const [collapsedHierarchyTaskIds, setCollapsedHierarchyTaskIds] = useState<Set<string>>(() => new Set());
   const [hierarchySortTargetId, setHierarchySortTargetId] = useState<string | null>(null);
   const [hierarchyChildTargetId, setHierarchyChildTargetId] = useState<string | null>(null);
+  const [taskDropTargetId, setTaskDropTargetId] = useState<string | null>(null);
   const [childTaskTitles, setChildTaskTitles] = useState<Record<string, string>>({});
   const [changedTaskId, setChangedTaskId] = useState<string | null>(null);
   const settingsMenuRef = useRef<HTMLDivElement | null>(null);
@@ -572,7 +604,7 @@ function App() {
   );
   const filteredTreeTasks = useMemo(() => {
     const query = treeFilters.query.trim().toLowerCase();
-    return sortedTasks(state?.tasks ?? []).filter((task) => {
+    return sortedListTasks(state?.tasks ?? []).filter((task) => {
       const matchesQuery = !query || task.title.toLowerCase().includes(query);
       const matchesStatus = treeFilters.statuses.length === 0 || treeFilters.statuses.includes(task.status);
       const taskTags = task.tags ?? [];
@@ -762,15 +794,23 @@ function App() {
       parentId,
       status,
       done: status === "Done" || status === "Aborted",
-      treeOrder: 0
+      treeOrder: 0,
+      listOrder: 0,
+      boardOrder: 0
     };
 
     updateState((draft) => {
       const siblingKey = parentId ?? "";
+      const statusKey = task.status;
       const tasks = normalizeTasks([
-        { ...task, treeOrder: 0 },
+        { ...task, treeOrder: 0, listOrder: 0, boardOrder: 0 },
         ...draft.tasks.map((existingTask) =>
-          (existingTask.parentId ?? "") === siblingKey ? { ...existingTask, treeOrder: existingTask.treeOrder + 1 } : existingTask
+          ({
+            ...existingTask,
+            treeOrder: (existingTask.parentId ?? "") === siblingKey ? existingTask.treeOrder + 1 : existingTask.treeOrder,
+            listOrder: existingTask.listOrder + 1,
+            boardOrder: existingTask.status === statusKey ? existingTask.boardOrder + 1 : existingTask.boardOrder
+          })
         )
       ]);
       const next: AppState = {
@@ -828,12 +868,24 @@ function App() {
     setChangedTaskId(taskId);
     updateState((draft) => ({
       ...draft,
-      tasks: draft.tasks.map((task) => (task.id === taskId ? { ...task, ...patch } : task))
+      tasks: normalizeTasks(draft.tasks.map((task) => (task.id === taskId ? { ...task, ...patch } : task)))
     }));
   }
 
   function setTaskDone(taskId: string, done: boolean) {
     updateTask(taskId, { done, status: done ? "Done" : "Ready" });
+  }
+
+  function moveTaskBeforeInList(sourceTaskId: string, targetTaskId: string) {
+    updateState((draft) => {
+      const tasks = sortedListTasks(draft.tasks);
+      const sourceIndex = tasks.findIndex((task) => task.id === sourceTaskId);
+      const targetIndex = tasks.findIndex((task) => task.id === targetTaskId);
+      return {
+        ...draft,
+        tasks: moveItemToDropTarget(tasks, sourceIndex, targetIndex).map((task, listOrder) => ({ ...task, listOrder }))
+      };
+    });
   }
 
   function moveTaskBeforeInTree(sourceTaskId: string, targetTaskId: string) {
@@ -952,8 +1004,10 @@ function App() {
         ...draft,
         prioTaskIds: draft.prioTaskIds.filter((id) => id !== taskId),
         prioDurations,
-        tasks: draft.tasks.map((candidate) =>
-          candidate.id === taskId && candidate.status !== "Done" ? { ...candidate, status: "Started" } : candidate
+        tasks: normalizeTasks(
+          draft.tasks.map((candidate) =>
+            candidate.id === taskId && candidate.status !== "Done" ? { ...candidate, status: "Started" } : candidate
+          )
         ),
         bookings: [...draft.bookings, { id: uid("booking"), taskId, date, startTime, durationMinutes }]
       };
@@ -1062,15 +1116,26 @@ function App() {
 
   function moveTaskToBoardStatus(taskId: string, status: TaskStatus, targetTaskId?: string) {
     updateState((draft) => {
-      const tasks = sortedTasks(
-        draft.tasks.map((task) =>
-          task.id === taskId ? { ...task, status, done: status === "Done" || status === "Aborted" } : task
-        )
+      const statusTasks = sortedBoardTasks(
+        draft.tasks
+          .map((task) => (task.id === taskId ? { ...task, status, done: status === "Done" || status === "Aborted" } : task))
+          .filter((task) => task.status === status)
       );
-      if (!targetTaskId) return { ...draft, tasks: tasks.map((task, treeOrder) => ({ ...task, treeOrder })) };
-      const sourceIndex = tasks.findIndex((task) => task.id === taskId);
-      const targetIndex = tasks.findIndex((task) => task.id === targetTaskId);
-      return { ...draft, tasks: moveItemToDropTarget(tasks, sourceIndex, targetIndex).map((task, treeOrder) => ({ ...task, treeOrder })) };
+      const orderedIds = statusTasks.map((task) => task.id);
+      if (!orderedIds.includes(taskId)) orderedIds.push(taskId);
+      const sourceIndex = orderedIds.indexOf(taskId);
+      const targetIndex = targetTaskId ? orderedIds.indexOf(targetTaskId) : orderedIds.length - 1;
+      const nextIds = targetIndex >= 0 ? moveItemToDropTarget(orderedIds, sourceIndex, targetIndex) : orderedIds;
+      return {
+        ...draft,
+        tasks: normalizeTasks(
+          draft.tasks.map((task) => {
+            if (task.id === taskId) return { ...task, status, done: status === "Done" || status === "Aborted", boardOrder: nextIds.indexOf(task.id) };
+            if (nextIds.includes(task.id)) return { ...task, boardOrder: nextIds.indexOf(task.id) };
+            return task;
+          })
+        )
+      };
     });
   }
 
@@ -1098,15 +1163,24 @@ function App() {
         variant={options?.boardStatus ? "board" : "list"}
         expanded={expandedTaskIds.has(task.id)}
         showUnsavedDot={changedTaskId === task.id && saveState !== "saved" && saveState !== "idle"}
+        isDropTarget={taskDropTargetId === task.id}
         onToggleExpanded={() => toggleTaskDetails(task.id)}
         onDragStart={() => setDragPayload({ kind: "tree-task", taskId: task.id })}
-        onDragEnd={() => setDragPayload(null)}
+        onDragEnd={() => {
+          setDragPayload(null);
+          setTaskDropTargetId(null);
+        }}
+        onTaskDragOver={() => {
+          if (dragPayload?.kind === "tree-task" || dragPayload?.kind === "prio-task") setTaskDropTargetId(task.id);
+        }}
+        onTaskDragLeave={() => setTaskDropTargetId((current) => (current === task.id ? null : current))}
         onDropOnTask={() => {
           if (dragPayload?.kind === "tree-task" || dragPayload?.kind === "prio-task") {
             if (options?.boardStatus) moveTaskToBoardStatus(dragPayload.taskId, options.boardStatus, task.id);
-            else if (dragPayload.kind === "tree-task") moveTaskBeforeInTree(dragPayload.taskId, task.id);
+            else if (dragPayload.kind === "tree-task") moveTaskBeforeInList(dragPayload.taskId, task.id);
           }
           setDragPayload(null);
+          setTaskDropTargetId(null);
         }}
         onDone={(done) => setTaskDone(task.id, done)}
         onTitle={(title) => updateTask(task.id, { title })}
@@ -1437,7 +1511,7 @@ function App() {
               </div>
               <div className="task-board" style={{ gridTemplateColumns: `repeat(${visibleBoardStatuses.length}, minmax(340px, 340px))` }}>
                 {visibleBoardStatuses.map((status) => {
-                  const columnTasks = filteredTreeTasks.filter((task) => task.status === status);
+                  const columnTasks = sortedBoardTasks(filteredTreeTasks.filter((task) => task.status === status));
                   return (
                     <section
                       className={`board-column ${statusMeta[status].className}`}
@@ -1878,6 +1952,7 @@ function TaskCard({
   variant = "list",
   expanded,
   showUnsavedDot,
+  isDropTarget = false,
   isHierarchySortTarget = false,
   onToggleExpanded,
   onDragStart,
@@ -1906,6 +1981,7 @@ function TaskCard({
   variant?: "list" | "board" | "hierarchy";
   expanded: boolean;
   showUnsavedDot: boolean;
+  isDropTarget?: boolean;
   isHierarchySortTarget?: boolean;
   onToggleExpanded: () => void;
   onDragStart: () => void;
@@ -1928,7 +2004,7 @@ function TaskCard({
 }) {
   return (
     <article
-      className={`task-card task-card-${variant} status-card ${statusMeta[task.status].className} ${isHierarchySortTarget ? "hierarchy-sort-target" : ""}`}
+      className={`task-card task-card-${variant} status-card ${statusMeta[task.status].className} ${isDropTarget ? "task-drop-target" : ""} ${isHierarchySortTarget ? "hierarchy-sort-target" : ""}`}
       data-task-id={task.id}
       draggable
       onDragStart={(event) => {
