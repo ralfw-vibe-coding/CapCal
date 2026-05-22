@@ -27,15 +27,138 @@ sehen können, wann man verplant ist. Er ist ein Export, kein Arbeitsbereich.
 
 ---
 
-## Authentifizierung
+## Einmalige Einrichtung bei Google (Betreiber-Aufgabe)
 
-Google Calendar erfordert **OAuth2** — kein einfacher API-Key für Benutzerkalender.
+Bevor ein einzelner User GCal verbinden kann, muss CapCal einmalig als
+OAuth-App bei Google registriert werden. Das ist eine Betreiber-Aufgabe,
+keine User-Aufgabe — und geschieht in der **Google Cloud Console**.
 
-- Scope `https://www.googleapis.com/auth/calendar` für den CapCal-Kalender (lesen + schreiben)
-- Scope `https://www.googleapis.com/auth/calendar.readonly` für andere Kalender
-- OAuth-Flow: User autorisiert CapCal einmalig über Google
-- **Refresh-Token** wird serverseitig gespeichert (verschlüsselt in der DB, pro User)
-- Access-Token wird bei Bedarf automatisch erneuert
+### Schritte
+
+1. **Projekt anlegen** unter [console.cloud.google.com](https://console.cloud.google.com) → "CapCal"
+2. **Google Calendar API aktivieren** → APIs & Services → Library → "Google Calendar API"
+3. **OAuth Consent Screen konfigurieren:**
+   - App-Name: "CapCal", Support-E-Mail
+   - Scopes eintragen: `calendar`, `calendar.readonly`
+   - Publishing Status: **Testing** (bis zu 100 explizit eingetragene Testnutzer —
+     für persönliche Nutzung dauerhaft ausreichend, kein Google-Review nötig)
+4. **OAuth 2.0 Client ID erstellen** (Typ: "Web application"):
+   - Authorized Redirect URI: `https://deine-domain.netlify.app/api/auth/gcal/callback`
+   - → liefert `Client ID` und `Client Secret`
+5. Beide Werte als **Netlify Environment Variables** hinterlegen:
+   ```
+   GOOGLE_CLIENT_ID=...
+   GOOGLE_CLIENT_SECRET=...
+   ```
+
+### Publishing Status
+
+| Status | Nutzerkreis | Google-Review |
+|--------|-------------|---------------|
+| **Testing** | nur explizit eingetragene Testnutzer (max. 100) | nicht nötig |
+| **Production** | jeder | erforderlich (Datenschutzerklärung, Review-Prozess) |
+
+Testing ist für persönliche und Team-Nutzung dauerhaft ausreichend.
+Production wird erst relevant, wenn CapCal öffentlich für beliebige Nutzer angeboten wird.
+
+### Kosten
+
+Die Google Calendar API ist kostenlos. Free Quota: 1.000.000 Requests/Tag —
+für eine persönliche App praktisch unbegrenzt.
+
+---
+
+## OAuth2-Flow im Detail
+
+Google Calendar erfordert OAuth2 — kein einfacher API-Key für Benutzerkalender.
+CapCal muss vorab als OAuth-App bei Google registriert sein (Google Cloud Console):
+`Client ID` und `Client Secret` werden dort generiert und in CapCal als Umgebungsvariablen hinterlegt.
+
+### Ablauf aus User-Sicht
+
+1. User klickt "GCal anbinden" in den User Settings
+2. Ein Google-Fenster öffnet sich (OAuth Consent Screen)
+3. User wählt seinen Google-Account und erteilt CapCal Zugriff
+4. User landet zurück in CapCal — fertig
+
+### Was technisch passiert
+
+```
+User                  CapCal Server             Google
+ │                         │                       │
+ │─── "GCal anbinden" ────▶│                       │
+ │                         │── Authorization URL ──▶│
+ │◀── Redirect zu Google ──│   (mit client_id,      │
+ │                         │    redirect_uri,        │
+ │                         │    scope, state)        │
+ │                         │                       │
+ │─── Zugriff erteilen ───────────────────────────▶│
+ │◀── Redirect zu CapCal ──────────────────────────│
+ │    (?code=AUTH_CODE)    │                       │
+ │                         │                       │
+ │─── AUTH_CODE ──────────▶│                       │
+ │                         │── Token-Austausch ───▶│
+ │                         │   (code + client_secret)
+ │                         │◀── access_token +─────│
+ │                         │    refresh_token       │
+ │                         │                       │
+ │                         │── refresh_token ──▶ DB │
+ │◀─── "Verbunden" ────────│   (verschlüsselt)      │
+```
+
+### Die zwei Token
+
+**Authorization Code** (kurzlebig, Einmalnutzung):
+- Kommt von Google per Redirect-URL zurück zu CapCal
+- Wird sofort gegen die echten Token getauscht
+- Danach wertlos
+
+**Access Token** (kurzlebig, ~1 Stunde):
+- Wird für jeden Google Calendar API-Aufruf mitgeschickt
+- Läuft ab → wird automatisch erneuert (kein User-Eingriff nötig)
+- Nicht dauerhaft gespeichert (nur im Speicher oder kurz in der DB)
+
+**Refresh Token** (langlebig, bis zum Widerruf):
+- Wird verwendet, um jederzeit einen neuen Access Token zu holen
+- Muss sicher und dauerhaft gespeichert werden
+- **Das sensibelste Datum in der ganzen App**
+- Wird verschlüsselt in der DB gespeichert (pro User)
+- Bleibt gültig bis der User den Zugriff in seinem Google-Konto widerruft
+
+### Wo wird was gespeichert
+
+```sql
+ALTER TABLE users ADD COLUMN
+  gcal_refresh_token_enc TEXT;   -- verschlüsselt (AES-256), nie im Klartext
+
+ALTER TABLE users ADD COLUMN
+  gcal_connected_at TIMESTAMPTZ; -- wann wurde verbunden
+
+ALTER TABLE users ADD COLUMN
+  gcal_calendar_id TEXT;         -- ID des gewählten CapCal-Kalenders in GCal
+```
+
+### Scopes (Zugriffsrechte)
+
+- `https://www.googleapis.com/auth/calendar` — Lesen + Schreiben des CapCal-Kalenders
+- `https://www.googleapis.com/auth/calendar.readonly` — Lesen aller anderen Kalender
+
+CapCal fordert nur diese zwei Scopes — nichts darüber hinaus.
+
+### CSRF-Schutz
+
+Der `state`-Parameter im OAuth-Flow enthält ein zufälliges Token,
+das CapCal vor dem Redirect in der Session speichert und nach dem Redirect prüft.
+Verhindert, dass ein Angreifer den OAuth-Callback missbraucht.
+
+### Verbindung trennen
+
+User kann "GCal trennen" in den User Settings:
+- Refresh Token wird aus der DB gelöscht
+- CapCal verliert damit dauerhaft Zugriff
+- Der Eintrag im CapCal-Kalender bei Google bleibt bestehen (User muss selbst löschen)
+- Empfehlung: User auffordern, in seinem Google-Konto unter "Drittanbieter-Apps"
+  CapCal ebenfalls zu entfernen
 
 In einem geteilten Taskspace: jeder User synct seine eigenen Buchungen mit seinem
 eigenen Google-Kalender. Keine geteilte GCal-Verbindung.

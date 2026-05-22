@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import {
   AlertOctagon,
   ArchiveX,
+  ArrowUpNarrowWide,
   CalendarDays,
   Check,
   ChevronDown,
@@ -12,6 +13,7 @@ import {
   CircleDot,
   Clock3,
   Download,
+  FolderTree,
   GripVertical,
   ListTree,
   Loader,
@@ -30,7 +32,7 @@ import "./styles.css";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 type TaskStatus = "Backlog" | "Ready" | "Started" | "Blocked" | "Done" | "Aborted";
-type TreeViewMode = "list" | "board";
+type TreeViewMode = "list" | "board" | "hierarchy";
 type AuthUser = { id: number; email: string };
 
 type Task = {
@@ -40,6 +42,7 @@ type Task = {
   tags?: string[];
   dueDate?: string;
   estimateMinutes?: number;
+  parentId?: string;
   status: TaskStatus;
   done: boolean;
   treeOrder: number;
@@ -254,13 +257,32 @@ function normalizeTags(rawTags?: unknown[] | string | null): string[] {
   );
 }
 
+function normalizeTasks(tasks: Task[]): Task[] {
+  const taskIds = new Set(tasks.map((task) => task.id));
+  const cleanedTasks = tasks.map((task) => ({
+    ...task,
+    parentId: task.parentId && task.parentId !== task.id && taskIds.has(task.parentId) ? task.parentId : undefined,
+    tags: normalizeTags(task.tags)
+  }));
+  const byParent = new Map<string, Task[]>();
+  for (const task of sortedTasks(cleanedTasks)) {
+    const parentKey = task.parentId ?? "";
+    byParent.set(parentKey, [...(byParent.get(parentKey) ?? []), task]);
+  }
+  return cleanedTasks.map((task) => {
+    const siblings = byParent.get(task.parentId ?? "") ?? [];
+    return { ...task, treeOrder: siblings.findIndex((sibling) => sibling.id === task.id) };
+  });
+}
+
 function normalizeState(rawState: AppState): AppState {
+  const rawTaskView = rawState.settings?.taskView;
   return {
     ...rawState,
     settings: {
       ...defaultSettings,
       ...(rawState.settings ?? {}),
-      taskView: rawState.settings?.taskView === "board" ? "board" : "list",
+      taskView: rawTaskView === "board" || rawTaskView === "hierarchy" ? rawTaskView : "list",
       treeFilters: normalizeTreeFilters(rawState.settings?.treeFilters),
       boardHiddenStatuses: normalizeTaskStatuses(rawState.settings?.boardHiddenStatuses),
       panelsCollapsed: {
@@ -269,7 +291,7 @@ function normalizeState(rawState: AppState): AppState {
       }
     },
     dailyCapacities: rawState.dailyCapacities ?? {},
-    tasks: (rawState.tasks ?? []).map((task) => ({ ...task, tags: normalizeTags(task.tags) })),
+    tasks: normalizeTasks(rawState.tasks ?? []),
     prioTaskIds: rawState.prioTaskIds ?? [],
     prioDurations: rawState.prioDurations ?? {},
     bookings: rawState.bookings ?? []
@@ -312,6 +334,10 @@ function App() {
   const [calendarStartDate, setCalendarStartDate] = useState(today);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [expandedTaskIds, setExpandedTaskIds] = useState<Set<string>>(() => new Set());
+  const [collapsedHierarchyTaskIds, setCollapsedHierarchyTaskIds] = useState<Set<string>>(() => new Set());
+  const [hierarchySortTargetId, setHierarchySortTargetId] = useState<string | null>(null);
+  const [hierarchyChildTargetId, setHierarchyChildTargetId] = useState<string | null>(null);
+  const [childTaskTitles, setChildTaskTitles] = useState<Record<string, string>>({});
   const [changedTaskId, setChangedTaskId] = useState<string | null>(null);
   const settingsMenuRef = useRef<HTMLDivElement | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
@@ -512,6 +538,29 @@ function App() {
     for (const booking of state?.bookings ?? []) counts.set(booking.taskId, (counts.get(booking.taskId) ?? 0) + 1);
     return counts;
   }, [state?.bookings]);
+  const childCountByTaskId = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const task of state?.tasks ?? []) {
+      if (task.parentId) counts.set(task.parentId, (counts.get(task.parentId) ?? 0) + 1);
+    }
+    return counts;
+  }, [state?.tasks]);
+  const parentTitleByTaskId = useMemo(() => {
+    const parentTitles = new Map<string, string>();
+    for (const task of state?.tasks ?? []) {
+      if (task.parentId) parentTitles.set(task.id, taskById.get(task.parentId)?.title ?? "");
+    }
+    return parentTitles;
+  }, [state?.tasks, taskById]);
+  const tasksByParentId = useMemo(() => {
+    const children = new Map<string, Task[]>();
+    for (const task of state?.tasks ?? []) {
+      const parentKey = task.parentId ?? "";
+      children.set(parentKey, [...(children.get(parentKey) ?? []), task]);
+    }
+    for (const [parentKey, parentTasks] of children.entries()) children.set(parentKey, sortedTasks(parentTasks));
+    return children;
+  }, [state?.tasks]);
   const treeFilters = settings.treeFilters;
   const availableTags = useMemo(
     () => Array.from(new Set((state?.tasks ?? []).flatMap((task) => task.tags ?? []))).sort((a, b) => a.localeCompare(b, "de")),
@@ -531,6 +580,7 @@ function App() {
       return matchesQuery && matchesStatus && matchesTags;
     });
   }, [state?.tasks, treeFilters.query, treeFilters.statuses, treeFilters.tags]);
+  const filteredTaskIds = useMemo(() => new Set(filteredTreeTasks.map((task) => task.id)), [filteredTreeTasks]);
   const days = useMemo(
     () => {
       const nextDays: string[] = [];
@@ -696,7 +746,7 @@ function App() {
     });
   }
 
-  function upsertTask(title: string, target?: "prio" | "cal", date = today, initialStatus?: TaskStatus): Task | null {
+  function upsertTask(title: string, target?: "prio" | "cal", date = today, initialStatus?: TaskStatus, parentId?: string): Task | null {
     const trimmed = title.trim();
     if (!trimmed) return null;
     const estimateMinutes = settings.defaultTreeDurationMinutes;
@@ -709,17 +759,20 @@ function App() {
       tags: [],
       dueDate: target === "cal" ? date : undefined,
       estimateMinutes,
+      parentId,
       status,
       done: status === "Done" || status === "Aborted",
       treeOrder: 0
     };
 
     updateState((draft) => {
-      const existingTasks = sortedTasks(draft.tasks);
-      const tasks = [
+      const siblingKey = parentId ?? "";
+      const tasks = normalizeTasks([
         { ...task, treeOrder: 0 },
-        ...existingTasks.map((existingTask, index) => ({ ...existingTask, treeOrder: index + 1 }))
-      ];
+        ...draft.tasks.map((existingTask) =>
+          (existingTask.parentId ?? "") === siblingKey ? { ...existingTask, treeOrder: existingTask.treeOrder + 1 } : existingTask
+        )
+      ]);
       const next: AppState = {
         ...draft,
         tasks,
@@ -758,6 +811,19 @@ function App() {
     setBoardQuickAdd((current) => ({ ...current, [status]: "" }));
   }
 
+  function addChildTask(parentId: string) {
+    const title = childTaskTitles[parentId]?.trim();
+    if (!title) return;
+    const created = upsertTask(title, undefined, today, "Ready", parentId);
+    if (!created) return;
+    setChildTaskTitles((current) => ({ ...current, [parentId]: "" }));
+    setCollapsedHierarchyTaskIds((current) => {
+      const next = new Set(current);
+      next.delete(parentId);
+      return next;
+    });
+  }
+
   function updateTask(taskId: string, patch: Partial<Task>) {
     setChangedTaskId(taskId);
     updateState((draft) => ({
@@ -772,10 +838,50 @@ function App() {
 
   function moveTaskBeforeInTree(sourceTaskId: string, targetTaskId: string) {
     updateState((draft) => {
-      const tasks = sortedTasks(draft.tasks);
-      const sourceIndex = tasks.findIndex((task) => task.id === sourceTaskId);
-      const targetIndex = tasks.findIndex((task) => task.id === targetTaskId);
-      return { ...draft, tasks: moveItemToDropTarget(tasks, sourceIndex, targetIndex).map((task, treeOrder) => ({ ...task, treeOrder })) };
+      const sourceTask = draft.tasks.find((task) => task.id === sourceTaskId);
+      const targetTask = draft.tasks.find((task) => task.id === targetTaskId);
+      if (!sourceTask || !targetTask || sourceTask.id === targetTask.id) return draft;
+      const parentId = targetTask.parentId;
+      const movedTasks = draft.tasks.map((task) => (task.id === sourceTaskId ? { ...task, parentId } : task));
+      const siblings = sortedTasks(movedTasks.filter((task) => (task.parentId ?? "") === (parentId ?? "") && task.id !== sourceTaskId));
+      const targetIndex = siblings.findIndex((task) => task.id === targetTaskId);
+      const orderedSiblingIds = [
+        ...siblings.slice(0, targetIndex).map((task) => task.id),
+        sourceTaskId,
+        ...siblings.slice(targetIndex).map((task) => task.id)
+      ];
+      return {
+        ...draft,
+        tasks: normalizeTasks(
+          movedTasks.map((task) =>
+            orderedSiblingIds.includes(task.id) ? { ...task, treeOrder: orderedSiblingIds.indexOf(task.id) } : task
+          )
+        )
+      };
+    });
+  }
+
+  function isDescendant(tasks: Task[], taskId: string, possibleAncestorId: string): boolean {
+    let current = tasks.find((task) => task.id === taskId);
+    while (current?.parentId) {
+      if (current.parentId === possibleAncestorId) return true;
+      current = tasks.find((task) => task.id === current?.parentId);
+    }
+    return false;
+  }
+
+  function moveTaskAsChild(sourceTaskId: string, parentId: string) {
+    updateState((draft) => {
+      if (sourceTaskId === parentId || isDescendant(draft.tasks, parentId, sourceTaskId)) return draft;
+      const nextTasks = normalizeTasks(
+        draft.tasks.map((task) => (task.id === sourceTaskId ? { ...task, parentId, treeOrder: Number.MAX_SAFE_INTEGER } : task))
+      );
+      return { ...draft, tasks: nextTasks };
+    });
+    setCollapsedHierarchyTaskIds((current) => {
+      const next = new Set(current);
+      next.delete(parentId);
+      return next;
     });
   }
 
@@ -822,15 +928,16 @@ function App() {
   }
 
   function deleteTask(taskId: string) {
-    updateState((draft) => ({
-      ...draft,
-      tasks: sortedTasks(draft.tasks)
-        .filter((task) => task.id !== taskId)
-        .map((task, treeOrder) => ({ ...task, treeOrder })),
-      prioTaskIds: draft.prioTaskIds.filter((id) => id !== taskId),
-      prioDurations: Object.fromEntries(Object.entries(draft.prioDurations ?? {}).filter(([id]) => id !== taskId)),
-      bookings: draft.bookings.filter((booking) => booking.taskId !== taskId)
-    }));
+    updateState((draft) => {
+      if (draft.tasks.some((task) => task.parentId === taskId)) return draft;
+      return {
+        ...draft,
+        tasks: normalizeTasks(draft.tasks.filter((task) => task.id !== taskId)),
+        prioTaskIds: draft.prioTaskIds.filter((id) => id !== taskId),
+        prioDurations: Object.fromEntries(Object.entries(draft.prioDurations ?? {}).filter(([id]) => id !== taskId)),
+        bookings: draft.bookings.filter((booking) => booking.taskId !== taskId)
+      };
+    });
   }
 
   function bookTask(taskId: string, date: string, startTime?: string, source: "tree" | "prio" = "tree") {
@@ -968,7 +1075,7 @@ function App() {
   }
 
   function scrollToTask(taskId: string) {
-    updateSettings({ panelsCollapsed: { ...settings.panelsCollapsed, tree: false } });
+    updateSettings({ taskView: "hierarchy", panelsCollapsed: { ...settings.panelsCollapsed, tree: false } });
     setExpandedTaskIds((current) => {
       const next = new Set(current);
       next.add(taskId);
@@ -986,6 +1093,8 @@ function App() {
         task={task}
         allTags={availableTags}
         bookingCount={bookingCountByTaskId.get(task.id) ?? 0}
+        childCount={childCountByTaskId.get(task.id) ?? 0}
+        parentTitle={parentTitleByTaskId.get(task.id)}
         variant={options?.boardStatus ? "board" : "list"}
         expanded={expandedTaskIds.has(task.id)}
         showUnsavedDot={changedTaskId === task.id && saveState !== "saved" && saveState !== "idle"}
@@ -1006,9 +1115,117 @@ function App() {
         onDueDate={(dueDate) => updateTask(task.id, { dueDate: dueDate || undefined })}
         onDescription={(description) => updateTask(task.id, { description })}
         onTags={(tags) => updateTask(task.id, { tags: normalizeTags(tags) })}
+        onGoToHierarchy={() => scrollToTask(task.id)}
+        childTaskTitle={childTaskTitles[task.id] ?? ""}
+        onChildTaskTitleChange={(title) => setChildTaskTitles((current) => ({ ...current, [task.id]: title }))}
+        onAddChildTask={() => addChildTask(task.id)}
         onDelete={() => deleteTask(task.id)}
       />
     );
+  }
+
+  function hasVisibleDescendant(taskId: string): boolean {
+    return (tasksByParentId.get(taskId) ?? []).some((child) => filteredTaskIds.has(child.id) || hasVisibleDescendant(child.id));
+  }
+
+  function renderHierarchyTaskNodes(parentId = "", depth = 0): ReactNode[] {
+    return (tasksByParentId.get(parentId) ?? []).flatMap((task) => {
+      const children = tasksByParentId.get(task.id) ?? [];
+      const visible = filteredTaskIds.has(task.id) || hasVisibleDescendant(task.id);
+      if (!visible) return [];
+      const collapsed = collapsedHierarchyTaskIds.has(task.id);
+      return [
+        <div className="hierarchy-node" key={task.id} style={{ paddingLeft: depth * 18 }}>
+          <div className="hierarchy-row">
+            <div className="hierarchy-toggle-cell">
+              {children.length > 0 && (
+                <button
+                  className="hierarchy-collapse"
+                  title={collapsed ? "Teilbaum öffnen" : "Teilbaum schließen"}
+                  onClick={() =>
+                    setCollapsedHierarchyTaskIds((current) => {
+                      const next = new Set(current);
+                      if (next.has(task.id)) next.delete(task.id);
+                      else next.add(task.id);
+                      return next;
+                    })
+                  }
+                >
+                  {collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
+                </button>
+              )}
+            </div>
+            <TaskCard
+              task={task}
+              allTags={availableTags}
+              bookingCount={bookingCountByTaskId.get(task.id) ?? 0}
+              childCount={childCountByTaskId.get(task.id) ?? 0}
+              parentTitle={parentTitleByTaskId.get(task.id)}
+              variant="hierarchy"
+              expanded={expandedTaskIds.has(task.id)}
+              showUnsavedDot={changedTaskId === task.id && saveState !== "saved" && saveState !== "idle"}
+              isHierarchySortTarget={hierarchySortTargetId === task.id}
+              onToggleExpanded={() => toggleTaskDetails(task.id)}
+              onDragStart={() => setDragPayload({ kind: "tree-task", taskId: task.id })}
+              onDragEnd={() => {
+                setDragPayload(null);
+                setHierarchySortTargetId(null);
+                setHierarchyChildTargetId(null);
+              }}
+              onTaskDragOver={() => {
+                if (dragPayload?.kind === "tree-task" || dragPayload?.kind === "prio-task") {
+                  setHierarchySortTargetId(task.id);
+                  setHierarchyChildTargetId(null);
+                }
+              }}
+              onTaskDragLeave={() => setHierarchySortTargetId((current) => (current === task.id ? null : current))}
+              onDropOnTask={() => {
+                if (dragPayload?.kind === "tree-task" || dragPayload?.kind === "prio-task") moveTaskBeforeInTree(dragPayload.taskId, task.id);
+                setDragPayload(null);
+                setHierarchySortTargetId(null);
+                setHierarchyChildTargetId(null);
+              }}
+              onDone={(done) => setTaskDone(task.id, done)}
+              onTitle={(title) => updateTask(task.id, { title })}
+              onStatus={(status) => updateTask(task.id, { status, done: status === "Done" || status === "Aborted" })}
+              onEstimate={(estimateMinutes) => updateTask(task.id, { estimateMinutes })}
+              onDueDate={(dueDate) => updateTask(task.id, { dueDate: dueDate || undefined })}
+              onDescription={(description) => updateTask(task.id, { description })}
+              onTags={(tags) => updateTask(task.id, { tags: normalizeTags(tags) })}
+              onGoToHierarchy={() => scrollToTask(task.id)}
+              childTaskTitle={childTaskTitles[task.id] ?? ""}
+              onChildTaskTitleChange={(title) => setChildTaskTitles((current) => ({ ...current, [task.id]: title }))}
+              onAddChildTask={() => addChildTask(task.id)}
+              onDelete={() => deleteTask(task.id)}
+            />
+          </div>
+          <div
+            className={`hierarchy-child-drop ${hierarchyChildTargetId === task.id ? "active" : ""}`}
+            onDragOver={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              if (dragPayload?.kind === "tree-task" || dragPayload?.kind === "prio-task") {
+                setHierarchyChildTargetId(task.id);
+                setHierarchySortTargetId(null);
+              }
+            }}
+            onDragLeave={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                setHierarchyChildTargetId((current) => (current === task.id ? null : current));
+              }
+            }}
+            onDrop={(event) => {
+              event.stopPropagation();
+              if (dragPayload?.kind === "tree-task" || dragPayload?.kind === "prio-task") moveTaskAsChild(dragPayload.taskId, task.id);
+              setDragPayload(null);
+              setHierarchySortTargetId(null);
+              setHierarchyChildTargetId(null);
+            }}
+          />
+        </div>,
+        ...(collapsed ? [] : renderHierarchyTaskNodes(task.id, depth + 1))
+      ];
+    });
   }
 
   function exportTaskspace() {
@@ -1114,6 +1331,12 @@ function App() {
               <button className={`view-chip ${settings.taskView === "board" ? "active" : ""}`} onClick={() => setTreeView("board")}>
                 Board
               </button>
+              <button
+                className={`view-chip ${settings.taskView === "hierarchy" ? "active" : ""}`}
+                onClick={() => setTreeView("hierarchy")}
+              >
+                Hierarchie
+              </button>
             </div>
           }
         >
@@ -1192,6 +1415,8 @@ function App() {
 
           {settings.taskView === "list" ? (
             <div className="list">{filteredTreeTasks.map((task) => renderTreeTaskCard(task))}</div>
+          ) : settings.taskView === "hierarchy" ? (
+            <div className="hierarchy-view">{renderHierarchyTaskNodes()}</div>
           ) : (
             <div className="board-view">
               <div className="board-column-controls">
@@ -1648,12 +1873,17 @@ function TaskCard({
   task,
   allTags,
   bookingCount,
+  childCount,
+  parentTitle,
   variant = "list",
   expanded,
   showUnsavedDot,
+  isHierarchySortTarget = false,
   onToggleExpanded,
   onDragStart,
   onDragEnd,
+  onTaskDragOver,
+  onTaskDragLeave,
   onDropOnTask,
   onDone,
   onTitle,
@@ -1662,17 +1892,26 @@ function TaskCard({
   onDueDate,
   onDescription,
   onTags,
+  onGoToHierarchy,
+  childTaskTitle,
+  onChildTaskTitleChange,
+  onAddChildTask,
   onDelete
 }: {
   task: Task;
   allTags: string[];
   bookingCount: number;
-  variant?: "list" | "board";
+  childCount: number;
+  parentTitle?: string;
+  variant?: "list" | "board" | "hierarchy";
   expanded: boolean;
   showUnsavedDot: boolean;
+  isHierarchySortTarget?: boolean;
   onToggleExpanded: () => void;
   onDragStart: () => void;
   onDragEnd: () => void;
+  onTaskDragOver?: () => void;
+  onTaskDragLeave?: () => void;
   onDropOnTask: () => void;
   onDone: (done: boolean) => void;
   onTitle: (title: string) => void;
@@ -1681,11 +1920,15 @@ function TaskCard({
   onDueDate: (date: string) => void;
   onDescription: (description: string) => void;
   onTags: (tags: string[]) => void;
+  onGoToHierarchy: () => void;
+  childTaskTitle: string;
+  onChildTaskTitleChange: (title: string) => void;
+  onAddChildTask: () => void;
   onDelete: () => void;
 }) {
   return (
     <article
-      className={`task-card task-card-${variant} status-card ${statusMeta[task.status].className}`}
+      className={`task-card task-card-${variant} status-card ${statusMeta[task.status].className} ${isHierarchySortTarget ? "hierarchy-sort-target" : ""}`}
       data-task-id={task.id}
       draggable
       onDragStart={(event) => {
@@ -1696,7 +1939,13 @@ function TaskCard({
         event.currentTarget.classList.remove("dragging-source");
         onDragEnd();
       }}
-      onDragOver={(event) => event.preventDefault()}
+      onDragOver={(event) => {
+        event.preventDefault();
+        onTaskDragOver?.();
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) onTaskDragLeave?.();
+      }}
       onDrop={(event) => {
         event.stopPropagation();
         onDropOnTask();
@@ -1719,6 +1968,18 @@ function TaskCard({
           <span className={`task-status-pill ${statusMeta[task.status].className}`}>{task.status}</span>
           {task.dueDate && <span className={`task-deadline-pill ${deadlineTone(task.dueDate)}`}>{formatOptionalDate(task.dueDate)}</span>}
           <span>{estimateToLabel(task.estimateMinutes)}</span>
+          {parentTitle && (
+            <button className="task-hierarchy-chip" title={`Parent: ${parentTitle}`} onClick={onGoToHierarchy}>
+              <ArrowUpNarrowWide size={11} />
+              {parentTitle}
+            </button>
+          )}
+          {childCount > 0 && (
+            <button className="task-hierarchy-chip" title={`${childCount} Unteraufgabe${childCount === 1 ? "" : "n"}`} onClick={onGoToHierarchy}>
+              <FolderTree size={11} />
+              {childCount}
+            </button>
+          )}
           {bookingCount > 0 && (
             <span className="task-booking-chip" title={`${bookingCount} Buchung${bookingCount === 1 ? "" : "en"} im Kalender`}>
               <CalendarDays size={11} />
@@ -1731,7 +1992,12 @@ function TaskCard({
             </span>
           ))}
         </div>
-        <button className="icon-button ghost danger" title="Aufgabe löschen" onClick={onDelete}>
+        <button
+          className="icon-button ghost danger"
+          title={childCount > 0 ? "Aufgaben mit Unteraufgaben können noch nicht gelöscht werden" : "Aufgabe löschen"}
+          disabled={childCount > 0}
+          onClick={onDelete}
+        >
           <Trash2 size={15} />
         </button>
       </div>
@@ -1749,6 +2015,19 @@ function TaskCard({
             />
           </label>
           <TaskTagPicker allTags={allTags} task={task} onTags={onTags} />
+          <div className="child-task-form">
+            <input
+              placeholder="Neue Unteraufgabe"
+              value={childTaskTitle}
+              onChange={(event) => onChildTaskTitleChange(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") onAddChildTask();
+              }}
+            />
+            <button className="icon-button" title="Unteraufgabe anlegen" onClick={onAddChildTask}>
+              <Plus size={15} />
+            </button>
+          </div>
           <div className="task-detail-grid">
             <label>
               Deadline

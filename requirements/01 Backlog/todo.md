@@ -1,0 +1,1 @@
+- icon zur anzeige der children für eine aufgabe: lucide/folder-tree, icon für den parent: lucide/arrow-up-narrow-wide
