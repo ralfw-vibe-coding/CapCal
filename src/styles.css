@@ -530,6 +530,7 @@ button:disabled {
   flex-direction: column;
   gap: 10px;
   min-height: 0;
+  min-width: 0;
   overflow: hidden;
 }
 
@@ -550,9 +551,11 @@ button:disabled {
   display: grid;
   gap: 10px;
   min-height: 0;
-  min-width: max-content;
-  overflow: auto;
-  padding-bottom: 2px;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: auto;
+  padding-bottom: 10px;
+  width: 100%;
 }
 
 .board-column {
@@ -562,7 +565,7 @@ button:disabled {
   display: flex;
   flex-direction: column;
   min-height: 260px;
-  min-width: 240px;
+  min-width: 340px;
   padding: 8px;
 }
 
@@ -768,6 +771,63 @@ button:disabled {
 
 .task-detail-panel textarea {
   padding: 8px;
+}
+
+.task-card-board {
+  padding: 8px;
+}
+
+.task-card-board .task-row {
+  align-items: center;
+  display: grid;
+  grid-template-columns: 15px 20px 24px minmax(0, 1fr) 34px;
+  grid-template-rows: auto auto;
+  row-gap: 7px;
+}
+
+.task-card-board .drag-handle {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.task-card-board .task-expand-button {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.task-card-board .check-button {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+.task-card-board .task-main {
+  grid-column: 4;
+  grid-row: 1;
+}
+
+.task-card-board .task-main strong {
+  white-space: normal;
+}
+
+.task-card-board .task-compact-meta {
+  flex-wrap: wrap;
+  grid-column: 4 / 6;
+  grid-row: 2;
+}
+
+.task-card-board .task-row > .icon-button {
+  grid-column: 5;
+  grid-row: 1;
+  height: 32px;
+  min-width: 32px;
+}
+
+.task-card-board .task-detail-panel {
+  margin-left: 26px;
+}
+
+.task-card-board .task-detail-grid {
+  grid-template-columns: 1fr;
 }
 
 .drag-handle {

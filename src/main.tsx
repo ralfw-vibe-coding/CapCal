@@ -784,6 +784,7 @@ function App() {
       <TaskCard
         key={task.id}
         task={task}
+        variant={options?.boardStatus ? "board" : "list"}
         expanded={expandedTaskIds.has(task.id)}
         showUnsavedDot={changedTaskId === task.id && saveState !== "saved" && saveState !== "idle"}
         onToggleExpanded={() => toggleTaskDetails(task.id)}
@@ -998,7 +999,7 @@ function App() {
                   );
                 })}
               </div>
-              <div className="task-board" style={{ gridTemplateColumns: `repeat(${visibleBoardStatuses.length}, minmax(240px, 240px))` }}>
+              <div className="task-board" style={{ gridTemplateColumns: `repeat(${visibleBoardStatuses.length}, minmax(340px, 340px))` }}>
                 {visibleBoardStatuses.map((status) => {
                   const columnTasks = filteredTreeTasks.filter((task) => task.status === status);
                   return (
@@ -1404,6 +1405,7 @@ function SettingsPanel({
 
 function TaskCard({
   task,
+  variant = "list",
   expanded,
   showUnsavedDot,
   onToggleExpanded,
@@ -1419,6 +1421,7 @@ function TaskCard({
   onDelete
 }: {
   task: Task;
+  variant?: "list" | "board";
   expanded: boolean;
   showUnsavedDot: boolean;
   onToggleExpanded: () => void;
@@ -1435,7 +1438,7 @@ function TaskCard({
 }) {
   return (
     <article
-      className={`task-card status-card ${statusMeta[task.status].className}`}
+      className={`task-card task-card-${variant} status-card ${statusMeta[task.status].className}`}
       draggable
       onDragStart={(event) => {
         event.currentTarget.classList.add("dragging-source");

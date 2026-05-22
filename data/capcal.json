@@ -15,109 +15,140 @@
   },
   "tasks": [
     {
-      "id": "task-2ck0924ehso-mpfjncuf",
-      "title": "aufgabe 1.1.1 - geändert",
+      "id": "task-5dnlvha064a-mpgjsz72",
+      "title": "bishi abholen",
+      "description": "",
       "estimateMinutes": 30,
-      "status": "Done",
-      "done": true,
+      "status": "Backlog",
+      "done": false,
       "treeOrder": 0
     },
     {
-      "id": "task-pm8paeeerv8-mpfjg9ql",
-      "title": "yyy2",
-      "estimateMinutes": 45,
-      "status": "Ready",
+      "id": "task-gg3rdqbcl8t-mpgjstjx",
+      "title": "blog schreiben",
+      "description": "",
+      "estimateMinutes": 30,
+      "status": "Backlog",
       "done": false,
       "treeOrder": 1
     },
     {
-      "id": "task-0y8msvqfllp-mpfjg31v",
-      "title": "yyy - auf done",
-      "dueDate": "2026-05-21",
-      "estimateMinutes": 45,
-      "status": "Done",
-      "done": true,
+      "id": "task-0qpacqjje3sk-mpgjr5po",
+      "title": "lesen",
+      "description": "",
+      "dueDate": "2026-05-22",
+      "estimateMinutes": 30,
+      "status": "Started",
+      "done": false,
       "treeOrder": 2
     },
     {
-      "id": "task-ogm24ndifrk-mpfi5n3f",
-      "title": "aufgabe 3",
-      "estimateMinutes": 30,
-      "status": "Blocked",
+      "id": "task-r6xtptpqo2h-mpgjlevt",
+      "title": "bad putzen",
+      "description": "dkjhfkajlsdhfkashdfs",
+      "dueDate": "2026-05-24",
+      "estimateMinutes": 45,
+      "status": "Started",
       "done": false,
       "treeOrder": 3
     },
     {
-      "id": "task-i8l5z290sz-mpfi5ksp",
-      "title": "aufgabe 2",
-      "estimateMinutes": 105,
-      "status": "Blocked",
+      "id": "task-6gv9itv55e-mpgjlqov",
+      "title": "balkon aufbauen",
+      "description": "",
+      "estimateMinutes": 60,
+      "status": "Started",
       "done": false,
       "treeOrder": 4
     },
     {
-      "id": "task-9iw0q8t2qbm-mpfi5jcs",
-      "title": "aufgabe 1",
-      "estimateMinutes": 240,
-      "status": "Done",
-      "done": true,
+      "id": "task-sojeaf40eij-mpgjlmwo",
+      "title": "gästezimmer herrichten",
+      "description": "",
+      "estimateMinutes": 30,
+      "status": "Started",
+      "done": false,
       "treeOrder": 5
+    },
+    {
+      "id": "task-d08wr028af4-mpgjl6cz",
+      "title": "rasen mähen",
+      "description": "",
+      "estimateMinutes": 30,
+      "status": "Ready",
+      "done": false,
+      "treeOrder": 6
+    },
+    {
+      "id": "task-jn7bdn0a6d-mpgjljgb",
+      "title": "studio herrichten",
+      "description": "",
+      "estimateMinutes": 30,
+      "status": "Started",
+      "done": false,
+      "treeOrder": 7
+    },
+    {
+      "id": "task-idqzwmbt86-mpgjlc7i",
+      "title": "staubsaugen",
+      "description": "",
+      "estimateMinutes": 30,
+      "status": "Ready",
+      "done": false,
+      "treeOrder": 8
+    },
+    {
+      "id": "task-wg5iexchewl-mpgjl9kz",
+      "title": "einkaufen",
+      "description": "",
+      "estimateMinutes": 30,
+      "status": "Started",
+      "done": false,
+      "treeOrder": 9
     }
   ],
-  "prioTaskIds": [
-    "task-2ck0924ehso-mpfjncuf",
-    "task-pm8paeeerv8-mpfjg9ql",
-    "task-0y8msvqfllp-mpfjg31v"
-  ],
+  "prioTaskIds": [],
   "bookings": [
     {
-      "id": "booking-gmez6opy6wa-mpfi5z9c",
-      "taskId": "task-9iw0q8t2qbm-mpfi5jcs",
-      "date": "2026-05-21",
+      "id": "booking-ykw7zlyxlk-mpgjoyu6",
+      "taskId": "task-wg5iexchewl-mpgjl9kz",
+      "date": "2026-05-22",
+      "startTime": "11:30",
+      "durationMinutes": 150
+    },
+    {
+      "id": "booking-wodos2pbc3-mpgjp4s2",
+      "taskId": "task-jn7bdn0a6d-mpgjljgb",
+      "date": "2026-05-22",
       "startTime": "10:00",
-      "durationMinutes": 240
-    },
-    {
-      "id": "booking-53ymroc2gx2-mpfi644b",
-      "taskId": "task-i8l5z290sz-mpfi5ksp",
-      "date": "2026-05-22",
-      "startTime": "10:10",
-      "durationMinutes": 195
-    },
-    {
-      "id": "booking-vhd2lhou11e-mpfi78ui",
-      "taskId": "task-ogm24ndifrk-mpfi5n3f",
-      "date": "2026-05-21",
-      "startTime": "08:00",
-      "durationMinutes": 90
-    },
-    {
-      "id": "booking-57ghonnmy7-mpfjfpnx",
-      "taskId": "task-9iw0q8t2qbm-mpfi5jcs",
-      "date": "2026-05-22",
-      "startTime": "05:15",
-      "durationMinutes": 60
-    },
-    {
-      "id": "booking-i163rfe9rda-mpfjfu4k",
-      "taskId": "task-9iw0q8t2qbm-mpfi5jcs",
-      "date": "2026-05-22",
-      "startTime": "07:00",
-      "durationMinutes": 60
-    },
-    {
-      "id": "booking-9j479haf4ho-mpfjwfaq",
-      "taskId": "task-2ck0924ehso-mpfjncuf",
-      "date": "2026-05-23",
-      "startTime": "06:00",
       "durationMinutes": 30
     },
     {
-      "id": "booking-i0oy8sdo9kb-mpft90ii",
-      "taskId": "task-2ck0924ehso-mpfjncuf",
-      "date": "2026-05-21",
-      "startTime": "05:15",
-      "durationMinutes": 105
+      "id": "booking-s16ndl6h97i-mpgjpckm",
+      "taskId": "task-6gv9itv55e-mpgjlqov",
+      "date": "2026-05-22",
+      "startTime": "14:15",
+      "durationMinutes": 60
+    },
+    {
+      "id": "booking-2q0p42b2ms-mpgjqua1",
+      "taskId": "task-sojeaf40eij-mpgjlmwo",
+      "date": "2026-05-22",
+      "startTime": "15:30",
+      "durationMinutes": 30
+    },
+    {
+      "id": "booking-lng52cb5mwn-mpgjqy8l",
+      "taskId": "task-r6xtptpqo2h-mpgjlevt",
+      "date": "2026-05-23",
+      "startTime": "09:00",
+      "durationMinutes": 45
+    },
+    {
+      "id": "booking-9915z30f405-mpgjr5po",
+      "taskId": "task-0qpacqjje3sk-mpgjr5po",
+      "date": "2026-05-22",
+      "durationMinutes": 90
     }
   ],
   "settings": {
@@ -127,23 +158,22 @@
     "defaultPlanningCapacityMinutes": 300,
     "calendarStartTime": "05:00",
     "calendarEndTime": "22:00",
-    "showWeekends": true,
-    "visibleDayCount": 21,
+    "showWeekends": false,
+    "visibleDayCount": 7,
     "taskView": "list",
     "treeFilters": {
       "query": "",
       "statuses": []
     },
-    "boardHiddenStatuses": [],
+    "boardHiddenStatuses": [
+      "Aborted",
+      "Done"
+    ],
     "panelsCollapsed": {
       "tree": false,
-      "prio": false,
+      "prio": true,
       "cal": false
     }
   },
-  "prioDurations": {
-    "task-2ck0924ehso-mpfjncuf": 30,
-    "task-pm8paeeerv8-mpfjg9ql": 45,
-    "task-0y8msvqfllp-mpfjg31v": 45
-  }
+  "prioDurations": {}
 }
