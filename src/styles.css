@@ -1066,6 +1066,45 @@ button:disabled {
   top: -7px;
 }
 
+.list-task-slot,
+.board-task-slot {
+  display: grid;
+  gap: 1px;
+}
+
+.list-booking-drop,
+.board-booking-drop {
+  min-height: 8px;
+  position: relative;
+}
+
+.list-booking-drop.active::before,
+.board-booking-drop.active::before {
+  background: var(--accent);
+  border-radius: 999px;
+  content: "";
+  height: 2px;
+  left: 0;
+  position: absolute;
+  right: 0;
+  top: 3px;
+}
+
+.list-booking-drop.active::after,
+.board-booking-drop.active::after {
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  color: var(--accent);
+  content: "Neue Aufgabe";
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  position: absolute;
+  right: 0;
+  top: -7px;
+}
+
 .task-card-board {
   padding: 8px;
 }

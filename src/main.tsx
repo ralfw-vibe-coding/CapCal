@@ -1098,6 +1098,67 @@ function App() {
     }));
   }
 
+  function linkBookingToTask(bookingId: string, taskId: string) {
+    updateState((draft) => ({
+      ...draft,
+      tasks: normalizeTasks(
+        draft.tasks.map((task) =>
+          task.id === taskId && task.status !== "Done" ? { ...task, status: "Started" } : task
+        )
+      ),
+      bookings: draft.bookings.map((booking) =>
+        booking.id === bookingId ? { ...booking, taskId, label: "" } : booking
+      )
+    }));
+  }
+
+  function createTaskFromBookingBefore(bookingId: string, targetTaskId: string, mode: "list" | "hierarchy" | "board" = "list") {
+    updateState((draft) => {
+      const booking = draft.bookings.find((candidate) => candidate.id === bookingId);
+      const targetTask = draft.tasks.find((candidate) => candidate.id === targetTaskId);
+      if (!booking || !targetTask) return draft;
+      const title = (booking.label || "Neue Aufgabe").trim();
+      const targetStatus = mode === "board" ? targetTask.status : "Started";
+      const maxRootTreeOrder = Math.max(-1, ...draft.tasks.filter((task) => !task.parentId).map((task) => task.treeOrder));
+      const maxListOrder = Math.max(-1, ...draft.tasks.map((task) => task.listOrder));
+      const task: Task = {
+        id: uid("task"),
+        title,
+        description: booking.description ?? "",
+        tags: [],
+        dueDate: undefined,
+        estimateMinutes: undefined,
+        parentId: mode === "hierarchy" ? targetTask.parentId : undefined,
+        archived: false,
+        status: targetStatus,
+        done: false,
+        treeOrder: mode === "hierarchy" ? targetTask.treeOrder : 0,
+        listOrder: mode === "list" ? targetTask.listOrder : 0,
+        boardOrder: mode === "board" ? targetTask.boardOrder : 0
+      };
+      const tasks = draft.tasks.map((existingTask) => ({
+        ...existingTask,
+        treeOrder:
+          (existingTask.parentId ?? "") === (task.parentId ?? "") &&
+          existingTask.treeOrder >= (mode === "hierarchy" ? targetTask.treeOrder : 0)
+            ? existingTask.treeOrder + 1
+            : existingTask.treeOrder,
+        listOrder: existingTask.listOrder >= (mode === "list" ? targetTask.listOrder : 0) ? existingTask.listOrder + 1 : existingTask.listOrder,
+        boardOrder:
+          existingTask.status === targetStatus && existingTask.boardOrder >= (mode === "board" ? targetTask.boardOrder : 0)
+            ? existingTask.boardOrder + 1
+            : existingTask.boardOrder
+      }));
+      return {
+        ...draft,
+        tasks: normalizeTasks([task, ...tasks]),
+        bookings: draft.bookings.map((candidate) =>
+          candidate.id === bookingId ? { ...candidate, taskId: task.id, label: "" } : candidate
+        )
+      };
+    });
+  }
+
   function updateBooking(bookingId: string, patch: Partial<Booking>) {
     updateState((draft) => ({
       ...draft,
@@ -1258,7 +1319,7 @@ function App() {
           setTaskDropTargetId(null);
         }}
         onTaskDragOver={() => {
-          if (dragPayload?.kind === "tree-task" || dragPayload?.kind === "prio-task") setTaskDropTargetId(task.id);
+          if (dragPayload) setTaskDropTargetId(task.id);
         }}
         onTaskDragLeave={() => setTaskDropTargetId((current) => (current === task.id ? null : current))}
         onDropOnTask={() => {
@@ -1266,6 +1327,7 @@ function App() {
             if (options?.boardStatus) moveTaskToBoardStatus(dragPayload.taskId, options.boardStatus, task.id);
             else if (dragPayload.kind === "tree-task") moveTaskBeforeInList(dragPayload.taskId, task.id);
           }
+          if (dragPayload?.kind === "booking") linkBookingToTask(dragPayload.bookingId, task.id);
           setDragPayload(null);
           setTaskDropTargetId(null);
         }}
@@ -1337,7 +1399,7 @@ function App() {
                 setHierarchyChildTargetId(null);
               }}
               onTaskDragOver={() => {
-                if (dragPayload?.kind === "tree-task" || dragPayload?.kind === "prio-task") {
+                if (dragPayload) {
                   setHierarchySortTargetId(task.id);
                   setHierarchyChildTargetId(null);
                 }
@@ -1345,6 +1407,7 @@ function App() {
               onTaskDragLeave={() => setHierarchySortTargetId((current) => (current === task.id ? null : current))}
               onDropOnTask={() => {
                 if (dragPayload?.kind === "tree-task" || dragPayload?.kind === "prio-task") moveTaskBeforeInTree(dragPayload.taskId, task.id);
+                if (dragPayload?.kind === "booking") linkBookingToTask(dragPayload.bookingId, task.id);
                 setDragPayload(null);
                 setHierarchySortTargetId(null);
                 setHierarchyChildTargetId(null);
@@ -1369,7 +1432,7 @@ function App() {
             onDragOver={(event) => {
               event.preventDefault();
               event.stopPropagation();
-              if (dragPayload?.kind === "tree-task" || dragPayload?.kind === "prio-task") {
+              if (dragPayload) {
                 setHierarchyChildTargetId(task.id);
                 setHierarchySortTargetId(null);
               }
@@ -1382,6 +1445,7 @@ function App() {
             onDrop={(event) => {
               event.stopPropagation();
               if (dragPayload?.kind === "tree-task" || dragPayload?.kind === "prio-task") moveTaskAsChild(dragPayload.taskId, task.id);
+              if (dragPayload?.kind === "booking") createTaskFromBookingBefore(dragPayload.bookingId, task.id, "hierarchy");
               setDragPayload(null);
               setHierarchySortTargetId(null);
               setHierarchyChildTargetId(null);
@@ -1586,7 +1650,32 @@ function App() {
           </div>
 
           {settings.taskView === "list" ? (
-            <div className="list">{filteredTreeTasks.map((task) => renderTreeTaskCard(task))}</div>
+            <div className="list">
+              {filteredTreeTasks.map((task) => (
+                <div className="list-task-slot" key={task.id}>
+                  <div
+                    className={`list-booking-drop ${hierarchyChildTargetId === task.id ? "active" : ""}`}
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      if (dragPayload?.kind === "booking") setHierarchyChildTargetId(task.id);
+                    }}
+                    onDragLeave={(event) => {
+                      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                        setHierarchyChildTargetId((current) => (current === task.id ? null : current));
+                      }
+                    }}
+                    onDrop={(event) => {
+                      event.stopPropagation();
+                      if (dragPayload?.kind === "booking") createTaskFromBookingBefore(dragPayload.bookingId, task.id, "list");
+                      setDragPayload(null);
+                      setHierarchyChildTargetId(null);
+                    }}
+                  />
+                  {renderTreeTaskCard(task)}
+                </div>
+              ))}
+            </div>
           ) : settings.taskView === "hierarchy" ? (
             <div className="hierarchy-view">{renderHierarchyTaskNodes()}</div>
           ) : (
@@ -1641,7 +1730,30 @@ function App() {
                         </button>
                       </div>
                       <div className="board-card-list">
-                        {columnTasks.map((task) => renderTreeTaskCard(task, { boardStatus: status }))}
+                        {columnTasks.map((task) => (
+                          <div className="board-task-slot" key={task.id}>
+                            <div
+                              className={`board-booking-drop ${hierarchyChildTargetId === task.id ? "active" : ""}`}
+                              onDragOver={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                if (dragPayload?.kind === "booking") setHierarchyChildTargetId(task.id);
+                              }}
+                              onDragLeave={(event) => {
+                                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                                  setHierarchyChildTargetId((current) => (current === task.id ? null : current));
+                                }
+                              }}
+                              onDrop={(event) => {
+                                event.stopPropagation();
+                                if (dragPayload?.kind === "booking") createTaskFromBookingBefore(dragPayload.bookingId, task.id, "board");
+                                setDragPayload(null);
+                                setHierarchyChildTargetId(null);
+                              }}
+                            />
+                            {renderTreeTaskCard(task, { boardStatus: status })}
+                          </div>
+                        ))}
                       </div>
                     </section>
                   );
@@ -1824,7 +1936,6 @@ function App() {
                   calendarEndMinutes={calendarEndMinutes}
                   timeOptions={timeOptions}
                   taskById={taskById}
-                  tasks={state.tasks}
                   onDrop={handleDrop}
                   onBookingDrag={(bookingId) => setDragPayload({ kind: "booking", bookingId })}
                   onBookingDragEnd={() => setDragPayload(null)}
@@ -2336,7 +2447,6 @@ function DayColumn({
   calendarEndMinutes,
   timeOptions,
   taskById,
-  tasks,
   onDrop,
   onBookingDrag,
   onBookingDragEnd,
@@ -2353,7 +2463,6 @@ function DayColumn({
   calendarEndMinutes: number;
   timeOptions: string[];
   taskById: Map<string, Task>;
-  tasks: Task[];
   onDrop: (date: string, startTime?: string) => void;
   onBookingDrag: (bookingId: string) => void;
   onBookingDragEnd: () => void;
@@ -2515,7 +2624,6 @@ function DayColumn({
               <BookingEditor
                 booking={booking}
                 task={booking.taskId ? taskById.get(booking.taskId) : undefined}
-                tasks={tasks}
                 timeOptions={timeOptions}
                 onChange={onBookingChange}
                 onOpenTask={() => {
@@ -2591,7 +2699,6 @@ function DayColumn({
                   <BookingEditor
                     booking={booking}
                     task={booking.taskId ? taskById.get(booking.taskId) : undefined}
-                    tasks={tasks}
                     timeOptions={timeOptions}
                     onChange={onBookingChange}
                     onOpenTask={() => {
@@ -2668,7 +2775,6 @@ function BookingCard({
 function BookingEditor({
   booking,
   task,
-  tasks,
   timeOptions,
   onChange,
   onOpenTask,
@@ -2677,7 +2783,6 @@ function BookingEditor({
 }: {
   booking: Booking;
   task?: Task;
-  tasks: Task[];
   timeOptions: string[];
   onChange: (bookingId: string, patch: Partial<Booking>) => void;
   onOpenTask: () => void;
@@ -2723,26 +2828,6 @@ function BookingEditor({
             />
           </label>
         )}
-        <label>
-          <span>Aufgabe</span>
-          <select
-            aria-label="Aufgabe verknüpfen"
-            value={booking.taskId ?? ""}
-            onChange={(event) =>
-              onChange(booking.id, {
-                taskId: event.target.value || undefined,
-                label: event.target.value ? "" : (booking.label || task?.title || "")
-              })
-            }
-          >
-            <option value="">Keine</option>
-            {sortedListTasks(tasks.filter((candidate) => !candidate.archived)).map((candidate) => (
-              <option key={candidate.id} value={candidate.id}>
-                {candidate.title}
-              </option>
-            ))}
-          </select>
-        </label>
         <label>
           <span>
             <Clock3 size={13} />

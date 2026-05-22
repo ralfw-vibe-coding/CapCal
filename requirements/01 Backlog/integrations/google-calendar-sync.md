@@ -43,12 +43,18 @@ keine User-Aufgabe — und geschieht in der **Google Cloud Console**.
    - Publishing Status: **Testing** (bis zu 100 explizit eingetragene Testnutzer —
      für persönliche Nutzung dauerhaft ausreichend, kein Google-Review nötig)
 4. **OAuth 2.0 Client ID erstellen** (Typ: "Web application"):
-   - Authorized Redirect URI: `https://deine-domain.netlify.app/api/auth/gcal/callback`
+   - Authorized Redirect URIs:
+     ```
+     https://ralfw-capcal.netlify.app/api/auth/gcal/callback
+     http://localhost:3001/api/auth/gcal/callback
+     ```
    - → liefert `Client ID` und `Client Secret`
-5. Beide Werte als **Netlify Environment Variables** hinterlegen:
+5. Diese Werte als **Netlify Environment Variables** hinterlegen:
    ```
    GOOGLE_CLIENT_ID=...
    GOOGLE_CLIENT_SECRET=...
+   GOOGLE_REDIRECT_URI=https://ralfw-capcal.netlify.app/api/auth/gcal/callback
+   GCAL_TOKEN_ENCRYPTION_KEY=...   # zufälliger 32-Byte-Schlüssel für AES-256
    ```
 
 ### Publishing Status
