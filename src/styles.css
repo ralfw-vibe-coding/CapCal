@@ -782,6 +782,34 @@ button:disabled {
   color: currentColor;
 }
 
+.task-time-chip {
+  align-items: center;
+  display: inline-flex;
+  gap: 3px;
+}
+
+.task-time-chip svg {
+  color: currentColor;
+  flex-shrink: 0;
+}
+
+.task-time-over {
+  background: #fff3b8 !important;
+  color: #8f5f00 !important;
+}
+
+.task-time-done {
+  background: #eef9f3 !important;
+  color: #168456 !important;
+}
+
+.time-chip-separator {
+  background: transparent !important;
+  color: currentColor !important;
+  font-size: inherit !important;
+  padding: 0 !important;
+}
+
 .task-hierarchy-chip {
   align-items: center;
   cursor: pointer;

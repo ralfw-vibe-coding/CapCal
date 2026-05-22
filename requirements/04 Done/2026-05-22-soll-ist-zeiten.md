@@ -88,3 +88,15 @@ Mögliche Situationen, alle valide:
   (Buchungen tun das bereits — die Ist-Zeit ist ja ihre Summe, also ja)
 - Soll es eine Auswertungsansicht geben: Soll vs. Ist über alle Aufgaben?
   (Nützlich zum Kalibrieren der eigenen Schätzfähigkeit — aber eigenes Feature)
+
+## Umsetzung
+
+Umgesetzt am 2026-05-22:
+
+- Ist-Zeit wird aus allen Buchungen pro Aufgabe berechnet und nicht gespeichert.
+- Aufgaben-Karten zeigen kompakt Soll/Ist als `Goal Soll / Hourglass Ist`.
+- Ohne Buchungen wird nur die Soll-Zeit angezeigt.
+- Aufgaben ohne Schätzung zeigen `?`.
+- Prio-Karten zeigen dieselbe kompakte Soll/Ist-Anzeige.
+- Ist >= Soll wird bei offenen Aufgaben gelb hervorgehoben.
+- Erledigte Aufgaben zeigen die Zeitangabe grün.

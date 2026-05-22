@@ -15,6 +15,8 @@ import {
   Download,
   FolderTree,
   GripVertical,
+  Goal,
+  Hourglass,
   ListTree,
   Loader,
   LogOut,
@@ -569,6 +571,11 @@ function App() {
     const counts = new Map<string, number>();
     for (const booking of state?.bookings ?? []) counts.set(booking.taskId, (counts.get(booking.taskId) ?? 0) + 1);
     return counts;
+  }, [state?.bookings]);
+  const bookedMinutesByTaskId = useMemo(() => {
+    const minutes = new Map<string, number>();
+    for (const booking of state?.bookings ?? []) minutes.set(booking.taskId, (minutes.get(booking.taskId) ?? 0) + booking.durationMinutes);
+    return minutes;
   }, [state?.bookings]);
   const childCountByTaskId = useMemo(() => {
     const counts = new Map<string, number>();
@@ -1158,6 +1165,7 @@ function App() {
         task={task}
         allTags={availableTags}
         bookingCount={bookingCountByTaskId.get(task.id) ?? 0}
+        bookedMinutes={bookedMinutesByTaskId.get(task.id) ?? 0}
         childCount={childCountByTaskId.get(task.id) ?? 0}
         parentTitle={parentTitleByTaskId.get(task.id)}
         variant={options?.boardStatus ? "board" : "list"}
@@ -1233,6 +1241,7 @@ function App() {
               task={task}
               allTags={availableTags}
               bookingCount={bookingCountByTaskId.get(task.id) ?? 0}
+              bookedMinutes={bookedMinutesByTaskId.get(task.id) ?? 0}
               childCount={childCountByTaskId.get(task.id) ?? 0}
               parentTitle={parentTitleByTaskId.get(task.id)}
               variant="hierarchy"
@@ -1621,6 +1630,7 @@ function App() {
                   </div>
                   <div className="prio-card-side">
                     {task.dueDate && <span className={`task-deadline-pill ${deadlineTone(task.dueDate)}`}>{formatOptionalDate(task.dueDate)}</span>}
+                    <TaskTimeChip task={task} bookedMinutes={bookedMinutesByTaskId.get(task.id) ?? 0} />
                     <select
                       className="prio-duration"
                       aria-label="Dauer in Priorisierung"
@@ -1947,6 +1957,7 @@ function TaskCard({
   task,
   allTags,
   bookingCount,
+  bookedMinutes,
   childCount,
   parentTitle,
   variant = "list",
@@ -1976,6 +1987,7 @@ function TaskCard({
   task: Task;
   allTags: string[];
   bookingCount: number;
+  bookedMinutes: number;
   childCount: number;
   parentTitle?: string;
   variant?: "list" | "board" | "hierarchy";
@@ -2043,7 +2055,7 @@ function TaskCard({
         <div className="task-compact-meta">
           <span className={`task-status-pill ${statusMeta[task.status].className}`}>{task.status}</span>
           {task.dueDate && <span className={`task-deadline-pill ${deadlineTone(task.dueDate)}`}>{formatOptionalDate(task.dueDate)}</span>}
-          <span>{estimateToLabel(task.estimateMinutes)}</span>
+          <TaskTimeChip task={task} bookedMinutes={bookedMinutes} />
           {parentTitle && (
             <button className="task-hierarchy-chip" title={`Parent: ${parentTitle}`} onClick={onGoToHierarchy}>
               <ArrowUpNarrowWide size={11} />
@@ -2130,6 +2142,26 @@ function TaskCard({
         </div>
       )}
     </article>
+  );
+}
+
+function TaskTimeChip({ task, bookedMinutes }: { task: Task; bookedMinutes: number }) {
+  const hasBookings = bookedMinutes > 0;
+  const hasEstimate = task.estimateMinutes !== undefined;
+  const overEstimate = hasBookings && hasEstimate && bookedMinutes >= task.estimateMinutes!;
+  const tone = task.done ? "done" : overEstimate ? "over" : "neutral";
+  return (
+    <span className={`task-time-chip task-time-${tone}`} title={hasBookings ? "Soll / Ist" : "Soll"}>
+      <Goal size={11} />
+      {estimateToLabel(task.estimateMinutes)}
+      {hasBookings && (
+        <>
+          <span className="time-chip-separator">/</span>
+          <Hourglass size={11} />
+          {minutesToTimeLabel(bookedMinutes)}
+        </>
+      )}
+    </span>
   );
 }
 
