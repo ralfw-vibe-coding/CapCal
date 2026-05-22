@@ -1987,6 +1987,7 @@ function DayColumn({
             {editingBookingId === booking.id && (
               <BookingEditor
                 booking={booking}
+                task={taskById.get(booking.taskId)}
                 timeOptions={timeOptions}
                 onChange={onBookingChange}
                 onDelete={(bookingId) => {
@@ -2058,6 +2059,7 @@ function DayColumn({
                 {editingBookingId === booking.id && (
                   <BookingEditor
                     booking={booking}
+                    task={taskById.get(booking.taskId)}
                     timeOptions={timeOptions}
                     onChange={onBookingChange}
                     onDelete={(bookingId) => {
@@ -2122,16 +2124,6 @@ function BookingCard({
         <StatusIcon status={task.status} />
         <strong>{task.title}</strong>
       </div>
-      <div className="booking-read-meta">
-        <span>
-          {booking.startTime ? <Clock3 size={12} /> : <CalendarDays size={12} />}
-          {booking.startTime ?? "Allokation"}
-        </span>
-        <span>
-          <Timer size={12} />
-          {minutesToTimeLabel(booking.durationMinutes)}
-        </span>
-      </div>
       {onResizeStart && <div className="booking-resize-handle" title="Dauer ändern" onPointerDown={onResizeStart} />}
     </article>
   );
@@ -2139,12 +2131,14 @@ function BookingCard({
 
 function BookingEditor({
   booking,
+  task,
   timeOptions,
   onChange,
   onDelete,
   onClose
 }: {
   booking: Booking;
+  task?: Task;
   timeOptions: string[];
   onChange: (bookingId: string, patch: Partial<Booking>) => void;
   onDelete: (bookingId: string) => void;
@@ -2155,30 +2149,58 @@ function BookingEditor({
       <button className="icon-button ghost editor-close" title="Editor schließen" onClick={onClose}>
         <X size={14} />
       </button>
+      {task && (
+        <div className="booking-editor-summary">
+          <div className="booking-editor-title">
+            <StatusIcon status={task.status} />
+            <strong>{task.title}</strong>
+          </div>
+          <div className="booking-editor-meta">
+            {task.dueDate && <span className={`task-deadline-pill ${deadlineTone(task.dueDate)}`}>{formatOptionalDate(task.dueDate)}</span>}
+            {(task.tags ?? []).map((tag) => (
+              <span className="task-tag-chip" key={tag}>
+                {tag}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="booking-controls">
-        <select
-          aria-label="Terminzeit"
-          value={booking.startTime ?? "allocation"}
-          onChange={(event) => onChange(booking.id, { startTime: event.target.value === "allocation" ? undefined : event.target.value })}
-        >
-          <option value="allocation">Allokation</option>
-          {timeOptions.map((time) => (
-            <option key={time} value={time}>
-              {time}
-            </option>
-          ))}
-        </select>
-        <select
-          aria-label="Dauer"
-          value={booking.durationMinutes}
-          onChange={(event) => onChange(booking.id, { durationMinutes: Number(event.target.value) })}
-        >
-          {durationOptions.map((minutes) => (
-            <option key={minutes} value={minutes}>
-              {minutesToTimeLabel(minutes)}
-            </option>
-          ))}
-        </select>
+        <label>
+          <span>
+            <Clock3 size={13} />
+            Zeit
+          </span>
+          <select
+            aria-label="Terminzeit"
+            value={booking.startTime ?? "allocation"}
+            onChange={(event) => onChange(booking.id, { startTime: event.target.value === "allocation" ? undefined : event.target.value })}
+          >
+            <option value="allocation">Allokation</option>
+            {timeOptions.map((time) => (
+              <option key={time} value={time}>
+                {time}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>
+            <Timer size={13} />
+            Dauer
+          </span>
+          <select
+            aria-label="Dauer"
+            value={booking.durationMinutes}
+            onChange={(event) => onChange(booking.id, { durationMinutes: Number(event.target.value) })}
+          >
+            {durationOptions.map((minutes) => (
+              <option key={minutes} value={minutes}>
+                {minutesToTimeLabel(minutes)}
+              </option>
+            ))}
+          </select>
+        </label>
         <button className="icon-button ghost" title="Buchung löschen" onClick={() => onDelete(booking.id)}>
           <Trash2 size={14} />
         </button>

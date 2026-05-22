@@ -1272,7 +1272,7 @@ button:disabled {
 .booking-card {
   border-color: rgba(25, 110, 98, 0.32);
   cursor: pointer;
-  padding: 7px;
+  padding: 6px 7px;
   position: relative;
 }
 
@@ -1282,36 +1282,18 @@ button:disabled {
 }
 
 .booking-head {
-  align-items: flex-start;
+  align-items: center;
   display: flex;
   gap: 6px;
-  margin-bottom: 6px;
+  min-width: 0;
 }
 
 .booking-head strong {
   font-size: 13px;
   line-height: 1.2;
-}
-
-.booking-read-meta {
-  color: var(--muted);
-  display: flex;
-  font-size: 12px;
-  gap: 8px;
-  padding-left: 21px;
-}
-
-.booking-read-meta span {
-  align-items: center;
-  background: var(--surface-2);
-  border-radius: 6px;
-  display: inline-flex;
-  gap: 4px;
-  padding: 2px 6px;
-}
-
-.booking-read-meta svg {
-  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .booking-resize-handle {
@@ -1340,8 +1322,8 @@ button:disabled {
   border-radius: 8px;
   box-shadow: 0 12px 28px rgba(34, 44, 37, 0.18);
   left: calc(100% + 8px);
-  min-width: 156px;
-  padding: 32px 8px 8px;
+  min-width: 210px;
+  padding: 34px 10px 10px;
   position: absolute;
   top: 0;
   z-index: 30;
@@ -1356,13 +1338,72 @@ button:disabled {
 }
 
 .booking-controls {
-  align-items: center;
   display: grid;
-  gap: 5px;
+  gap: 8px;
+}
+
+.booking-controls label {
+  color: var(--muted);
+  display: grid;
+  font-size: 11px;
+  gap: 3px;
+}
+
+.booking-controls label span {
+  align-items: center;
+  display: inline-flex;
+  gap: 4px;
 }
 
 .booking-controls select {
-  min-width: 104px;
+  min-width: 132px;
+}
+
+.booking-controls > .icon-button {
+  justify-self: start;
+}
+
+.booking-editor-summary {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 10px;
+}
+
+.booking-editor-title {
+  align-items: flex-start;
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.booking-editor-title strong {
+  font-size: 14px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.booking-editor-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.booking-editor-meta .task-tag-chip {
+  background: #eef1ea;
+  border-radius: 999px;
+  color: #4f5a50;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 7px;
+}
+
+.booking-editor-meta > span:not(.task-status-pill):not(.task-deadline-pill):not(.task-tag-chip) {
+  background: var(--surface-2);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 7px;
 }
 
 .status-icon {
