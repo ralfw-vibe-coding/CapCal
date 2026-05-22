@@ -1,5 +1,5 @@
 import type { Config } from "@netlify/functions";
-import { getSessionUser, isAuthRequired } from "../../src/server/auth";
+import { getApiKeyUser, getSessionUser, isAuthRequired } from "../../src/server/auth";
 import { createStateProvider } from "../../src/server/storage";
 import type { AppState } from "../../src/server/storage/types";
 
@@ -16,7 +16,7 @@ function jsonResponse(payload: unknown, init?: ResponseInit) {
 export default async (request: Request) => {
   try {
     const provider = createStateProvider();
-    const user = getSessionUser(request.headers.get("cookie") ?? "");
+    const user = getSessionUser(request.headers.get("cookie") ?? "") ?? (await getApiKeyUser(request.headers.get("authorization")));
     if (isAuthRequired() && !user) return jsonResponse({ error: "Unauthorized" }, { status: 401 });
 
     if (request.method === "GET") {

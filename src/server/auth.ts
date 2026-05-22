@@ -33,6 +33,11 @@ export function isAuthRequired() {
   return getEnv("AUTH_REQUIRED") === "true" || getEnv("STATE_PROVIDER") === "postgres";
 }
 
+function bearerToken(authorizationHeader?: string | null) {
+  const [scheme, token] = (authorizationHeader ?? "").split(" ");
+  return scheme?.toLowerCase() === "bearer" && token ? token : null;
+}
+
 export async function ensureAuthSchema() {
   const db = sql();
   await db`
@@ -100,6 +105,21 @@ export async function getUserSettings(user: AuthUser): Promise<UserSettings> {
     apiKeyMasked: maskApiKey(row.api_key_hash, row.api_key_suffix),
     apiKeyLastUsedAt: row.api_key_last_used_at ? new Date(row.api_key_last_used_at).toISOString() : undefined
   };
+}
+
+export async function getApiKeyUser(authorizationHeader?: string | null): Promise<AuthUser | null> {
+  const apiKey = bearerToken(authorizationHeader);
+  if (!apiKey) return null;
+
+  await ensureAuthSchema();
+  const db = sql();
+  const rows = (await db`
+    UPDATE users
+    SET api_key_last_used_at = NOW()
+    WHERE api_key_hash = ${hashApiKey(apiKey)}
+    RETURNING id, email
+  `) as AuthUser[];
+  return rows[0] ?? null;
 }
 
 export async function updateUserProfile(user: AuthUser, profileInput: UserProfile): Promise<UserSettings> {

@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import type { ServerResponse } from "node:http";
 import {
   clearSessionCookie,
+  getApiKeyUser,
   getUserSettings,
   getSessionUser,
   isAuthRequired,
@@ -24,7 +25,7 @@ function send(response: ServerResponse, status: number, payload: unknown, header
     "content-type": "application/json; charset=utf-8",
     "access-control-allow-origin": "*",
     "access-control-allow-methods": "GET,PUT,OPTIONS",
-    "access-control-allow-headers": "content-type",
+    "access-control-allow-headers": "authorization, content-type",
     ...headers
   });
   response.end(JSON.stringify(payload));
@@ -69,7 +70,7 @@ const server = createServer(async (request, response) => {
       return;
     }
 
-    const user = getSessionUser(request.headers.cookie);
+    const user = getSessionUser(request.headers.cookie) ?? (await getApiKeyUser(request.headers.authorization));
     if (isAuthRequired() && !user) {
       send(response, 401, { error: "Unauthorized" });
       return;
