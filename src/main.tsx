@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import {
   AlertOctagon,
+  Archive,
   ArchiveX,
   ArrowUpNarrowWide,
   CalendarDays,
@@ -45,6 +46,8 @@ type Task = {
   dueDate?: string;
   estimateMinutes?: number;
   parentId?: string;
+  archived?: boolean;
+  archivedAt?: string;
   status: TaskStatus;
   done: boolean;
   treeOrder: number;
@@ -69,6 +72,7 @@ type TreeFilterSettings = {
   query: string;
   statuses: TaskStatus[];
   tags: string[];
+  showArchived: boolean;
 };
 
 type AppSettings = {
@@ -137,7 +141,8 @@ const defaultSettings: AppSettings = {
   treeFilters: {
     query: "",
     statuses: [],
-    tags: []
+    tags: [],
+    showArchived: false
   },
   boardHiddenStatuses: [],
   panelsCollapsed: {
@@ -254,7 +259,8 @@ function normalizeTreeFilters(filters?: Partial<TreeFilterSettings> | null): Tre
   return {
     query: filters?.query ?? "",
     statuses: (filters?.statuses ?? []).filter((status): status is TaskStatus => statuses.includes(status as TaskStatus)),
-    tags: normalizeTags(filters?.tags)
+    tags: normalizeTags(filters?.tags),
+    showArchived: filters?.showArchived ?? false
   };
 }
 
@@ -281,6 +287,7 @@ function normalizeTasks(tasks: Task[]): Task[] {
     ...task,
     parentId: task.parentId && task.parentId !== task.id && taskIds.has(task.parentId) ? task.parentId : undefined,
     tags: normalizeTags(task.tags),
+    archived: task.archived ?? false,
     treeOrder: task.treeOrder ?? legacyOrder,
     listOrder: task.listOrder ?? legacyOrder,
     boardOrder: task.boardOrder ?? legacyOrder
@@ -584,6 +591,13 @@ function App() {
     }
     return counts;
   }, [state?.tasks]);
+  const activeChildCountByTaskId = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const task of state?.tasks ?? []) {
+      if (task.parentId && !task.archived) counts.set(task.parentId, (counts.get(task.parentId) ?? 0) + 1);
+    }
+    return counts;
+  }, [state?.tasks]);
   const parentTitleByTaskId = useMemo(() => {
     const parentTitles = new Map<string, string>();
     for (const task of state?.tasks ?? []) {
@@ -612,13 +626,14 @@ function App() {
   const filteredTreeTasks = useMemo(() => {
     const query = treeFilters.query.trim().toLowerCase();
     return sortedListTasks(state?.tasks ?? []).filter((task) => {
+      const matchesArchive = treeFilters.showArchived ? task.archived : !task.archived;
       const matchesQuery = !query || task.title.toLowerCase().includes(query);
       const matchesStatus = treeFilters.statuses.length === 0 || treeFilters.statuses.includes(task.status);
       const taskTags = task.tags ?? [];
       const matchesTags = treeFilters.tags.length === 0 || treeFilters.tags.every((tag) => taskTags.includes(tag));
-      return matchesQuery && matchesStatus && matchesTags;
+      return matchesArchive && matchesQuery && matchesStatus && matchesTags;
     });
-  }, [state?.tasks, treeFilters.query, treeFilters.statuses, treeFilters.tags]);
+  }, [state?.tasks, treeFilters.query, treeFilters.showArchived, treeFilters.statuses, treeFilters.tags]);
   const filteredTaskIds = useMemo(() => new Set(filteredTreeTasks.map((task) => task.id)), [filteredTreeTasks]);
   const days = useMemo(
     () => {
@@ -799,6 +814,7 @@ function App() {
       dueDate: target === "cal" ? date : undefined,
       estimateMinutes,
       parentId,
+      archived: false,
       status,
       done: status === "Done" || status === "Aborted",
       treeOrder: 0,
@@ -885,6 +901,7 @@ function App() {
 
   function moveTaskBeforeInList(sourceTaskId: string, targetTaskId: string) {
     updateState((draft) => {
+      if (draft.tasks.find((task) => task.id === sourceTaskId)?.archived) return draft;
       const tasks = sortedListTasks(draft.tasks);
       const sourceIndex = tasks.findIndex((task) => task.id === sourceTaskId);
       const targetIndex = tasks.findIndex((task) => task.id === targetTaskId);
@@ -899,6 +916,7 @@ function App() {
     updateState((draft) => {
       const sourceTask = draft.tasks.find((task) => task.id === sourceTaskId);
       const targetTask = draft.tasks.find((task) => task.id === targetTaskId);
+      if (sourceTask?.archived) return draft;
       if (!sourceTask || !targetTask || sourceTask.id === targetTask.id) return draft;
       const parentId = targetTask.parentId;
       const movedTasks = draft.tasks.map((task) => (task.id === sourceTaskId ? { ...task, parentId } : task));
@@ -931,6 +949,7 @@ function App() {
 
   function moveTaskAsChild(sourceTaskId: string, parentId: string) {
     updateState((draft) => {
+      if (draft.tasks.find((task) => task.id === sourceTaskId)?.archived) return draft;
       if (sourceTaskId === parentId || isDescendant(draft.tasks, parentId, sourceTaskId)) return draft;
       const nextTasks = normalizeTasks(
         draft.tasks.map((task) => (task.id === sourceTaskId ? { ...task, parentId, treeOrder: Number.MAX_SAFE_INTEGER } : task))
@@ -948,6 +967,7 @@ function App() {
     updateState((draft) => {
       if (draft.prioTaskIds.includes(taskId)) return draft;
       const task = draft.tasks.find((candidate) => candidate.id === taskId);
+      if (!task || task.archived) return draft;
       return {
         ...draft,
         prioTaskIds: [...draft.prioTaskIds, taskId],
@@ -970,6 +990,7 @@ function App() {
     updateState((draft) => {
       const sourceWasNew = !draft.prioTaskIds.includes(sourceTaskId);
       const sourceTask = draft.tasks.find((task) => task.id === sourceTaskId);
+      if (!sourceTask || sourceTask.archived) return draft;
       const prioTaskIds = draft.prioTaskIds.includes(sourceTaskId) ? [...draft.prioTaskIds] : [...draft.prioTaskIds, sourceTaskId];
       const sourceIndex = prioTaskIds.indexOf(sourceTaskId);
       const targetIndex = prioTaskIds.indexOf(targetTaskId);
@@ -999,9 +1020,36 @@ function App() {
     });
   }
 
+  function toggleTaskArchived(taskId: string) {
+    updateState((draft) => {
+      const task = draft.tasks.find((candidate) => candidate.id === taskId);
+      if (!task) return draft;
+      const hasActiveChildren = draft.tasks.some((candidate) => candidate.parentId === taskId && !candidate.archived);
+      if (!task.archived && hasActiveChildren) return draft;
+      const { [taskId]: _removed, ...prioDurations } = draft.prioDurations ?? {};
+      return {
+        ...draft,
+        tasks: normalizeTasks(
+          draft.tasks.map((candidate) =>
+            candidate.id === taskId
+              ? {
+                  ...candidate,
+                  archived: !candidate.archived,
+                  archivedAt: candidate.archived ? undefined : new Date().toISOString()
+                }
+              : candidate
+          )
+        ),
+        prioTaskIds: draft.prioTaskIds.filter((id) => id !== taskId),
+        prioDurations
+      };
+    });
+  }
+
   function bookTask(taskId: string, date: string, startTime?: string, source: "tree" | "prio" = "tree") {
     updateState((draft) => {
       const task = draft.tasks.find((candidate) => candidate.id === taskId);
+      if (!task || task.archived) return draft;
       const durationMinutes =
         source === "prio"
           ? (draft.prioDurations?.[taskId] ?? durationForPlanning(task?.estimateMinutes, settings.defaultPrioDurationMinutes))
@@ -1123,6 +1171,7 @@ function App() {
 
   function moveTaskToBoardStatus(taskId: string, status: TaskStatus, targetTaskId?: string) {
     updateState((draft) => {
+      if (draft.tasks.find((task) => task.id === taskId)?.archived) return draft;
       const statusTasks = sortedBoardTasks(
         draft.tasks
           .map((task) => (task.id === taskId ? { ...task, status, done: status === "Done" || status === "Aborted" } : task))
@@ -1167,6 +1216,7 @@ function App() {
         bookingCount={bookingCountByTaskId.get(task.id) ?? 0}
         bookedMinutes={bookedMinutesByTaskId.get(task.id) ?? 0}
         childCount={childCountByTaskId.get(task.id) ?? 0}
+        activeChildCount={activeChildCountByTaskId.get(task.id) ?? 0}
         parentTitle={parentTitleByTaskId.get(task.id)}
         variant={options?.boardStatus ? "board" : "list"}
         expanded={expandedTaskIds.has(task.id)}
@@ -1201,6 +1251,7 @@ function App() {
         childTaskTitle={childTaskTitles[task.id] ?? ""}
         onChildTaskTitleChange={(title) => setChildTaskTitles((current) => ({ ...current, [task.id]: title }))}
         onAddChildTask={() => addChildTask(task.id)}
+        onArchive={() => toggleTaskArchived(task.id)}
         onDelete={() => deleteTask(task.id)}
       />
     );
@@ -1243,6 +1294,7 @@ function App() {
               bookingCount={bookingCountByTaskId.get(task.id) ?? 0}
               bookedMinutes={bookedMinutesByTaskId.get(task.id) ?? 0}
               childCount={childCountByTaskId.get(task.id) ?? 0}
+              activeChildCount={activeChildCountByTaskId.get(task.id) ?? 0}
               parentTitle={parentTitleByTaskId.get(task.id)}
               variant="hierarchy"
               expanded={expandedTaskIds.has(task.id)}
@@ -1279,6 +1331,7 @@ function App() {
               childTaskTitle={childTaskTitles[task.id] ?? ""}
               onChildTaskTitleChange={(title) => setChildTaskTitles((current) => ({ ...current, [task.id]: title }))}
               onAddChildTask={() => addChildTask(task.id)}
+              onArchive={() => toggleTaskArchived(task.id)}
               onDelete={() => deleteTask(task.id)}
             />
           </div>
@@ -1434,6 +1487,13 @@ function App() {
             </div>
             <div className="status-filter-chips" aria-label="Status filtern">
               <button
+                className={`filter-chip archive-filter-chip ${treeFilters.showArchived ? "active" : ""}`}
+                onClick={() => updateSettings({ treeFilters: { ...treeFilters, showArchived: !treeFilters.showArchived } })}
+              >
+                <Archive size={13} />
+                Archiv
+              </button>
+              <button
                 className={`filter-chip ${treeFilters.statuses.length === 0 ? "active" : ""}`}
                 onClick={() => updateSettings({ treeFilters: { ...treeFilters, statuses: [] } })}
               >
@@ -1460,11 +1520,11 @@ function App() {
                   </button>
                 );
               })}
-              {(treeFilters.query || treeFilters.statuses.length > 0 || treeFilters.tags.length > 0) && (
+              {(treeFilters.query || treeFilters.statuses.length > 0 || treeFilters.tags.length > 0 || treeFilters.showArchived) && (
                 <button
                   className="filter-reset-chip"
                   title="Filter zurücksetzen"
-                  onClick={() => updateSettings({ treeFilters: { query: "", statuses: [], tags: [] } })}
+                  onClick={() => updateSettings({ treeFilters: { query: "", statuses: [], tags: [], showArchived: false } })}
                 >
                   <X size={13} />
                 </button>
@@ -1600,7 +1660,7 @@ function App() {
           <div className="list prio-list">
             {state.prioTaskIds.map((taskId) => {
               const task = taskById.get(taskId);
-              if (!task) return null;
+              if (!task || task.archived) return null;
               const prioDuration =
                 state.prioDurations?.[task.id] ?? durationForPlanning(task.estimateMinutes, settings.defaultPrioDurationMinutes);
               return (
@@ -1959,6 +2019,7 @@ function TaskCard({
   bookingCount,
   bookedMinutes,
   childCount,
+  activeChildCount,
   parentTitle,
   variant = "list",
   expanded,
@@ -1982,6 +2043,7 @@ function TaskCard({
   childTaskTitle,
   onChildTaskTitleChange,
   onAddChildTask,
+  onArchive,
   onDelete
 }: {
   task: Task;
@@ -1989,6 +2051,7 @@ function TaskCard({
   bookingCount: number;
   bookedMinutes: number;
   childCount: number;
+  activeChildCount: number;
   parentTitle?: string;
   variant?: "list" | "board" | "hierarchy";
   expanded: boolean;
@@ -2012,13 +2075,14 @@ function TaskCard({
   childTaskTitle: string;
   onChildTaskTitleChange: (title: string) => void;
   onAddChildTask: () => void;
+  onArchive: () => void;
   onDelete: () => void;
 }) {
   return (
     <article
-      className={`task-card task-card-${variant} status-card ${statusMeta[task.status].className} ${isDropTarget ? "task-drop-target" : ""} ${isHierarchySortTarget ? "hierarchy-sort-target" : ""}`}
+      className={`task-card task-card-${variant} status-card ${statusMeta[task.status].className} ${task.archived ? "archived" : ""} ${isDropTarget ? "task-drop-target" : ""} ${isHierarchySortTarget ? "hierarchy-sort-target" : ""}`}
       data-task-id={task.id}
-      draggable
+      draggable={!task.archived}
       onDragStart={(event) => {
         event.currentTarget.classList.add("dragging-source");
         onDragStart();
@@ -2080,6 +2144,20 @@ function TaskCard({
             </span>
           ))}
         </div>
+        <button
+          className="icon-button ghost"
+          title={
+            !task.archived && activeChildCount > 0
+              ? "Aufgaben mit aktiven Unteraufgaben können nicht archiviert werden"
+              : task.archived
+                ? "Aufgabe aus Archiv holen"
+                : "Aufgabe archivieren"
+          }
+          disabled={!task.archived && activeChildCount > 0}
+          onClick={onArchive}
+        >
+          <Archive size={15} />
+        </button>
         <button
           className="icon-button ghost danger"
           title={childCount > 0 ? "Aufgaben mit Unteraufgaben können noch nicht gelöscht werden" : "Aufgabe löschen"}
@@ -2525,7 +2603,7 @@ function BookingCard({
   if (!task) return null;
   return (
     <article
-      className={`booking-card status-card ${statusMeta[task.status].className} ${isEditing ? "editing" : ""}`}
+      className={`booking-card status-card ${statusMeta[task.status].className} ${task.archived ? "archived-booking" : ""} ${isEditing ? "editing" : ""}`}
       data-booking-id={booking.id}
       draggable
       onDragStart={(event) => {
@@ -2542,6 +2620,7 @@ function BookingCard({
       <div className="booking-head">
         <StatusIcon status={task.status} />
         <strong>{task.title}</strong>
+        {task.archived && <Archive size={13} />}
       </div>
       {onResizeStart && <div className="booking-resize-handle" title="Dauer ändern" onPointerDown={onResizeStart} />}
     </article>
@@ -2580,6 +2659,12 @@ function BookingEditor({
             <strong>{task.title}</strong>
           </div>
           <div className="booking-editor-meta">
+            {task.archived && (
+              <span className="task-archive-pill">
+                <Archive size={11} />
+                Archiv
+              </span>
+            )}
             {task.dueDate && <span className={`task-deadline-pill ${deadlineTone(task.dueDate)}`}>{formatOptionalDate(task.dueDate)}</span>}
             {(task.tags ?? []).map((tag) => (
               <span className="task-tag-chip" key={tag}>

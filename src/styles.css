@@ -506,6 +506,12 @@ button:disabled {
   color: white;
 }
 
+.archive-filter-chip.active {
+  background: #eef1ea;
+  border-color: #9aa49b;
+  color: #4f5a50;
+}
+
 .status-filter-chip .status-icon svg {
   height: 12px;
   width: 12px;
@@ -698,6 +704,16 @@ button:disabled {
   box-shadow: inset 4px 0 0 var(--status-color);
 }
 
+.status-card.archived,
+.booking-card.archived-booking {
+  filter: saturate(0.45);
+  opacity: 0.72;
+}
+
+.booking-card.archived-booking {
+  border-style: dashed;
+}
+
 .task-card {
   display: block;
   padding: 6px 7px;
@@ -816,6 +832,22 @@ button:disabled {
   display: inline-flex;
   gap: 3px;
   max-width: 110px;
+}
+
+.task-archive-pill {
+  align-items: center;
+  background: #eef1ea;
+  border-radius: 999px;
+  color: #4f5a50;
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 700;
+  gap: 3px;
+  padding: 3px 7px;
+}
+
+.task-archive-pill svg {
+  color: currentColor;
 }
 
 .task-hierarchy-chip svg {
@@ -1557,7 +1589,7 @@ button:disabled {
   padding: 3px 7px;
 }
 
-.booking-editor-meta > span:not(.task-status-pill):not(.task-deadline-pill):not(.task-tag-chip) {
+.booking-editor-meta > span:not(.task-status-pill):not(.task-deadline-pill):not(.task-tag-chip):not(.task-archive-pill) {
   background: var(--surface-2);
   border-radius: 999px;
   color: var(--muted);
