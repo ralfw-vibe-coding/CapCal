@@ -1043,11 +1043,6 @@ function App() {
             <button className="icon-button ghost" title="Taskspace importieren" onClick={() => importInputRef.current?.click()}>
               <Upload size={16} />
             </button>
-            {authUser && (
-              <button className="icon-button ghost" title={`Logout ${authUser.email}`} onClick={() => void logout()}>
-                <LogOut size={16} />
-              </button>
-            )}
             <input
               ref={importInputRef}
               className="file-input"
@@ -1078,6 +1073,11 @@ function App() {
               />
             )}
           </div>
+          {authUser && (
+            <button className="icon-button ghost" title={`Logout ${authUser.email}`} onClick={() => void logout()}>
+              <LogOut size={16} />
+            </button>
+          )}
         </div>
       </header>
 
@@ -2199,7 +2199,7 @@ function StatusIcon({ status }: { status: TaskStatus }) {
 
 function Metric({ icon: Icon, label, value, className }: { icon: typeof Circle; label: string; value: number; className: string }) {
   return (
-    <div className="metric">
+    <div className={`metric ${className}`}>
       <span className={`status-icon ${className}`}>
         <Icon size={16} />
       </span>

@@ -224,9 +224,10 @@ button:disabled {
 
 .metric {
   align-items: center;
-  background: rgba(255, 255, 255, 0.8);
-  border: 1px solid var(--line);
+  background: var(--status-bg, rgba(255, 255, 255, 0.8));
+  border: 1px solid var(--status-color, var(--line));
   border-radius: 8px;
+  color: var(--status-color, var(--text));
   display: flex;
   gap: 8px;
   min-height: 38px;
@@ -234,7 +235,7 @@ button:disabled {
 }
 
 .metric span {
-  color: var(--muted);
+  color: inherit;
   font-size: 13px;
 }
 
