@@ -30,6 +30,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 type TaskStatus = "Backlog" | "Ready" | "Started" | "Blocked" | "Done" | "Aborted";
 type TreeViewMode = "list" | "board";
+type AuthUser = { id: number; email: string };
 
 type Task = {
   id: string;
@@ -268,6 +269,12 @@ function createTimeOptions(startTime: string, endTime: string) {
 
 function App() {
   const [state, setState] = useState<AppState | null>(null);
+  const [authRequired, setAuthRequired] = useState(false);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [authEmail, setAuthEmail] = useState("");
+  const [authOtp, setAuthOtp] = useState("");
+  const [authStep, setAuthStep] = useState<"email" | "otp">("email");
+  const [authError, setAuthError] = useState("");
   const [saveState, setSaveState] = useState<"idle" | "dirty" | "saving" | "saved" | "error">("idle");
   const [loadError, setLoadError] = useState("");
   const [saveError, setSaveError] = useState("");
@@ -295,21 +302,27 @@ function App() {
   const stateVersionRef = useRef(0);
   const saveCurrentStateRef = useRef<(options?: { keepalive?: boolean }) => Promise<void>>(async () => undefined);
 
+  async function loadState() {
+    try {
+      const response = await fetch("/api/state", { credentials: "same-origin" });
+      if (response.status === 401) {
+        setAuthRequired(true);
+        return;
+      }
+      if (!response.ok) throw new Error(await response.text());
+      const normalizedState = normalizeState(await response.json());
+      stateRef.current = normalizedState;
+      setState(normalizedState);
+      setLoadError("");
+      setAuthRequired(false);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "State konnte nicht geladen werden.");
+      setSaveState("error");
+    }
+  }
+
   useEffect(() => {
-    fetch("/api/state")
-      .then(async (response) => {
-        if (!response.ok) throw new Error(await response.text());
-        return response.json();
-      })
-      .then((loadedState) => {
-        const normalizedState = normalizeState(loadedState);
-        stateRef.current = normalizedState;
-        setState(normalizedState);
-      })
-      .catch((error) => {
-        setLoadError(error instanceof Error ? error.message : "State konnte nicht geladen werden.");
-        setSaveState("error");
-      });
+    void loadState();
   }, []);
 
   useEffect(() => {
@@ -351,6 +364,7 @@ function App() {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(currentState),
+        credentials: "same-origin",
         keepalive: options.keepalive
       });
       if (!response.ok) throw new Error(await response.text());
@@ -368,6 +382,39 @@ function App() {
   }
 
   saveCurrentStateRef.current = saveCurrentState;
+
+  async function requestLoginOtp() {
+    setAuthError("");
+    const response = await fetch("/api/auth/request-otp", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: authEmail })
+    });
+    if (!response.ok) {
+      setAuthError(await response.text());
+      return;
+    }
+    setAuthStep("otp");
+  }
+
+  async function verifyLoginOtp() {
+    setAuthError("");
+    const response = await fetch("/api/auth/verify", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ email: authEmail, otp: authOtp })
+    });
+    if (!response.ok) {
+      setAuthError(await response.text());
+      return;
+    }
+    const payload = (await response.json()) as { user: AuthUser };
+    setAuthUser(payload.user);
+    setAuthRequired(false);
+    setAuthOtp("");
+    await loadState();
+  }
 
   useEffect(() => {
     const flush = () => {
@@ -466,6 +513,56 @@ function App() {
     window.addEventListener("pointerdown", handlePointerDown);
     return () => window.removeEventListener("pointerdown", handlePointerDown);
   }, [settingsOpen]);
+
+  if (authRequired) {
+    return (
+      <main className="login-screen">
+        <section className="login-panel">
+          <div className="brand">
+            <CalendarDays size={19} />
+            <span>CapCal</span>
+          </div>
+          <p>Plane deine Kapazität wie ein Profi</p>
+          {authStep === "email" ? (
+            <>
+              <input
+                autoFocus
+                placeholder="E-Mail-Adresse"
+                value={authEmail}
+                onChange={(event) => setAuthEmail(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") void requestLoginOtp();
+                }}
+              />
+              <button className="primary" onClick={() => void requestLoginOtp()}>
+                Code senden
+              </button>
+            </>
+          ) : (
+            <>
+              <input
+                autoFocus
+                inputMode="numeric"
+                placeholder="6-stelliger Code"
+                value={authOtp}
+                onChange={(event) => setAuthOtp(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") void verifyLoginOtp();
+                }}
+              />
+              <button className="primary" onClick={() => void verifyLoginOtp()}>
+                Einloggen
+              </button>
+              <button className="soft-button" onClick={() => setAuthStep("email")}>
+                E-Mail ändern
+              </button>
+            </>
+          )}
+          {authError && <div className="login-error">{authError}</div>}
+        </section>
+      </main>
+    );
+  }
 
   if (!state) {
     return (

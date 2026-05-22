@@ -192,7 +192,7 @@
     ],
     "panelsCollapsed": {
       "tree": false,
-      "prio": true,
+      "prio": false,
       "cal": false
     }
   },

@@ -8,8 +8,8 @@ export type AppState = {
 };
 
 export type StateProvider = {
-  load(): Promise<AppState>;
-  save(state: AppState): Promise<void>;
+  load(userId?: number): Promise<AppState>;
+  save(state: AppState, userId?: number): Promise<void>;
 };
 
 export const emptyState: AppState = {
