@@ -25,7 +25,8 @@ export const emptyState: AppState = {
     taskView: "list",
     treeFilters: {
       query: "",
-      statuses: []
+      statuses: [],
+      tags: []
     },
     boardHiddenStatuses: [],
     panelsCollapsed: {

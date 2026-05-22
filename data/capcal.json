@@ -21,7 +21,11 @@
       "estimateMinutes": 30,
       "status": "Backlog",
       "done": false,
-      "treeOrder": 0
+      "treeOrder": 0,
+      "tags": [
+        "privat",
+        "krimi"
+      ]
     },
     {
       "id": "task-gg3rdqbcl8t-mpgjstjx",
@@ -30,7 +34,10 @@
       "estimateMinutes": 30,
       "status": "Backlog",
       "done": false,
-      "treeOrder": 1
+      "treeOrder": 1,
+      "tags": [
+        "privat"
+      ]
     },
     {
       "id": "task-0qpacqjje3sk-mpgjr5po",
@@ -40,17 +47,24 @@
       "estimateMinutes": 30,
       "status": "Started",
       "done": false,
-      "treeOrder": 2
+      "treeOrder": 2,
+      "tags": [
+        "privat"
+      ]
     },
     {
       "id": "task-r6xtptpqo2h-mpgjlevt",
-      "title": "bad putzen",
-      "description": "dkjhfkajlsdhfkashdfs",
+      "title": "ein titel",
+      "description": "eine beschreibung",
       "dueDate": "2026-05-24",
       "estimateMinutes": 45,
       "status": "Started",
       "done": false,
-      "treeOrder": 3
+      "treeOrder": 3,
+      "tags": [
+        "krimi",
+        "privat"
+      ]
     },
     {
       "id": "task-6gv9itv55e-mpgjlqov",
@@ -59,7 +73,8 @@
       "estimateMinutes": 60,
       "status": "Started",
       "done": false,
-      "treeOrder": 4
+      "treeOrder": 4,
+      "tags": []
     },
     {
       "id": "task-sojeaf40eij-mpgjlmwo",
@@ -68,7 +83,8 @@
       "estimateMinutes": 30,
       "status": "Started",
       "done": false,
-      "treeOrder": 5
+      "treeOrder": 5,
+      "tags": []
     },
     {
       "id": "task-d08wr028af4-mpgjl6cz",
@@ -77,7 +93,8 @@
       "estimateMinutes": 30,
       "status": "Ready",
       "done": false,
-      "treeOrder": 6
+      "treeOrder": 6,
+      "tags": []
     },
     {
       "id": "task-jn7bdn0a6d-mpgjljgb",
@@ -86,7 +103,8 @@
       "estimateMinutes": 30,
       "status": "Started",
       "done": false,
-      "treeOrder": 7
+      "treeOrder": 7,
+      "tags": []
     },
     {
       "id": "task-idqzwmbt86-mpgjlc7i",
@@ -95,7 +113,8 @@
       "estimateMinutes": 30,
       "status": "Ready",
       "done": false,
-      "treeOrder": 8
+      "treeOrder": 8,
+      "tags": []
     },
     {
       "id": "task-wg5iexchewl-mpgjl9kz",
@@ -104,7 +123,8 @@
       "estimateMinutes": 30,
       "status": "Started",
       "done": false,
-      "treeOrder": 9
+      "treeOrder": 9,
+      "tags": []
     }
   ],
   "prioTaskIds": [],
@@ -163,7 +183,8 @@
     "taskView": "list",
     "treeFilters": {
       "query": "",
-      "statuses": []
+      "statuses": [],
+      "tags": []
     },
     "boardHiddenStatuses": [
       "Aborted",

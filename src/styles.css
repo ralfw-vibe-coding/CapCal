@@ -451,6 +451,16 @@ button:disabled {
   color: var(--status-color);
 }
 
+.tag-chip {
+  background: #f7f8f3;
+}
+
+.tag-chip.active {
+  background: #1d261f;
+  border-color: #1d261f;
+  color: white;
+}
+
 .status-filter-chip .status-icon svg {
   height: 12px;
   width: 12px;
@@ -708,6 +718,11 @@ button:disabled {
   color: var(--status-color);
 }
 
+.task-compact-meta .task-tag-chip {
+  background: #eef1ea;
+  color: #4f5a50;
+}
+
 .task-deadline-pill.deadline-soon {
   background: #ffe68a;
   color: #6f5200;
@@ -764,6 +779,8 @@ button:disabled {
   border: 1px solid var(--line);
   border-radius: 8px;
   color: var(--text);
+  font: inherit;
+  font-size: 13px;
   min-height: 32px;
   padding: 0 8px;
   width: 100%;
@@ -771,6 +788,37 @@ button:disabled {
 
 .task-detail-panel textarea {
   padding: 8px;
+}
+
+.tag-picker {
+  display: grid;
+  gap: 6px;
+}
+
+.tag-picker-selected,
+.tag-picker-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.tag-remove-chip,
+.tag-picker-options button {
+  align-items: center;
+  background: #eef1ea;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: #4f5a50;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 700;
+  gap: 4px;
+  min-height: 26px;
+  padding: 0 8px;
+}
+
+.tag-picker-options button {
+  background: var(--surface);
 }
 
 .task-card-board {

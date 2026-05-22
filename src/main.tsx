@@ -35,6 +35,7 @@ type Task = {
   id: string;
   title: string;
   description?: string;
+  tags?: string[];
   dueDate?: string;
   estimateMinutes: number;
   status: TaskStatus;
@@ -58,6 +59,7 @@ type DailyCapacity = {
 type TreeFilterSettings = {
   query: string;
   statuses: TaskStatus[];
+  tags: string[];
 };
 
 type AppSettings = {
@@ -119,7 +121,8 @@ const defaultSettings: AppSettings = {
   taskView: "list",
   treeFilters: {
     query: "",
-    statuses: []
+    statuses: [],
+    tags: []
   },
   boardHiddenStatuses: [],
   panelsCollapsed: {
@@ -214,12 +217,24 @@ function durationForPlanning(taskDurationMinutes: number | undefined, defaultPri
 function normalizeTreeFilters(filters?: Partial<TreeFilterSettings> | null): TreeFilterSettings {
   return {
     query: filters?.query ?? "",
-    statuses: (filters?.statuses ?? []).filter((status): status is TaskStatus => statuses.includes(status as TaskStatus))
+    statuses: (filters?.statuses ?? []).filter((status): status is TaskStatus => statuses.includes(status as TaskStatus)),
+    tags: normalizeTags(filters?.tags)
   };
 }
 
 function normalizeTaskStatuses(rawStatuses?: unknown[] | null): TaskStatus[] {
   return (rawStatuses ?? []).filter((status): status is TaskStatus => statuses.includes(status as TaskStatus));
+}
+
+function normalizeTags(rawTags?: unknown[] | string | null): string[] {
+  const values = Array.isArray(rawTags) ? rawTags : typeof rawTags === "string" ? rawTags.split(",") : [];
+  return Array.from(
+    new Set(
+      values
+        .map((tag) => String(tag).trim())
+        .filter(Boolean)
+    )
+  );
 }
 
 function normalizeState(rawState: AppState): AppState {
@@ -237,7 +252,7 @@ function normalizeState(rawState: AppState): AppState {
       }
     },
     dailyCapacities: rawState.dailyCapacities ?? {},
-    tasks: rawState.tasks ?? [],
+    tasks: (rawState.tasks ?? []).map((task) => ({ ...task, tags: normalizeTags(task.tags) })),
     prioTaskIds: rawState.prioTaskIds ?? [],
     prioDurations: rawState.prioDurations ?? {},
     bookings: rawState.bookings ?? []
@@ -392,6 +407,10 @@ function App() {
   );
   const taskById = useMemo(() => new Map(state?.tasks.map((task) => [task.id, task]) ?? []), [state?.tasks]);
   const treeFilters = settings.treeFilters;
+  const availableTags = useMemo(
+    () => Array.from(new Set((state?.tasks ?? []).flatMap((task) => task.tags ?? []))).sort((a, b) => a.localeCompare(b, "de")),
+    [state?.tasks]
+  );
   const visibleBoardStatuses = useMemo(
     () => statuses.filter((status) => !settings.boardHiddenStatuses.includes(status)),
     [settings.boardHiddenStatuses]
@@ -401,9 +420,11 @@ function App() {
     return sortedTasks(state?.tasks ?? []).filter((task) => {
       const matchesQuery = !query || task.title.toLowerCase().includes(query);
       const matchesStatus = treeFilters.statuses.length === 0 || treeFilters.statuses.includes(task.status);
-      return matchesQuery && matchesStatus;
+      const taskTags = task.tags ?? [];
+      const matchesTags = treeFilters.tags.length === 0 || treeFilters.tags.every((tag) => taskTags.includes(tag));
+      return matchesQuery && matchesStatus && matchesTags;
     });
-  }, [state?.tasks, treeFilters.query, treeFilters.statuses]);
+  }, [state?.tasks, treeFilters.query, treeFilters.statuses, treeFilters.tags]);
   const days = useMemo(
     () => {
       const nextDays: string[] = [];
@@ -529,6 +550,7 @@ function App() {
       id: uid("task"),
       title: trimmed,
       description: "",
+      tags: [],
       dueDate: target === "cal" ? date : undefined,
       estimateMinutes,
       status,
@@ -746,6 +768,16 @@ function App() {
     });
   }
 
+  function toggleTreeFilterTag(tag: string) {
+    const selected = treeFilters.tags.includes(tag);
+    updateSettings({
+      treeFilters: {
+        ...treeFilters,
+        tags: selected ? treeFilters.tags.filter((candidate) => candidate !== tag) : [...treeFilters.tags, tag]
+      }
+    });
+  }
+
   function toggleTaskDetails(taskId: string) {
     setExpandedTaskIds((current) => {
       const next = new Set(current);
@@ -784,6 +816,7 @@ function App() {
       <TaskCard
         key={task.id}
         task={task}
+        allTags={availableTags}
         variant={options?.boardStatus ? "board" : "list"}
         expanded={expandedTaskIds.has(task.id)}
         showUnsavedDot={changedTaskId === task.id && saveState !== "saved" && saveState !== "idle"}
@@ -803,6 +836,7 @@ function App() {
         onEstimate={(estimateMinutes) => updateTask(task.id, { estimateMinutes })}
         onDueDate={(dueDate) => updateTask(task.id, { dueDate: dueDate || undefined })}
         onDescription={(description) => updateTask(task.id, { description })}
+        onTags={(tags) => updateTask(task.id, { tags: normalizeTags(tags) })}
         onDelete={() => deleteTask(task.id)}
       />
     );
@@ -846,7 +880,7 @@ function App() {
             <CalendarDays size={19} />
             <span>CapCal</span>
           </div>
-          <p>Kapazität planen wie die Profis</p>
+          <p>Plane deine Kapazität wie ein Profi</p>
         </div>
         <div className="topbar-metrics">
           <Metric icon={Loader} label="Started" value={startedCount} className="status-started" />
@@ -938,11 +972,19 @@ function App() {
                   </button>
                 );
               })}
-              {(treeFilters.query || treeFilters.statuses.length > 0) && (
+              {availableTags.map((tag) => {
+                const active = treeFilters.tags.includes(tag);
+                return (
+                  <button className={`filter-chip tag-chip ${active ? "active" : ""}`} key={tag} onClick={() => toggleTreeFilterTag(tag)}>
+                    {tag}
+                  </button>
+                );
+              })}
+              {(treeFilters.query || treeFilters.statuses.length > 0 || treeFilters.tags.length > 0) && (
                 <button
                   className="filter-reset-chip"
                   title="Filter zurücksetzen"
-                  onClick={() => updateSettings({ treeFilters: { query: "", statuses: [] } })}
+                  onClick={() => updateSettings({ treeFilters: { query: "", statuses: [], tags: [] } })}
                 >
                   <X size={13} />
                 </button>
@@ -1405,6 +1447,7 @@ function SettingsPanel({
 
 function TaskCard({
   task,
+  allTags,
   variant = "list",
   expanded,
   showUnsavedDot,
@@ -1418,9 +1461,11 @@ function TaskCard({
   onEstimate,
   onDueDate,
   onDescription,
+  onTags,
   onDelete
 }: {
   task: Task;
+  allTags: string[];
   variant?: "list" | "board";
   expanded: boolean;
   showUnsavedDot: boolean;
@@ -1434,6 +1479,7 @@ function TaskCard({
   onEstimate: (estimate: number) => void;
   onDueDate: (date: string) => void;
   onDescription: (description: string) => void;
+  onTags: (tags: string[]) => void;
   onDelete: () => void;
 }) {
   return (
@@ -1471,6 +1517,11 @@ function TaskCard({
           <span className={`task-status-pill ${statusMeta[task.status].className}`}>{task.status}</span>
           {task.dueDate && <span className={`task-deadline-pill ${deadlineTone(task.dueDate)}`}>{formatOptionalDate(task.dueDate)}</span>}
           <span>{minutesToTimeLabel(task.estimateMinutes)}</span>
+          {(task.tags ?? []).map((tag) => (
+            <span className="task-tag-chip" key={tag}>
+              {tag}
+            </span>
+          ))}
         </div>
         <button className="icon-button ghost danger" title="Aufgabe löschen" onClick={onDelete}>
           <Trash2 size={15} />
@@ -1489,6 +1540,7 @@ function TaskCard({
               onDragStart={(event) => event.preventDefault()}
             />
           </label>
+          <TaskTagPicker allTags={allTags} task={task} onTags={onTags} />
           <div className="task-detail-grid">
             <label>
               Deadline
@@ -1520,6 +1572,61 @@ function TaskCard({
         </div>
       )}
     </article>
+  );
+}
+
+function TaskTagPicker({ allTags, task, onTags }: { allTags: string[]; task: Task; onTags: (tags: string[]) => void }) {
+  const [input, setInput] = useState("");
+  const selectedTags = task.tags ?? [];
+  const query = input.trim().toLowerCase();
+  const suggestions = allTags
+    .filter((tag) => !selectedTags.includes(tag))
+    .filter((tag) => !query || tag.toLowerCase().includes(query))
+    .slice(0, 6);
+  const canCreate = Boolean(input.trim()) && !allTags.some((tag) => tag.toLowerCase() === input.trim().toLowerCase());
+
+  function addTag(tag: string) {
+    const [normalizedTag] = normalizeTags([tag]);
+    if (!normalizedTag || selectedTags.includes(normalizedTag)) return;
+    onTags([...selectedTags, normalizedTag]);
+    setInput("");
+  }
+
+  function removeTag(tag: string) {
+    onTags(selectedTags.filter((candidate) => candidate !== tag));
+  }
+
+  return (
+    <div className="tag-picker">
+      <div className="tag-picker-selected">
+        {selectedTags.map((tag) => (
+          <button className="tag-remove-chip" key={tag} onClick={() => removeTag(tag)}>
+            {tag}
+            <X size={12} />
+          </button>
+        ))}
+      </div>
+      <input
+        placeholder="Tag suchen oder neu anlegen"
+        value={input}
+        onChange={(event) => setInput(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter") return;
+          event.preventDefault();
+          addTag(suggestions[0] ?? input);
+        }}
+      />
+      {(suggestions.length > 0 || canCreate) && (
+        <div className="tag-picker-options">
+          {suggestions.map((tag) => (
+            <button key={tag} onClick={() => addTag(tag)}>
+              {tag}
+            </button>
+          ))}
+          {canCreate && <button onClick={() => addTag(input)}>+ "{input.trim()}" anlegen</button>}
+        </div>
+      )}
+    </div>
   );
 }
 
