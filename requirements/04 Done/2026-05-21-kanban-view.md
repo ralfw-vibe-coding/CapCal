@@ -105,3 +105,20 @@ Umsortieren per Drag & Drop innerhalb einer Spalte ändert `treeOrder` entsprech
 
 - Soll der Textfilter aus dem Tree auch im Board wirken?
 - Soll der Owner-Filter auch im Board verfügbar sein?
+
+---
+
+## Umsetzung
+
+Erledigt am 2026-05-21:
+
+- Aufgaben-Panel behält die Überschrift "Aufgaben"; intern bleibt es der Tree.
+- Hinter der Überschrift kann zwischen den Ansichten "Liste" und "Board" per Chips umgeschaltet werden.
+- Die aktuelle Ansicht wird als `taskView` im App-State gespeichert.
+- Im Board werden Aufgaben nach Status in horizontal scrollbaren Spalten angezeigt.
+- Board-Spalten können per Status-Chips ein- und ausgeblendet werden; gespeichert als `boardHiddenStatuses`.
+- Suchtext und Statusfilter wirken in Liste und Board.
+- Aufgaben können in Board-Spalten direkt angelegt werden und bekommen den jeweiligen Spaltenstatus.
+- Aufgaben können im Detailpanel umbenannt werden.
+- Drag & Drop zwischen Board-Spalten ändert den Status; Drag & Drop innerhalb einer Spalte verändert die Tree-Reihenfolge.
+- Owner wurde bewusst ausgelassen, weil dieses Konzept noch nicht implementiert ist.

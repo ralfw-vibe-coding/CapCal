@@ -11,6 +11,7 @@ import {
   Circle,
   CircleDot,
   Clock3,
+  Download,
   GripVertical,
   ListTree,
   Loader,
@@ -18,16 +19,17 @@ import {
   PanelLeftOpen,
   Plus,
   SlidersHorizontal,
-  Sparkles,
   Target,
   Trash2,
   Timer,
+  Upload,
   X
 } from "lucide-react";
 import "./styles.css";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 type TaskStatus = "Backlog" | "Ready" | "Started" | "Blocked" | "Done" | "Aborted";
+type TreeViewMode = "list" | "board";
 
 type Task = {
   id: string;
@@ -67,7 +69,9 @@ type AppSettings = {
   calendarEndTime: string;
   showWeekends: boolean;
   visibleDayCount: number;
+  taskView: TreeViewMode;
   treeFilters: TreeFilterSettings;
+  boardHiddenStatuses: TaskStatus[];
   panelsCollapsed: {
     tree: boolean;
     prio: boolean;
@@ -112,10 +116,12 @@ const defaultSettings: AppSettings = {
   calendarEndTime: "20:00",
   showWeekends: false,
   visibleDayCount: 7,
+  taskView: "list",
   treeFilters: {
     query: "",
     statuses: []
   },
+  boardHiddenStatuses: [],
   panelsCollapsed: {
     tree: false,
     prio: false,
@@ -212,13 +218,19 @@ function normalizeTreeFilters(filters?: Partial<TreeFilterSettings> | null): Tre
   };
 }
 
+function normalizeTaskStatuses(rawStatuses?: unknown[] | null): TaskStatus[] {
+  return (rawStatuses ?? []).filter((status): status is TaskStatus => statuses.includes(status as TaskStatus));
+}
+
 function normalizeState(rawState: AppState): AppState {
   return {
     ...rawState,
     settings: {
       ...defaultSettings,
       ...(rawState.settings ?? {}),
+      taskView: rawState.settings?.taskView === "board" ? "board" : "list",
       treeFilters: normalizeTreeFilters(rawState.settings?.treeFilters),
+      boardHiddenStatuses: normalizeTaskStatuses(rawState.settings?.boardHiddenStatuses),
       panelsCollapsed: {
         ...defaultSettings.panelsCollapsed,
         ...(rawState.settings?.panelsCollapsed ?? {})
@@ -242,7 +254,17 @@ function createTimeOptions(startTime: string, endTime: string) {
 function App() {
   const [state, setState] = useState<AppState | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "dirty" | "saving" | "saved" | "error">("idle");
+  const [loadError, setLoadError] = useState("");
+  const [saveError, setSaveError] = useState("");
   const [newTask, setNewTask] = useState({ title: "", dueDate: "", estimateMinutes: 30 });
+  const [boardQuickAdd, setBoardQuickAdd] = useState<Record<TaskStatus, string>>({
+    Backlog: "",
+    Ready: "",
+    Started: "",
+    Blocked: "",
+    Done: "",
+    Aborted: ""
+  });
   const [quickAdd, setQuickAdd] = useState({ prio: "", cal: "" });
   const [dragPayload, setDragPayload] = useState<DragPayload | null>(null);
   const [calendarStartDate, setCalendarStartDate] = useState(today);
@@ -250,6 +272,7 @@ function App() {
   const [expandedTaskIds, setExpandedTaskIds] = useState<Set<string>>(() => new Set());
   const [changedTaskId, setChangedTaskId] = useState<string | null>(null);
   const settingsMenuRef = useRef<HTMLDivElement | null>(null);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
   const stateRef = useRef<AppState | null>(null);
   const dirtyRef = useRef(false);
   const hasLoadedRef = useRef(false);
@@ -259,16 +282,17 @@ function App() {
 
   useEffect(() => {
     fetch("/api/state")
-      .then((response) => response.json())
+      .then(async (response) => {
+        if (!response.ok) throw new Error(await response.text());
+        return response.json();
+      })
       .then((loadedState) => {
         const normalizedState = normalizeState(loadedState);
         stateRef.current = normalizedState;
         setState(normalizedState);
       })
-      .catch(() => {
-        const fallbackState = normalizeState({ dailyCapacities: {}, tasks: [], prioTaskIds: [], bookings: [] });
-        stateRef.current = fallbackState;
-        setState(fallbackState);
+      .catch((error) => {
+        setLoadError(error instanceof Error ? error.message : "State konnte nicht geladen werden.");
         setSaveState("error");
       });
   }, []);
@@ -306,21 +330,24 @@ function App() {
 
     const version = stateVersionRef.current;
     setSaveState("saving");
+    setSaveError("");
     try {
-      await fetch("/api/state", {
+      const response = await fetch("/api/state", {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(currentState),
         keepalive: options.keepalive
       });
+      if (!response.ok) throw new Error(await response.text());
       if (version === stateVersionRef.current) {
         dirtyRef.current = false;
         setSaveState("saved");
       } else {
         setSaveState("dirty");
       }
-    } catch {
+    } catch (error) {
       dirtyRef.current = true;
+      setSaveError(error instanceof Error ? error.message : "Speichern fehlgeschlagen.");
       setSaveState("error");
     }
   }
@@ -365,6 +392,10 @@ function App() {
   );
   const taskById = useMemo(() => new Map(state?.tasks.map((task) => [task.id, task]) ?? []), [state?.tasks]);
   const treeFilters = settings.treeFilters;
+  const visibleBoardStatuses = useMemo(
+    () => statuses.filter((status) => !settings.boardHiddenStatuses.includes(status)),
+    [settings.boardHiddenStatuses]
+  );
   const filteredTreeTasks = useMemo(() => {
     const query = treeFilters.query.trim().toLowerCase();
     return sortedTasks(state?.tasks ?? []).filter((task) => {
@@ -386,7 +417,13 @@ function App() {
     [calendarStartDate, settings.showWeekends, settings.visibleDayCount]
   );
   const workspaceColumns = [
-    settings.panelsCollapsed.tree ? "64px" : settings.panelsCollapsed.cal ? "minmax(520px, 1.35fr)" : "minmax(360px, 0.95fr)",
+    settings.panelsCollapsed.tree
+      ? "64px"
+      : settings.taskView === "board" && settings.panelsCollapsed.cal
+        ? "minmax(720px, 1.75fr)"
+        : settings.panelsCollapsed.cal
+          ? "minmax(520px, 1.35fr)"
+          : "minmax(360px, 0.95fr)",
     settings.panelsCollapsed.prio ? "64px" : "minmax(310px, 0.8fr)",
     settings.panelsCollapsed.cal ? "64px" : "minmax(520px, 1.45fr)"
   ].join(" ");
@@ -411,9 +448,21 @@ function App() {
 
   if (!state) {
     return (
-      <main className="loading">
-        <Loader className="spin" size={28} />
-        CapCal wird geladen
+      <main className={`loading ${loadError ? "load-error" : ""}`}>
+        {loadError ? (
+          <>
+            <AlertOctagon size={28} />
+            <div>
+              <strong>CapCal konnte die Daten nicht laden.</strong>
+              <span>Bitte Verbindung prüfen und neu laden.</span>
+            </div>
+          </>
+        ) : (
+          <>
+            <Loader className="spin" size={28} />
+            CapCal wird geladen
+          </>
+        )}
       </main>
     );
   }
@@ -433,6 +482,7 @@ function App() {
           ...(draft.settings?.treeFilters ?? defaultSettings.treeFilters),
           ...(patch.treeFilters ?? {})
         }),
+        boardHiddenStatuses: normalizeTaskStatuses(patch.boardHiddenStatuses ?? draft.settings?.boardHiddenStatuses),
         panelsCollapsed: {
           ...defaultSettings.panelsCollapsed,
           ...(draft.settings?.panelsCollapsed ?? defaultSettings.panelsCollapsed),
@@ -469,19 +519,20 @@ function App() {
     });
   }
 
-  function upsertTask(title: string, target?: "prio" | "cal", date = today): Task | null {
+  function upsertTask(title: string, target?: "prio" | "cal", date = today, initialStatus?: TaskStatus): Task | null {
     const trimmed = title.trim();
     if (!trimmed) return null;
     const estimateMinutes = settings.defaultTreeDurationMinutes;
     const planningDurationMinutes = durationForPlanning(estimateMinutes, settings.defaultPrioDurationMinutes);
+    const status = initialStatus ?? (target === "cal" ? "Started" : "Ready");
     const task: Task = {
       id: uid("task"),
       title: trimmed,
       description: "",
       dueDate: target === "cal" ? date : undefined,
       estimateMinutes,
-      status: target === "cal" ? "Started" : "Ready",
-      done: false,
+      status,
+      done: status === "Done" || status === "Aborted",
       treeOrder: 0
     };
 
@@ -521,6 +572,12 @@ function App() {
       estimateMinutes: newTask.estimateMinutes
     });
     setNewTask({ title: "", dueDate: "", estimateMinutes: settings.defaultTreeDurationMinutes });
+  }
+
+  function addBoardTask(status: TaskStatus) {
+    const created = upsertTask(boardQuickAdd[status], undefined, today, status);
+    if (!created) return;
+    setBoardQuickAdd((current) => ({ ...current, [status]: "" }));
   }
 
   function updateTask(taskId: string, patch: Partial<Task>) {
@@ -666,6 +723,19 @@ function App() {
     });
   }
 
+  function setTreeView(taskView: TreeViewMode) {
+    updateSettings({
+      taskView,
+      panelsCollapsed:
+        taskView === "board"
+          ? {
+              ...settings.panelsCollapsed,
+              cal: true
+            }
+          : settings.panelsCollapsed
+    });
+  }
+
   function toggleTreeFilterStatus(status: TaskStatus) {
     const selected = treeFilters.statuses.includes(status);
     updateSettings({
@@ -685,6 +755,85 @@ function App() {
     });
   }
 
+  function toggleBoardColumn(status: TaskStatus) {
+    const hidden = settings.boardHiddenStatuses.includes(status);
+    if (!hidden && visibleBoardStatuses.length === 1) return;
+    updateSettings({
+      boardHiddenStatuses: hidden
+        ? settings.boardHiddenStatuses.filter((candidate) => candidate !== status)
+        : [...settings.boardHiddenStatuses, status]
+    });
+  }
+
+  function moveTaskToBoardStatus(taskId: string, status: TaskStatus, targetTaskId?: string) {
+    updateState((draft) => {
+      const tasks = sortedTasks(
+        draft.tasks.map((task) =>
+          task.id === taskId ? { ...task, status, done: status === "Done" || status === "Aborted" } : task
+        )
+      );
+      if (!targetTaskId) return { ...draft, tasks: tasks.map((task, treeOrder) => ({ ...task, treeOrder })) };
+      const sourceIndex = tasks.findIndex((task) => task.id === taskId);
+      const targetIndex = tasks.findIndex((task) => task.id === targetTaskId);
+      return { ...draft, tasks: moveItemToDropTarget(tasks, sourceIndex, targetIndex).map((task, treeOrder) => ({ ...task, treeOrder })) };
+    });
+  }
+
+  function renderTreeTaskCard(task: Task, options?: { boardStatus?: TaskStatus }) {
+    return (
+      <TaskCard
+        key={task.id}
+        task={task}
+        expanded={expandedTaskIds.has(task.id)}
+        showUnsavedDot={changedTaskId === task.id && saveState !== "saved" && saveState !== "idle"}
+        onToggleExpanded={() => toggleTaskDetails(task.id)}
+        onDragStart={() => setDragPayload({ kind: "tree-task", taskId: task.id })}
+        onDragEnd={() => setDragPayload(null)}
+        onDropOnTask={() => {
+          if (dragPayload?.kind === "tree-task" || dragPayload?.kind === "prio-task") {
+            if (options?.boardStatus) moveTaskToBoardStatus(dragPayload.taskId, options.boardStatus, task.id);
+            else if (dragPayload.kind === "tree-task") moveTaskBeforeInTree(dragPayload.taskId, task.id);
+          }
+          setDragPayload(null);
+        }}
+        onDone={(done) => setTaskDone(task.id, done)}
+        onTitle={(title) => updateTask(task.id, { title })}
+        onStatus={(status) => updateTask(task.id, { status, done: status === "Done" || status === "Aborted" })}
+        onEstimate={(estimateMinutes) => updateTask(task.id, { estimateMinutes })}
+        onDueDate={(dueDate) => updateTask(task.id, { dueDate: dueDate || undefined })}
+        onDescription={(description) => updateTask(task.id, { description })}
+        onDelete={() => deleteTask(task.id)}
+      />
+    );
+  }
+
+  function exportTaskspace() {
+    const currentState = stateRef.current;
+    if (!currentState) return;
+    const blob = new Blob([JSON.stringify(currentState, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `capcal-${today}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function importTaskspace(file: File | undefined) {
+    if (!file) return;
+    try {
+      const importedState = normalizeState(JSON.parse(await file.text()) as AppState);
+      stateRef.current = importedState;
+      setState(importedState);
+      setSaveError("");
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Import fehlgeschlagen.");
+      setSaveState("error");
+    } finally {
+      if (importInputRef.current) importInputRef.current.value = "";
+    }
+  }
+
   const startedCount = state.tasks.filter((task) => task.status === "Started").length;
   const blockedCount = state.tasks.filter((task) => task.status === "Blocked").length;
 
@@ -693,22 +842,37 @@ function App() {
       <header className="topbar">
         <div>
           <div className="brand">
-            <Sparkles size={19} />
+            <CalendarDays size={19} />
             <span>CapCal</span>
           </div>
-          <p>Tree, Prio und Cal für echte Kapazitätsplanung.</p>
+          <p>Kapazität planen wie die Profis</p>
         </div>
         <div className="topbar-metrics">
           <Metric icon={Loader} label="Started" value={startedCount} className="status-started" />
           <Metric icon={AlertOctagon} label="Blocked" value={blockedCount} className="status-blocked" />
-          <div className={`save-pill save-${saveState}`}>
-            {saveState === "saving"
-              ? "Speichert"
-              : saveState === "dirty"
-                ? "Ungespeichert"
-                : saveState === "error"
-                  ? "Speicherfehler"
-                  : "Gespeichert"}
+          <div className="taskspace-actions">
+            <button className="icon-button ghost" title="Taskspace exportieren" onClick={exportTaskspace}>
+              <Download size={16} />
+            </button>
+            <button className="icon-button ghost" title="Taskspace importieren" onClick={() => importInputRef.current?.click()}>
+              <Upload size={16} />
+            </button>
+            <input
+              ref={importInputRef}
+              className="file-input"
+              type="file"
+              accept="application/json,.json"
+              onChange={(event) => void importTaskspace(event.target.files?.[0])}
+            />
+            {(saveState === "dirty" || saveState === "saving" || saveState === "error") && (
+              <button
+                className={`save-dot save-dot-${saveState}`}
+                title={saveState === "error" ? saveError : saveState === "saving" ? "Speichert" : "Ungespeichert"}
+                onClick={() => {
+                  if (saveState === "error" && saveError) void navigator.clipboard?.writeText(saveError);
+                }}
+              />
+            )}
           </div>
           <div className="settings-menu" ref={settingsMenuRef}>
             <button className="icon-button" title="Einstellungen" onClick={() => setSettingsOpen((open) => !open)}>
@@ -733,6 +897,16 @@ function App() {
           collapsed={settings.panelsCollapsed.tree}
           onToggle={() => togglePanel("tree")}
           className="tree-panel"
+          headerActions={
+            <div className="view-chips" aria-label="Aufgabenansicht">
+              <button className={`view-chip ${settings.taskView === "list" ? "active" : ""}`} onClick={() => setTreeView("list")}>
+                Liste
+              </button>
+              <button className={`view-chip ${settings.taskView === "board" ? "active" : ""}`} onClick={() => setTreeView("board")}>
+                Board
+              </button>
+            </div>
+          }
         >
           <div className="tree-filters">
             <div className="filter-control">
@@ -804,29 +978,68 @@ function App() {
             </button>
           </div>
 
-          <div className="list">
-            {filteredTreeTasks.map((task) => (
-              <TaskCard
-                key={task.id}
-                task={task}
-                expanded={expandedTaskIds.has(task.id)}
-                showUnsavedDot={changedTaskId === task.id && saveState !== "saved" && saveState !== "idle"}
-                onToggleExpanded={() => toggleTaskDetails(task.id)}
-                onDragStart={() => setDragPayload({ kind: "tree-task", taskId: task.id })}
-                onDragEnd={() => setDragPayload(null)}
-                onDropOnTask={() => {
-                  if (dragPayload?.kind === "tree-task") moveTaskBeforeInTree(dragPayload.taskId, task.id);
-                  setDragPayload(null);
-                }}
-                onDone={(done) => setTaskDone(task.id, done)}
-                onStatus={(status) => updateTask(task.id, { status, done: status === "Done" || status === "Aborted" })}
-                onEstimate={(estimateMinutes) => updateTask(task.id, { estimateMinutes })}
-                onDueDate={(dueDate) => updateTask(task.id, { dueDate: dueDate || undefined })}
-                onDescription={(description) => updateTask(task.id, { description })}
-                onDelete={() => deleteTask(task.id)}
-              />
-            ))}
-          </div>
+          {settings.taskView === "list" ? (
+            <div className="list">{filteredTreeTasks.map((task) => renderTreeTaskCard(task))}</div>
+          ) : (
+            <div className="board-view">
+              <div className="board-column-controls">
+                <span>Spalten</span>
+                {statuses.map((status) => {
+                  const hidden = settings.boardHiddenStatuses.includes(status);
+                  return (
+                    <button
+                      className={`filter-chip status-filter-chip ${hidden ? "" : `active ${statusMeta[status].className}`}`}
+                      key={status}
+                      onClick={() => toggleBoardColumn(status)}
+                    >
+                      <StatusIcon status={status} />
+                      {status}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="task-board" style={{ gridTemplateColumns: `repeat(${visibleBoardStatuses.length}, minmax(240px, 240px))` }}>
+                {visibleBoardStatuses.map((status) => {
+                  const columnTasks = filteredTreeTasks.filter((task) => task.status === status);
+                  return (
+                    <section
+                      className={`board-column ${statusMeta[status].className}`}
+                      key={status}
+                      onDragOver={(event) => event.preventDefault()}
+                      onDrop={() => {
+                        if (dragPayload?.kind === "tree-task" || dragPayload?.kind === "prio-task") moveTaskToBoardStatus(dragPayload.taskId, status);
+                        setDragPayload(null);
+                      }}
+                    >
+                      <header>
+                        <div>
+                          <StatusIcon status={status} />
+                          <strong>{status}</strong>
+                          <span>{columnTasks.length}</span>
+                        </div>
+                      </header>
+                      <div className="board-quick-add">
+                        <input
+                          placeholder="Neue Aufgabe"
+                          value={boardQuickAdd[status]}
+                          onChange={(event) => setBoardQuickAdd((current) => ({ ...current, [status]: event.target.value }))}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") addBoardTask(status);
+                          }}
+                        />
+                        <button className="icon-button" title={`${status}-Aufgabe anlegen`} onClick={() => addBoardTask(status)}>
+                          <Plus size={15} />
+                        </button>
+                      </div>
+                      <div className="board-card-list">
+                        {columnTasks.map((task) => renderTreeTaskCard(task, { boardStatus: status }))}
+                      </div>
+                    </section>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </Panel>
 
         <Panel
@@ -894,30 +1107,32 @@ function App() {
                   <StatusIcon status={task.status} />
                   <div className="prio-card-main">
                     <strong>{task.title}</strong>
-                    <span>{formatOptionalDate(task.dueDate)}</span>
                   </div>
-                  <select
-                    className="prio-duration"
-                    aria-label="Dauer in Priorisierung"
-                    value={prioDuration}
-                    onChange={(event) =>
-                      updateState((draft) => ({
-                        ...draft,
-                        prioDurations: {
-                          ...(draft.prioDurations ?? {}),
-                          [task.id]: Number(event.target.value)
-                        }
-                      }))
-                    }
-                    onClick={(event) => event.stopPropagation()}
-                    onDragStart={(event) => event.preventDefault()}
-                  >
-                    {durationOptions.map((minutes) => (
-                      <option key={minutes} value={minutes}>
-                        {minutesToTimeLabel(minutes)}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="prio-card-side">
+                    {task.dueDate && <span className={`task-deadline-pill ${deadlineTone(task.dueDate)}`}>{formatOptionalDate(task.dueDate)}</span>}
+                    <select
+                      className="prio-duration"
+                      aria-label="Dauer in Priorisierung"
+                      value={prioDuration}
+                      onChange={(event) =>
+                        updateState((draft) => ({
+                          ...draft,
+                          prioDurations: {
+                            ...(draft.prioDurations ?? {}),
+                            [task.id]: Number(event.target.value)
+                          }
+                        }))
+                      }
+                      onClick={(event) => event.stopPropagation()}
+                      onDragStart={(event) => event.preventDefault()}
+                    >
+                      {durationOptions.map((minutes) => (
+                        <option key={minutes} value={minutes}>
+                          {minutesToTimeLabel(minutes)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   <button className="icon-button ghost" title="Aus Prio entfernen" onClick={() => removeFromPrio(task.id)}>
                     <Trash2 size={15} />
                   </button>
@@ -1023,14 +1238,16 @@ function Panel({
   onToggle,
   children,
   className,
+  headerActions,
   onDrop
 }: {
   title: string;
   icon: typeof Circle;
   collapsed: boolean;
   onToggle: () => void;
-  children: React.ReactNode;
+  children: ReactNode;
   className: string;
+  headerActions?: ReactNode;
   onDrop?: () => void;
 }) {
   return (
@@ -1045,6 +1262,7 @@ function Panel({
       <header className="panel-header">
         <Icon size={18} />
         <h2>{title}</h2>
+        {!collapsed && headerActions}
       </header>
       {!collapsed && children}
     </section>
@@ -1193,6 +1411,7 @@ function TaskCard({
   onDragEnd,
   onDropOnTask,
   onDone,
+  onTitle,
   onStatus,
   onEstimate,
   onDueDate,
@@ -1207,6 +1426,7 @@ function TaskCard({
   onDragEnd: () => void;
   onDropOnTask: () => void;
   onDone: (done: boolean) => void;
+  onTitle: (title: string) => void;
   onStatus: (status: TaskStatus) => void;
   onEstimate: (estimate: number) => void;
   onDueDate: (date: string) => void;
@@ -1255,6 +1475,9 @@ function TaskCard({
       </div>
       {expanded && (
         <div className="task-detail-panel">
+          <label>
+            <input placeholder="Titel" value={task.title} onChange={(event) => onTitle(event.target.value)} />
+          </label>
           <label>
             <textarea
               placeholder="Beschreibung"

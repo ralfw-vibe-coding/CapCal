@@ -22,10 +22,12 @@ export const emptyState: AppState = {
     calendarEndTime: "20:00",
     showWeekends: false,
     visibleDayCount: 7,
+    taskView: "list",
     treeFilters: {
       query: "",
       statuses: []
     },
+    boardHiddenStatuses: [],
     panelsCollapsed: {
       tree: false,
       prio: false,

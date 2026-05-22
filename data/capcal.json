@@ -16,7 +16,7 @@
   "tasks": [
     {
       "id": "task-2ck0924ehso-mpfjncuf",
-      "title": "aufgabe 1.1",
+      "title": "aufgabe 1.1.1 - geändert",
       "estimateMinutes": 30,
       "status": "Done",
       "done": true,
@@ -32,11 +32,11 @@
     },
     {
       "id": "task-0y8msvqfllp-mpfjg31v",
-      "title": "yyy",
+      "title": "yyy - auf done",
       "dueDate": "2026-05-21",
       "estimateMinutes": 45,
-      "status": "Started",
-      "done": false,
+      "status": "Done",
+      "done": true,
       "treeOrder": 2
     },
     {
@@ -64,7 +64,11 @@
       "treeOrder": 5
     }
   ],
-  "prioTaskIds": [],
+  "prioTaskIds": [
+    "task-2ck0924ehso-mpfjncuf",
+    "task-pm8paeeerv8-mpfjg9ql",
+    "task-0y8msvqfllp-mpfjg31v"
+  ],
   "bookings": [
     {
       "id": "booking-gmez6opy6wa-mpfi5z9c",
@@ -77,7 +81,7 @@
       "id": "booking-53ymroc2gx2-mpfi644b",
       "taskId": "task-i8l5z290sz-mpfi5ksp",
       "date": "2026-05-22",
-      "startTime": "10:00",
+      "startTime": "10:10",
       "durationMinutes": 195
     },
     {
@@ -125,11 +129,21 @@
     "calendarEndTime": "22:00",
     "showWeekends": true,
     "visibleDayCount": 21,
+    "taskView": "list",
+    "treeFilters": {
+      "query": "",
+      "statuses": []
+    },
+    "boardHiddenStatuses": [],
     "panelsCollapsed": {
       "tree": false,
       "prio": false,
       "cal": false
     }
   },
-  "prioDurations": {}
+  "prioDurations": {
+    "task-2ck0924ehso-mpfjncuf": 30,
+    "task-pm8paeeerv8-mpfjg9ql": 45,
+    "task-0y8msvqfllp-mpfjg31v": 45
+  }
 }
