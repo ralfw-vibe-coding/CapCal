@@ -57,7 +57,9 @@ type Task = {
 
 type Booking = {
   id: string;
-  taskId: string;
+  taskId?: string;
+  label?: string;
+  description?: string;
   date: string;
   startTime?: string;
   durationMinutes: number;
@@ -334,7 +336,11 @@ function normalizeState(rawState: AppState): AppState {
     tasks: normalizeTasks(rawState.tasks ?? []),
     prioTaskIds: rawState.prioTaskIds ?? [],
     prioDurations: rawState.prioDurations ?? {},
-    bookings: rawState.bookings ?? []
+    bookings: (rawState.bookings ?? []).map((booking) => ({
+      ...booking,
+      label: booking.label ?? "",
+      description: booking.description ?? ""
+    }))
   };
 }
 
@@ -576,12 +582,16 @@ function App() {
   const taskById = useMemo(() => new Map(state?.tasks.map((task) => [task.id, task]) ?? []), [state?.tasks]);
   const bookingCountByTaskId = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const booking of state?.bookings ?? []) counts.set(booking.taskId, (counts.get(booking.taskId) ?? 0) + 1);
+    for (const booking of state?.bookings ?? []) {
+      if (booking.taskId) counts.set(booking.taskId, (counts.get(booking.taskId) ?? 0) + 1);
+    }
     return counts;
   }, [state?.bookings]);
   const bookedMinutesByTaskId = useMemo(() => {
     const minutes = new Map<string, number>();
-    for (const booking of state?.bookings ?? []) minutes.set(booking.taskId, (minutes.get(booking.taskId) ?? 0) + booking.durationMinutes);
+    for (const booking of state?.bookings ?? []) {
+      if (booking.taskId) minutes.set(booking.taskId, (minutes.get(booking.taskId) ?? 0) + booking.durationMinutes);
+    }
     return minutes;
   }, [state?.bookings]);
   const childCountByTaskId = useMemo(() => {
@@ -1067,6 +1077,25 @@ function App() {
         bookings: [...draft.bookings, { id: uid("booking"), taskId, date, startTime, durationMinutes }]
       };
     });
+  }
+
+  function addLooseBooking(label: string, date = today, startTime?: string) {
+    const trimmed = label.trim();
+    if (!trimmed) return;
+    updateState((draft) => ({
+      ...draft,
+      bookings: [
+        ...draft.bookings,
+        {
+          id: uid("booking"),
+          label: trimmed,
+          description: "",
+          date,
+          startTime,
+          durationMinutes: settings.defaultPrioDurationMinutes
+        }
+      ]
+    }));
   }
 
   function updateBooking(bookingId: string, patch: Partial<Booking>) {
@@ -1738,7 +1767,7 @@ function App() {
                 onChange={(event) => setQuickAdd({ ...quickAdd, cal: event.target.value })}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") {
-                    upsertTask(quickAdd.cal, "cal", today);
+                    addLooseBooking(quickAdd.cal, today);
                     setQuickAdd({ ...quickAdd, cal: "" });
                   }
                 }}
@@ -1747,7 +1776,7 @@ function App() {
                 className="icon-button"
                 title="In Cal anlegen"
                 onClick={() => {
-                  upsertTask(quickAdd.cal, "cal", today);
+                  addLooseBooking(quickAdd.cal, today);
                   setQuickAdd({ ...quickAdd, cal: "" });
                 }}
               >
@@ -1795,6 +1824,7 @@ function App() {
                   calendarEndMinutes={calendarEndMinutes}
                   timeOptions={timeOptions}
                   taskById={taskById}
+                  tasks={state.tasks}
                   onDrop={handleDrop}
                   onBookingDrag={(bookingId) => setDragPayload({ kind: "booking", bookingId })}
                   onBookingDragEnd={() => setDragPayload(null)}
@@ -2306,6 +2336,7 @@ function DayColumn({
   calendarEndMinutes,
   timeOptions,
   taskById,
+  tasks,
   onDrop,
   onBookingDrag,
   onBookingDragEnd,
@@ -2322,6 +2353,7 @@ function DayColumn({
   calendarEndMinutes: number;
   timeOptions: string[];
   taskById: Map<string, Task>;
+  tasks: Task[];
   onDrop: (date: string, startTime?: string) => void;
   onBookingDrag: (bookingId: string) => void;
   onBookingDragEnd: () => void;
@@ -2473,7 +2505,7 @@ function DayColumn({
           <div className="booking-shell" key={booking.id}>
             <BookingCard
               booking={booking}
-              task={taskById.get(booking.taskId)}
+              task={booking.taskId ? taskById.get(booking.taskId) : undefined}
               isEditing={editingBookingId === booking.id}
               onDrag={() => onBookingDrag(booking.id)}
               onDragEnd={onBookingDragEnd}
@@ -2482,10 +2514,13 @@ function DayColumn({
             {editingBookingId === booking.id && (
               <BookingEditor
                 booking={booking}
-                task={taskById.get(booking.taskId)}
+                task={booking.taskId ? taskById.get(booking.taskId) : undefined}
+                tasks={tasks}
                 timeOptions={timeOptions}
                 onChange={onBookingChange}
-                onOpenTask={() => onOpenTask(booking.taskId)}
+                onOpenTask={() => {
+                  if (booking.taskId) onOpenTask(booking.taskId);
+                }}
                 onDelete={(bookingId) => {
                   onBookingDelete(bookingId);
                   setEditingBookingId(null);
@@ -2541,7 +2576,7 @@ function DayColumn({
               <div className="scheduled-booking" key={booking.id} style={{ top, height }}>
                 <BookingCard
                   booking={booking}
-                  task={taskById.get(booking.taskId)}
+                  task={booking.taskId ? taskById.get(booking.taskId) : undefined}
                   isEditing={editingBookingId === booking.id}
                   onDrag={() => onBookingDrag(booking.id)}
                   onDragEnd={onBookingDragEnd}
@@ -2555,10 +2590,13 @@ function DayColumn({
                 {editingBookingId === booking.id && (
                   <BookingEditor
                     booking={booking}
-                    task={taskById.get(booking.taskId)}
+                    task={booking.taskId ? taskById.get(booking.taskId) : undefined}
+                    tasks={tasks}
                     timeOptions={timeOptions}
                     onChange={onBookingChange}
-                    onOpenTask={() => onOpenTask(booking.taskId)}
+                    onOpenTask={() => {
+                      if (booking.taskId) onOpenTask(booking.taskId);
+                    }}
                     onDelete={(bookingId) => {
                       onBookingDelete(bookingId);
                       setEditingBookingId(null);
@@ -2600,10 +2638,10 @@ function BookingCard({
   onOpen: () => void;
   onResizeStart?: (event: React.PointerEvent<HTMLDivElement>) => void;
 }) {
-  if (!task) return null;
+  const title = task?.title ?? booking.label ?? "Buchung";
   return (
     <article
-      className={`booking-card status-card ${statusMeta[task.status].className} ${task.archived ? "archived-booking" : ""} ${isEditing ? "editing" : ""}`}
+      className={`booking-card status-card ${task ? statusMeta[task.status].className : "loose-booking"} ${task?.archived ? "archived-booking" : ""} ${isEditing ? "editing" : ""}`}
       data-booking-id={booking.id}
       draggable
       onDragStart={(event) => {
@@ -2618,9 +2656,9 @@ function BookingCard({
       title="Buchung bearbeiten"
     >
       <div className="booking-head">
-        <StatusIcon status={task.status} />
-        <strong>{task.title}</strong>
-        {task.archived && <Archive size={13} />}
+        {task ? <StatusIcon status={task.status} /> : <CalendarDays size={14} />}
+        <strong>{title}</strong>
+        {task?.archived && <Archive size={13} />}
       </div>
       {onResizeStart && <div className="booking-resize-handle" title="Dauer ändern" onPointerDown={onResizeStart} />}
     </article>
@@ -2630,6 +2668,7 @@ function BookingCard({
 function BookingEditor({
   booking,
   task,
+  tasks,
   timeOptions,
   onChange,
   onOpenTask,
@@ -2638,6 +2677,7 @@ function BookingEditor({
 }: {
   booking: Booking;
   task?: Task;
+  tasks: Task[];
   timeOptions: string[];
   onChange: (bookingId: string, patch: Partial<Booking>) => void;
   onOpenTask: () => void;
@@ -2652,29 +2692,57 @@ function BookingEditor({
       <button className="icon-button ghost editor-close" title="Editor schließen" onClick={onClose}>
         <X size={14} />
       </button>
-      {task && (
-        <div className="booking-editor-summary">
-          <div className="booking-editor-title">
-            <StatusIcon status={task.status} />
-            <strong>{task.title}</strong>
-          </div>
-          <div className="booking-editor-meta">
-            {task.archived && (
-              <span className="task-archive-pill">
-                <Archive size={11} />
-                Archiv
-              </span>
-            )}
-            {task.dueDate && <span className={`task-deadline-pill ${deadlineTone(task.dueDate)}`}>{formatOptionalDate(task.dueDate)}</span>}
-            {(task.tags ?? []).map((tag) => (
-              <span className="task-tag-chip" key={tag}>
-                {tag}
-              </span>
-            ))}
-          </div>
+      <div className="booking-editor-summary">
+        <div className="booking-editor-title">
+          {task ? <StatusIcon status={task.status} /> : <CalendarDays size={15} />}
+          <strong>{task?.title ?? booking.label ?? "Buchung"}</strong>
         </div>
-      )}
+        <div className="booking-editor-meta">
+          {task?.archived && (
+            <span className="task-archive-pill">
+              <Archive size={11} />
+              Archiv
+            </span>
+          )}
+          {task?.dueDate && <span className={`task-deadline-pill ${deadlineTone(task.dueDate)}`}>{formatOptionalDate(task.dueDate)}</span>}
+          {(task?.tags ?? []).map((tag) => (
+            <span className="task-tag-chip" key={tag}>
+              {tag}
+            </span>
+          ))}
+        </div>
+      </div>
       <div className="booking-controls">
+        {!task && (
+          <label>
+            <span>Titel</span>
+            <input
+              aria-label="Buchungstitel"
+              value={booking.label ?? ""}
+              onChange={(event) => onChange(booking.id, { label: event.target.value })}
+            />
+          </label>
+        )}
+        <label>
+          <span>Aufgabe</span>
+          <select
+            aria-label="Aufgabe verknüpfen"
+            value={booking.taskId ?? ""}
+            onChange={(event) =>
+              onChange(booking.id, {
+                taskId: event.target.value || undefined,
+                label: event.target.value ? "" : (booking.label || task?.title || "")
+              })
+            }
+          >
+            <option value="">Keine</option>
+            {sortedListTasks(tasks.filter((candidate) => !candidate.archived)).map((candidate) => (
+              <option key={candidate.id} value={candidate.id}>
+                {candidate.title}
+              </option>
+            ))}
+          </select>
+        </label>
         <label>
           <span>
             <Clock3 size={13} />
@@ -2713,6 +2781,15 @@ function BookingEditor({
         <button className="icon-button ghost" title="Buchung löschen" onClick={() => onDelete(booking.id)}>
           <Trash2 size={14} />
         </button>
+        <label className="booking-description-field">
+          <span>Beschreibung</span>
+          <textarea
+            aria-label="Buchungsbeschreibung"
+            placeholder="Beschreibung"
+            value={booking.description ?? ""}
+            onChange={(event) => onChange(booking.id, { description: event.target.value })}
+          />
+        </label>
       </div>
     </aside>
   );

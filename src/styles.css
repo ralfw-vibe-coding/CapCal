@@ -704,6 +704,18 @@ button:disabled {
   box-shadow: inset 4px 0 0 var(--status-color);
 }
 
+.status-card.loose-booking {
+  --status-color: #8b9491;
+  --status-bg: repeating-linear-gradient(
+    135deg,
+    #f3f5f2 0,
+    #f3f5f2 8px,
+    #e7ebe6 8px,
+    #e7ebe6 14px
+  );
+  color: #4f5a50;
+}
+
 .status-card.archived,
 .booking-card.archived-booking {
   filter: saturate(0.45);
@@ -1556,6 +1568,28 @@ button:disabled {
 
 .booking-controls select {
   min-width: 132px;
+}
+
+.booking-controls input,
+.booking-controls textarea {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  font: inherit;
+  min-height: 34px;
+  padding: 0 8px;
+  width: 100%;
+}
+
+.booking-controls textarea {
+  min-height: 76px;
+  padding: 8px;
+  resize: vertical;
+}
+
+.booking-description-field {
+  grid-column: 1 / -1;
 }
 
 .booking-controls > .icon-button {

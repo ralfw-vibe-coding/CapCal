@@ -92,3 +92,17 @@ Beim manuellen Anlegen eines Blocks im Kalender:
 - Kein automatisches Task-Anlegen mehr
 - User kann optional einen Task aus dem Tree verknüpfen
 - Oder einfach ein Label eingeben und fertig
+
+## Umsetzung
+
+Umgesetzt am 2026-05-22:
+
+- `Booking.taskId` ist optional.
+- `Booking.label` und `Booking.description` wurden ergänzt.
+- Direktes Anlegen im Kalender erzeugt nun eine unverknüpfte Buchung mit Label statt automatisch eine Aufgabe.
+- Buchungskarten ohne Aufgabe werden grau und leicht gestreift dargestellt.
+- Buchungskarten ohne Aufgabe zeigen ein Kalender-Icon statt eines Task-Status.
+- Der Buchungsdialog bietet für freie Buchungen ein editierbares Label.
+- Der Buchungsdialog bietet für alle Buchungen eine Aufgaben-Auswahl zum Verknüpfen/Entknüpfen.
+- Der Buchungsdialog bietet eine Beschreibung als Textarea.
+- Soll/Ist-Berechnung ignoriert unverknüpfte Buchungen; Tageskapazität zählt sie weiterhin.
