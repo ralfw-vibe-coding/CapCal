@@ -1651,6 +1651,13 @@ button:disabled {
   min-height: 100%;
   overflow: visible;
   position: relative;
+  z-index: 1;
+}
+
+.day-column:has(.day-template-popover),
+.day-column:has(.booking-editor),
+.day-column:has(.google-event-editor) {
+  z-index: 80;
 }
 
 .day-column.today-column {
@@ -1677,19 +1684,105 @@ button:disabled {
   font-weight: 720;
   height: 40px;
   justify-content: center;
-  padding: 0 34px;
+  padding: 0 66px 0 34px;
   position: sticky;
   top: 0;
-  z-index: 12;
+  z-index: 50;
 }
 
 .day-add-booking-button {
   height: 28px;
   min-width: 28px;
   position: absolute;
-  right: 6px;
+  right: 38px;
   top: 5px;
   width: 28px;
+}
+
+.day-template-menu {
+  position: absolute;
+  right: 6px;
+  top: 5px;
+  z-index: 90;
+}
+
+.day-template-button {
+  height: 28px;
+  min-width: 28px;
+  width: 28px;
+}
+
+.day-template-popover {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 12px 28px rgba(34, 44, 37, 0.18);
+  color: var(--text);
+  display: grid;
+  gap: 5px;
+  min-width: 218px;
+  padding: 7px;
+  position: absolute;
+  right: 0;
+  top: 32px;
+  z-index: 100;
+}
+
+.day-template-form,
+.day-template-list {
+  display: grid;
+  gap: 6px;
+}
+
+.day-template-form input {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  font: inherit;
+  font-weight: 500;
+  min-height: 34px;
+  padding: 0 9px;
+}
+
+.day-template-list p,
+.day-template-message {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  margin: 0;
+  padding: 3px 4px;
+}
+
+.day-template-row {
+  align-items: center;
+  display: grid;
+  gap: 5px;
+  grid-template-columns: 1fr auto;
+}
+
+.day-template-row > button:first-child {
+  align-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  display: flex;
+  min-height: 40px;
+  padding: 5px 8px;
+  text-align: left;
+}
+
+.day-template-name {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.day-template-name span {
+  color: var(--muted);
+  font-weight: 500;
 }
 
 .day-column > header.today {

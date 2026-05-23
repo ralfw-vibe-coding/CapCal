@@ -7,6 +7,7 @@ import {
   ArrowUpNarrowWide,
   CalendarDays,
   CalendarPlus,
+  CalendarSync,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -15,12 +16,14 @@ import {
   CircleDot,
   Clock3,
   CloudOff,
+  Combine,
   Copy,
   Download,
   FolderTree,
   GripVertical,
   Goal,
   Hourglass,
+  LayoutTemplate,
   ListRestart,
   ListTree,
   Loader,
@@ -29,6 +32,7 @@ import {
   PanelLeftOpen,
   Plus,
   RotateCcw,
+  Save,
   SquareArrowOutUpRight,
   SlidersHorizontal,
   Target,
@@ -121,6 +125,20 @@ type Booking = {
   durationMinutes: number;
 };
 
+type DayTemplateSlot = {
+  label: string;
+  description?: string;
+  startTime?: string;
+  durationMinutes: number;
+};
+
+type DayTemplate = {
+  id: string;
+  name: string;
+  slots: DayTemplateSlot[];
+  createdAt: string;
+};
+
 type DailyCapacity = {
   dayCapacityMinutes: number;
   planningCapacityMinutes: number;
@@ -160,6 +178,7 @@ type AppState = {
   prioTaskIds: string[];
   prioDurations?: Record<string, number>;
   bookings: Booking[];
+  dayTemplates?: DayTemplate[];
 };
 
 type DragPayload =
@@ -457,6 +476,35 @@ function normalizeTasks(tasks: Task[]): Task[] {
   });
 }
 
+function normalizeDayTemplates(rawTemplates?: unknown[] | null): DayTemplate[] {
+  return (rawTemplates ?? [])
+    .map((item): DayTemplate | null => {
+      const rawTemplate = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
+      if (typeof rawTemplate.id !== "string" || typeof rawTemplate.name !== "string") return null;
+      const rawSlots = Array.isArray(rawTemplate.slots) ? rawTemplate.slots : [];
+      const slots = rawSlots
+        .map((slot): DayTemplateSlot | null => {
+          const rawSlot = slot && typeof slot === "object" ? (slot as Record<string, unknown>) : {};
+          const durationMinutes = Number(rawSlot.durationMinutes);
+          if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) return null;
+          return {
+            label: typeof rawSlot.label === "string" && rawSlot.label.trim() ? rawSlot.label : "Reservierung",
+            description: typeof rawSlot.description === "string" ? rawSlot.description : "",
+            startTime: typeof rawSlot.startTime === "string" ? rawSlot.startTime : undefined,
+            durationMinutes
+          };
+        })
+        .filter((slot): slot is DayTemplateSlot => Boolean(slot));
+      return {
+        id: rawTemplate.id,
+        name: rawTemplate.name,
+        slots,
+        createdAt: typeof rawTemplate.createdAt === "string" ? rawTemplate.createdAt : new Date().toISOString()
+      };
+    })
+    .filter((template): template is DayTemplate => Boolean(template));
+}
+
 function normalizeState(rawState: AppState): AppState {
   const rawTaskView = rawState.settings?.taskView;
   const rawCalendarView = rawState.settings?.calendarView;
@@ -478,6 +526,7 @@ function normalizeState(rawState: AppState): AppState {
     tasks: normalizeTasks(rawState.tasks ?? []),
     prioTaskIds: rawState.prioTaskIds ?? [],
     prioDurations: rawState.prioDurations ?? {},
+    dayTemplates: normalizeDayTemplates(rawState.dayTemplates),
     bookings: (rawState.bookings ?? []).map((booking) => ({
       ...booking,
       label: booking.label ?? "",
@@ -1564,6 +1613,65 @@ function App() {
     addLooseBooking("Neue Buchung", date);
   }
 
+  function saveDayAsTemplate(date: string, name: string) {
+    const trimmedName = name.trim();
+    if (!trimmedName) return { saved: false, count: 0 };
+    let slotCount = 0;
+    updateState((draft) => {
+      const slots = draft.bookings
+        .filter((booking) => booking.date === date && !booking.taskId)
+        .sort((a, b) => (a.startTime ?? "").localeCompare(b.startTime ?? ""))
+        .map((booking): DayTemplateSlot => ({
+          label: booking.label?.trim() || "Reservierung",
+          description: booking.description ?? "",
+          startTime: booking.startTime,
+          durationMinutes: booking.durationMinutes
+        }));
+      slotCount = slots.length;
+      if (slots.length === 0) return draft;
+      return {
+        ...draft,
+        dayTemplates: [
+          ...(draft.dayTemplates ?? []),
+          {
+            id: uid("template"),
+            name: trimmedName,
+            slots,
+            createdAt: new Date().toISOString()
+          }
+        ]
+      };
+    });
+    return { saved: slotCount > 0, count: slotCount };
+  }
+
+  function applyDayTemplate(templateId: string, date: string) {
+    const template = stateRef.current?.dayTemplates?.find((candidate) => candidate.id === templateId);
+    if (!template) return 0;
+    updateState((draft) => ({
+      ...draft,
+      bookings: [
+        ...draft.bookings,
+        ...template.slots.map((slot) => ({
+          id: uid("booking"),
+          label: slot.label,
+          description: slot.description ?? "",
+          date,
+          startTime: slot.startTime,
+          durationMinutes: slot.durationMinutes
+        }))
+      ]
+    }));
+    return template.slots.length;
+  }
+
+  function deleteDayTemplate(templateId: string) {
+    updateState((draft) => ({
+      ...draft,
+      dayTemplates: (draft.dayTemplates ?? []).filter((template) => template.id !== templateId)
+    }));
+  }
+
   function linkBookingToTask(bookingId: string, taskId: string) {
     updateState((draft) => ({
       ...draft,
@@ -2546,7 +2654,7 @@ function App() {
               disabled={googleCalendarEventsLoading || iCloudCalendarEventsLoading}
               onClick={() => void refreshExternalCalendarEvents()}
             >
-              <RotateCcw size={15} />
+              <CalendarSync size={15} />
             </button>
           </div>
           <div className="calendar-scroll">
@@ -2582,6 +2690,10 @@ function App() {
                     onOpenTask={scrollToTask}
                     onCapacityChange={(patch) => updateDailyCapacity(date, patch)}
                     onAddLooseBooking={addDefaultLooseBooking}
+                    dayTemplates={state.dayTemplates ?? []}
+                    onSaveTemplate={saveDayAsTemplate}
+                    onApplyTemplate={applyDayTemplate}
+                    onDeleteTemplate={deleteDayTemplate}
                   />
                 ))}
               </div>
@@ -3477,7 +3589,11 @@ function DayColumn({
   onBookingDelete,
   onOpenTask,
   onCapacityChange,
-  onAddLooseBooking
+  onAddLooseBooking,
+  dayTemplates,
+  onSaveTemplate,
+  onApplyTemplate,
+  onDeleteTemplate
 }: {
   date: string;
   bookings: Booking[];
@@ -3496,13 +3612,22 @@ function DayColumn({
   onOpenTask: (taskId: string) => void;
   onCapacityChange: (patch: Partial<DailyCapacity>) => void;
   onAddLooseBooking: (date: string) => void;
+  dayTemplates: DayTemplate[];
+  onSaveTemplate: (date: string, name: string) => { saved: boolean; count: number };
+  onApplyTemplate: (templateId: string, date: string) => number;
+  onDeleteTemplate: (templateId: string) => void;
 }) {
   const [editingBookingId, setEditingBookingId] = useState<string | null>(null);
   const [editingGoogleEventId, setEditingGoogleEventId] = useState<string | null>(null);
   const [dropPreview, setDropPreview] = useState<{ area: "allocation" | "time"; startTime?: string } | null>(null);
   const [resizingBooking, setResizingBooking] = useState<{ bookingId: string; startMinutes: number } | null>(null);
+  const [templateMenuOpen, setTemplateMenuOpen] = useState(false);
+  const [templateMode, setTemplateMode] = useState<"actions" | "save" | "apply">("actions");
+  const [templateName, setTemplateName] = useState("");
+  const [templateMessage, setTemplateMessage] = useState("");
   const timelineRef = useRef<HTMLDivElement | null>(null);
   const dayColumnRef = useRef<HTMLElement | null>(null);
+  const templateMenuRef = useRef<HTMLDivElement | null>(null);
   const allocations = bookings.filter((booking) => !booking.startTime);
   const scheduled = bookings.filter((booking) => booking.startTime).sort((a, b) => a.startTime!.localeCompare(b.startTime!));
   const googleBlockingMinutes = externalBookedMinutes(googleEvents, capacity);
@@ -3582,6 +3707,40 @@ function DayColumn({
     return () => window.removeEventListener("pointerdown", handlePointerDown);
   }, [editingBookingId, editingGoogleEventId]);
 
+  useEffect(() => {
+    if (!templateMenuOpen) return;
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target;
+      if (target instanceof Node && !templateMenuRef.current?.contains(target)) {
+        setTemplateMenuOpen(false);
+        setTemplateMode("actions");
+      }
+    }
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    return () => window.removeEventListener("pointerdown", handlePointerDown);
+  }, [templateMenuOpen]);
+
+  function defaultTemplateName() {
+    return `Vorlage ${formatDate(date)}`;
+  }
+
+  function handleSaveTemplate() {
+    const result = onSaveTemplate(date, templateName || defaultTemplateName());
+    setTemplateMessage(result.saved ? `${result.count} Reservierungen gespeichert.` : "Keine freien Buchungen vorhanden.");
+    if (result.saved) {
+      setTemplateName("");
+      setTemplateMode("actions");
+    }
+  }
+
+  function handleApplyTemplate(templateId: string) {
+    const count = onApplyTemplate(templateId, date);
+    setTemplateMessage(count > 0 ? `${count} Reservierungen eingefügt.` : "Vorlage ist leer.");
+    setTemplateMode("actions");
+  }
+
   return (
     <section
       className={`day-column ${date === today ? "today-column" : ""} ${isMonday(date) ? "week-start" : ""}`}
@@ -3597,6 +3756,76 @@ function DayColumn({
         >
           <CalendarPlus size={14} />
         </button>
+        <div className="day-template-menu" ref={templateMenuRef}>
+          <button
+            className="icon-button ghost day-template-button"
+            title="Tagesvorlagen"
+            onClick={(event) => {
+              event.stopPropagation();
+              setTemplateMenuOpen((open) => !open);
+              setTemplateMode("actions");
+              setTemplateMessage("");
+            }}
+          >
+            <LayoutTemplate size={14} />
+          </button>
+          {templateMenuOpen && (
+            <div className="day-template-popover" onClick={(event) => event.stopPropagation()}>
+              {templateMode === "actions" && (
+                <>
+                  <button className="menu-row" onClick={() => setTemplateMode("save")}>
+                    <Save size={14} />
+                    Speichern
+                  </button>
+                  <button className="menu-row" onClick={() => setTemplateMode("apply")}>
+                    <Combine size={14} />
+                    Anwenden
+                  </button>
+                </>
+              )}
+              {templateMode === "save" && (
+                <div className="day-template-form">
+                  <input
+                    autoFocus
+                    placeholder={defaultTemplateName()}
+                    value={templateName}
+                    onChange={(event) => setTemplateName(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") handleSaveTemplate();
+                    }}
+                  />
+                  <button className="primary" onClick={handleSaveTemplate}>
+                    Speichern
+                  </button>
+                  <button className="soft-button" onClick={() => setTemplateMode("actions")}>
+                    Zurück
+                  </button>
+                </div>
+              )}
+              {templateMode === "apply" && (
+                <div className="day-template-list">
+                  {dayTemplates.length === 0 ? (
+                    <p>Noch keine Vorlagen.</p>
+                  ) : (
+                    dayTemplates.map((template) => (
+                      <div className="day-template-row" key={template.id}>
+                        <button onClick={() => handleApplyTemplate(template.id)}>
+                          <span className="day-template-name">
+                            {template.name} <span>({template.slots.length})</span>
+                          </span>
+                        </button>
+                        <button className="icon-button ghost danger-icon" title="Vorlage löschen" onClick={() => onDeleteTemplate(template.id)}>
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+              {templateMessage && <div className="day-template-message">{templateMessage}</div>}
+            </div>
+          )}
+        </div>
       </header>
       <div className="capacity-strip">
         <div className="capacity-label">
@@ -3808,20 +4037,36 @@ function BookingCard({
   onResizeStart?: (event: React.PointerEvent<HTMLDivElement>) => void;
 }) {
   const title = task?.title ?? booking.label ?? "Buchung";
+  const wasDraggedRef = useRef(false);
+
+  function openFromPointer(event: React.PointerEvent<HTMLElement> | React.MouseEvent<HTMLElement>) {
+    if ("button" in event && event.button !== 0) return;
+    const target = event.target;
+    if (target instanceof Element && target.closest(".booking-resize-handle")) return;
+    if (wasDraggedRef.current) return;
+    event.stopPropagation();
+    onOpen();
+  }
+
   return (
     <article
       className={`booking-card status-card ${task ? statusMeta[task.status].className : "loose-booking"} ${task?.archived ? "archived-booking" : ""} ${isEditing ? "editing" : ""}`}
       data-booking-id={booking.id}
       draggable
       onDragStart={(event) => {
+        wasDraggedRef.current = true;
         event.currentTarget.classList.add("dragging-source");
         onDrag();
       }}
       onDragEnd={(event) => {
         event.currentTarget.classList.remove("dragging-source");
         onDragEnd();
+        window.setTimeout(() => {
+          wasDraggedRef.current = false;
+        }, 0);
       }}
-      onClick={onOpen}
+      onClick={openFromPointer}
+      onPointerUp={openFromPointer}
       title="Buchung bearbeiten"
     >
       <div className="booking-head">
