@@ -42,6 +42,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 type TaskStatus = "Backlog" | "Ready" | "Started" | "Blocked" | "Done" | "Aborted";
 type TreeViewMode = "list" | "board" | "hierarchy";
+type CalendarViewMode = "days" | "month";
 type AuthUser = { id: number; email: string };
 type UserProfile = { name?: string; initials?: string; timezone?: string };
 type UserSettingsState = {
@@ -140,6 +141,7 @@ type AppSettings = {
   calendarEndTime: string;
   showWeekends: boolean;
   visibleDayCount: number;
+  calendarView: CalendarViewMode;
   taskView: TreeViewMode;
   treeFilters: TreeFilterSettings;
   boardHiddenStatuses: TaskStatus[];
@@ -193,6 +195,7 @@ const defaultSettings: AppSettings = {
   calendarEndTime: "20:00",
   showWeekends: false,
   visibleDayCount: 7,
+  calendarView: "days",
   taskView: "list",
   treeFilters: {
     query: "",
@@ -223,6 +226,39 @@ function addDays(date: string, count: number) {
   const next = new Date(`${date}T12:00:00`);
   next.setDate(next.getDate() + count);
   return next.toISOString().slice(0, 10);
+}
+
+function startOfMonth(date: string) {
+  return `${date.slice(0, 7)}-01`;
+}
+
+function addMonths(date: string, count: number) {
+  const next = new Date(`${startOfMonth(date)}T12:00:00`);
+  next.setMonth(next.getMonth() + count);
+  return next.toISOString().slice(0, 10);
+}
+
+function endOfMonth(date: string) {
+  return addDays(addMonths(date, 1), -1);
+}
+
+function createMonthDays(monthStart: string, showWeekends: boolean) {
+  const days: string[] = [];
+  let cursor = startOfMonth(monthStart);
+  const monthKey = cursor.slice(0, 7);
+  while (cursor.slice(0, 7) === monthKey) {
+    if (showWeekends || !isWeekend(cursor)) days.push(cursor);
+    cursor = addDays(cursor, 1);
+  }
+  return days;
+}
+
+function formatMonthTitle(monthStart: string) {
+  return new Intl.DateTimeFormat("de-DE", { month: "long", year: "numeric" }).format(new Date(`${monthStart}T12:00:00`));
+}
+
+function formatMonthTileDay(date: string) {
+  return new Intl.DateTimeFormat("de-DE", { day: "2-digit" }).format(new Date(`${date}T12:00:00`));
 }
 
 function formatDate(date: string) {
@@ -269,6 +305,21 @@ function timeFromDateTime(value: string) {
 
 function minutesBetween(startAt: string, endAt: string) {
   return Math.max(0, Math.round((new Date(endAt).getTime() - new Date(startAt).getTime()) / 60_000));
+}
+
+function externalBookedMinutes(events: GoogleCalendarEvent[], capacity: DailyCapacity) {
+  return events.reduce((sum, event) => {
+    if (!event.blocksTime) return sum;
+    return sum + (event.allDay ? capacity.dayCapacityMinutes : minutesBetween(event.startAt, event.endAt));
+  }, 0);
+}
+
+function capacityLevelFor(bookedMinutes: number, capacity: DailyCapacity) {
+  const redCapacityThreshold =
+    capacity.planningCapacityMinutes + (capacity.dayCapacityMinutes - capacity.planningCapacityMinutes) * 0.8;
+  if (bookedMinutes >= redCapacityThreshold) return "over-plan";
+  if (bookedMinutes >= capacity.planningCapacityMinutes * 0.8) return "near-plan";
+  return "under-plan";
 }
 
 function plainTextFromHtml(value?: string) {
@@ -407,11 +458,13 @@ function normalizeTasks(tasks: Task[]): Task[] {
 
 function normalizeState(rawState: AppState): AppState {
   const rawTaskView = rawState.settings?.taskView;
+  const rawCalendarView = rawState.settings?.calendarView;
   return {
     ...rawState,
     settings: {
       ...defaultSettings,
       ...(rawState.settings ?? {}),
+      calendarView: rawCalendarView === "month" ? "month" : "days",
       taskView: rawTaskView === "board" || rawTaskView === "hierarchy" ? rawTaskView : "list",
       treeFilters: normalizeTreeFilters(rawState.settings?.treeFilters),
       boardHiddenStatuses: normalizeTaskStatuses(rawState.settings?.boardHiddenStatuses),
@@ -499,6 +552,7 @@ function App() {
   const [dragPayload, setDragPayload] = useState<DragPayload | null>(null);
   const [calendarStartDate, setCalendarStartDate] = useState(today);
   const [loadedCalendarDays, setLoadedCalendarDays] = useState<string[]>([]);
+  const [loadedCalendarMonths, setLoadedCalendarMonths] = useState<string[]>(() => [startOfMonth(today)]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [userPanel, setUserPanel] = useState<"menu" | "settings" | "gcal" | "icloud" | null>(null);
   const [userSettings, setUserSettings] = useState<UserSettingsState | null>(null);
@@ -870,6 +924,13 @@ function App() {
     }
   }
 
+  async function refreshExternalCalendarEvents() {
+    await Promise.all([
+      loadGoogleCalendarEvents(visibleRangeStart, visibleRangeEnd, true),
+      loadICloudCalendarEvents(visibleRangeStart, visibleRangeEnd, true)
+    ]);
+  }
+
   async function logout() {
     try {
       await fetch("/api/auth/logout", {
@@ -1001,8 +1062,19 @@ function App() {
     [calendarStartDate, settings.showWeekends, settings.visibleDayCount]
   );
   const days = loadedCalendarDays.length > 0 ? loadedCalendarDays : currentCalendarPeriod;
-  const visibleRangeStart = days.length > 0 ? days[0] : calendarStartDate;
-  const visibleRangeEnd = days.length > 0 ? days[days.length - 1] : calendarStartDate;
+  const calendarMonths = loadedCalendarMonths.length > 0 ? loadedCalendarMonths : [startOfMonth(calendarStartDate)];
+  const visibleRangeStart =
+    settings.calendarView === "month"
+      ? calendarMonths[0]
+      : days.length > 0
+        ? days[0]
+        : calendarStartDate;
+  const visibleRangeEnd =
+    settings.calendarView === "month"
+      ? endOfMonth(calendarMonths[calendarMonths.length - 1])
+      : days.length > 0
+        ? days[days.length - 1]
+        : calendarStartDate;
   const externalCalendarEvents = useMemo(
     () => [...googleCalendarEvents, ...iCloudCalendarEvents],
     [googleCalendarEvents, iCloudCalendarEvents]
@@ -1855,16 +1927,53 @@ function App() {
     return Array.from(new Set([...currentDays, ...nextDays])).sort((a, b) => a.localeCompare(b));
   }
 
+  function mergeCalendarMonths(currentMonths: string[], nextMonths: string[]) {
+    return Array.from(new Set([...currentMonths, ...nextMonths].map(startOfMonth))).sort((a, b) => a.localeCompare(b));
+  }
+
   function loadCalendarPeriod(startDate: string) {
     const period = createCalendarPeriod(startDate, settings.visibleDayCount, settings.showWeekends);
     setCalendarStartDate(startDate);
     setLoadedCalendarDays((currentDays) => mergeCalendarDays(currentDays.length > 0 ? currentDays : days, period));
   }
 
+  function loadCalendarMonth(monthStart: string) {
+    const normalizedMonth = startOfMonth(monthStart);
+    setCalendarStartDate(normalizedMonth);
+    setLoadedCalendarMonths((currentMonths) =>
+      mergeCalendarMonths(currentMonths.length > 0 ? currentMonths : calendarMonths, [normalizedMonth])
+    );
+  }
+
+  function setCalendarView(calendarView: CalendarViewMode) {
+    if (calendarView === "month") {
+      const anchorDate = days.includes(today) ? today : calendarStartDate;
+      const monthStart = startOfMonth(anchorDate);
+      setCalendarStartDate(anchorDate);
+      setLoadedCalendarMonths((currentMonths) =>
+        currentMonths.includes(monthStart) ? currentMonths : mergeCalendarMonths(currentMonths, [monthStart])
+      );
+    } else {
+      const anchorDate =
+        calendarMonths.some((monthStart) => today >= monthStart && today <= endOfMonth(monthStart)) ? today : calendarStartDate;
+      setCalendarStartDate(anchorDate);
+      setLoadedCalendarDays(createCalendarPeriod(anchorDate, settings.visibleDayCount, settings.showWeekends));
+    }
+    updateSettings({ calendarView });
+  }
+
   function resetCalendarToToday() {
     const period = createCalendarPeriod(today, settings.visibleDayCount, settings.showWeekends);
     setCalendarStartDate(today);
     setLoadedCalendarDays(period);
+    setLoadedCalendarMonths([startOfMonth(today)]);
+  }
+
+  function openDayFromMonth(date: string) {
+    const period = createCalendarPeriod(date, settings.visibleDayCount, settings.showWeekends);
+    setCalendarStartDate(date);
+    setLoadedCalendarDays(period);
+    setCalendarView("days");
   }
 
   async function importTaskspace(file: File | undefined) {
@@ -2325,6 +2434,16 @@ function App() {
           collapsed={settings.panelsCollapsed.cal}
           onToggle={() => togglePanel("cal")}
           className="cal-panel"
+          headerActions={
+            <div className="view-chips calendar-view-chips" aria-label="Kalenderansicht">
+              <button className={`view-chip ${settings.calendarView === "days" ? "active" : ""}`} onClick={() => setCalendarView("days")}>
+                Tag
+              </button>
+              <button className={`view-chip ${settings.calendarView === "month" ? "active" : ""}`} onClick={() => setCalendarView("month")}>
+                Monat
+              </button>
+            </div>
+          }
         >
           <div className="cal-tools">
             <div className="quick-add">
@@ -2355,6 +2474,7 @@ function App() {
               aria-label="Sichtbare Tage"
               value={settings.visibleDayCount}
               onChange={(event) => updateSettings({ visibleDayCount: Number(event.target.value) })}
+              disabled={settings.calendarView === "month"}
             >
               {visibleDayOptions.map((count) => (
                 <option key={count} value={count}>
@@ -2369,56 +2489,76 @@ function App() {
             >
               Wochenende
             </button>
-            <button className="soft-button icon-button" title="Vorherige Periode laden" onClick={() => loadCalendarPeriod(addDays(calendarStartDate, -settings.visibleDayCount))}>
+            <button
+              className="soft-button icon-button"
+              title={settings.calendarView === "month" ? "Vorherigen Monat laden" : "Vorherige Periode laden"}
+              onClick={() =>
+                settings.calendarView === "month"
+                  ? loadCalendarMonth(addMonths(calendarMonths[0], -1))
+                  : loadCalendarPeriod(addDays(calendarStartDate, -settings.visibleDayCount))
+              }
+            >
               <ChevronLeft size={15} />
             </button>
             <button className="soft-button today-button" onClick={resetCalendarToToday}>
               Heute
             </button>
-            <button className="soft-button icon-button" title="Nächste Periode laden" onClick={() => loadCalendarPeriod(addDays(calendarStartDate, settings.visibleDayCount))}>
+            <button
+              className="soft-button icon-button"
+              title={settings.calendarView === "month" ? "Nächsten Monat laden" : "Nächste Periode laden"}
+              onClick={() =>
+                settings.calendarView === "month"
+                  ? loadCalendarMonth(addMonths(calendarMonths[calendarMonths.length - 1], 1))
+                  : loadCalendarPeriod(addDays(calendarStartDate, settings.visibleDayCount))
+              }
+            >
               <ChevronRight size={15} />
             </button>
             <button
-              className={`soft-button icon-button ${googleCalendarEventsLoading ? "syncing" : ""}`}
-              title={googleCalendarEventsLoading ? "Google Calendar wird aktualisiert" : "Google Calendar Events aktualisieren"}
-              disabled={googleCalendarEventsLoading}
-              onClick={() => void loadGoogleCalendarEvents(visibleRangeStart, visibleRangeEnd, true)}
-            >
-              <RotateCcw size={15} />
-            </button>
-            <button
-              className={`soft-button icon-button ${iCloudCalendarEventsLoading ? "syncing" : ""}`}
-              title={iCloudCalendarEventsLoading ? "iCloud Kalender wird aktualisiert" : "iCloud Events aktualisieren"}
-              disabled={iCloudCalendarEventsLoading}
-              onClick={() => void loadICloudCalendarEvents(visibleRangeStart, visibleRangeEnd, true)}
+              className={`soft-button icon-button ${googleCalendarEventsLoading || iCloudCalendarEventsLoading ? "syncing" : ""}`}
+              title={googleCalendarEventsLoading || iCloudCalendarEventsLoading ? "Kalender werden aktualisiert" : "Externe Kalender aktualisieren"}
+              disabled={googleCalendarEventsLoading || iCloudCalendarEventsLoading}
+              onClick={() => void refreshExternalCalendarEvents()}
             >
               <RotateCcw size={15} />
             </button>
           </div>
           <div className="calendar-scroll">
-            <div className="calendar-grid" style={{ gridTemplateColumns: `repeat(${days.length}, minmax(220px, 1fr))` }}>
-              {days.map((date) => (
-                <DayColumn
-                  key={date}
-                  date={date}
-                  bookings={state.bookings.filter((booking) => booking.date === date)}
-                  googleEvents={externalEventsByDate.get(date) ?? []}
-                  capacity={state.dailyCapacities?.[date] ?? defaultCapacity}
-                  calendarStartMinutes={calendarStartMinutes}
-                  calendarEndMinutes={calendarEndMinutes}
-                  timeOptions={timeOptions}
-                  taskById={taskById}
-                  onDrop={handleDrop}
-                  onBookingDrag={(bookingId) => setDragPayload({ kind: "booking", bookingId })}
-                  onBookingDragEnd={() => setDragPayload(null)}
-                  isDragging={dragPayload !== null}
-                  onBookingChange={updateBooking}
-                  onBookingDelete={deleteBooking}
-                  onOpenTask={scrollToTask}
-                  onCapacityChange={(patch) => updateDailyCapacity(date, patch)}
-                />
-              ))}
-            </div>
+            {settings.calendarView === "month" ? (
+              <MonthCalendarView
+                months={calendarMonths}
+                showWeekends={settings.showWeekends}
+                bookings={state.bookings}
+                externalEventsByDate={externalEventsByDate}
+                dailyCapacities={state.dailyCapacities ?? {}}
+                defaultCapacity={defaultCapacity}
+                onOpenDay={openDayFromMonth}
+              />
+            ) : (
+              <div className="calendar-grid" style={{ gridTemplateColumns: `repeat(${days.length}, minmax(220px, 1fr))` }}>
+                {days.map((date) => (
+                  <DayColumn
+                    key={date}
+                    date={date}
+                    bookings={state.bookings.filter((booking) => booking.date === date)}
+                    googleEvents={externalEventsByDate.get(date) ?? []}
+                    capacity={state.dailyCapacities?.[date] ?? defaultCapacity}
+                    calendarStartMinutes={calendarStartMinutes}
+                    calendarEndMinutes={calendarEndMinutes}
+                    timeOptions={timeOptions}
+                    taskById={taskById}
+                    onDrop={handleDrop}
+                    onBookingDrag={(bookingId) => setDragPayload({ kind: "booking", bookingId })}
+                    onBookingDragEnd={() => setDragPayload(null)}
+                    isDragging={dragPayload !== null}
+                    onBookingChange={updateBooking}
+                    onBookingDelete={deleteBooking}
+                    onOpenTask={scrollToTask}
+                    onCapacityChange={(patch) => updateDailyCapacity(date, patch)}
+                  />
+                ))}
+              </div>
+            )}
             {googleCalendarEventsError && <div className="calendar-error">{googleCalendarEventsError}</div>}
             {iCloudCalendarEventsError && <div className="calendar-error">{iCloudCalendarEventsError}</div>}
           </div>
@@ -3197,6 +3337,98 @@ function TaskTagPicker({ allTags, task, onTags }: { allTags: string[]; task: Tas
   );
 }
 
+function MonthCalendarView({
+  months,
+  showWeekends,
+  bookings,
+  externalEventsByDate,
+  dailyCapacities,
+  defaultCapacity,
+  onOpenDay
+}: {
+  months: string[];
+  showWeekends: boolean;
+  bookings: Booking[];
+  externalEventsByDate: Map<string, GoogleCalendarEvent[]>;
+  dailyCapacities: Record<string, DailyCapacity>;
+  defaultCapacity: DailyCapacity;
+  onOpenDay: (date: string) => void;
+}) {
+  const bookingsByDate = useMemo(() => {
+    const byDate = new Map<string, Booking[]>();
+    for (const booking of bookings) byDate.set(booking.date, [...(byDate.get(booking.date) ?? []), booking]);
+    return byDate;
+  }, [bookings]);
+  const weekdayLabels = showWeekends ? ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"] : ["Mo", "Di", "Mi", "Do", "Fr"];
+
+  function leadingCells(firstVisibleDay: string) {
+    const day = new Date(`${firstVisibleDay}T12:00:00`).getDay();
+    const mondayBased = (day + 6) % 7;
+    return showWeekends ? mondayBased : Math.min(mondayBased, 4);
+  }
+
+  return (
+    <div className="month-strip">
+      {months.map((monthStart) => {
+        const monthDays = createMonthDays(monthStart, showWeekends);
+        const blanks = monthDays.length > 0 ? leadingCells(monthDays[0]) : 0;
+        return (
+          <section className="month-panel" key={monthStart}>
+            <header>{formatMonthTitle(monthStart)}</header>
+            <div className="month-weekdays" style={{ gridTemplateColumns: `repeat(${weekdayLabels.length}, minmax(92px, 1fr))` }}>
+              {weekdayLabels.map((label) => (
+                <span key={label}>{label}</span>
+              ))}
+            </div>
+            <div className="month-grid" style={{ gridTemplateColumns: `repeat(${weekdayLabels.length}, minmax(92px, 1fr))` }}>
+              {Array.from({ length: blanks }, (_, index) => (
+                <div className="month-empty-cell" key={`blank-${index}`} />
+              ))}
+              {monthDays.map((date) => {
+                const capacity = dailyCapacities[date] ?? defaultCapacity;
+                const capcalMinutes = (bookingsByDate.get(date) ?? []).reduce((sum, booking) => sum + booking.durationMinutes, 0);
+                const externalEvents = externalEventsByDate.get(date) ?? [];
+                const externalMinutes = externalBookedMinutes(externalEvents, capacity);
+                const bookedMinutes = capcalMinutes + externalMinutes;
+                const bookingCount = (bookingsByDate.get(date) ?? []).length + externalEvents.length;
+                const bookedPercent = capacity.dayCapacityMinutes > 0 ? (bookedMinutes / capacity.dayCapacityMinutes) * 100 : 0;
+                const fillPercent = Math.min(100, bookedPercent);
+                const level = capacityLevelFor(bookedMinutes, capacity);
+                const isOverbooked = bookedMinutes > capacity.dayCapacityMinutes;
+                return (
+                  <button
+                    className={`month-day-tile ${date === today ? "today-month-day" : ""} ${isWeekend(date) ? "weekend" : ""} ${level} ${isOverbooked ? "overbooked" : ""}`}
+                    key={date}
+                    style={{ "--month-fill": `${fillPercent}%` } as React.CSSProperties}
+                    onClick={() => onOpenDay(date)}
+                    title={`${formatDate(date)}: ${minutesToLabel(bookedMinutes)} gebucht von ${minutesToLabel(capacity.dayCapacityMinutes)}`}
+                  >
+                    <span className="month-day-head">
+                      <strong>{formatMonthTileDay(date)}</strong>
+                      <span className="month-day-load">
+                        <em>{minutesToLabel(bookedMinutes)}</em>
+                        <small>{Math.round(bookedPercent)}%</small>
+                        {bookingCount > 0 && (
+                          <span className="month-booking-markers" aria-label={`${bookingCount} Buchungen`}>
+                            {Array.from({ length: Math.min(bookingCount, 10) }, (_, index) => (
+                              <i key={index} />
+                            ))}
+                            {bookingCount > 10 && <b>+</b>}
+                          </span>
+                        )}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
 function DayColumn({
   date,
   bookings,
@@ -3240,10 +3472,7 @@ function DayColumn({
   const dayColumnRef = useRef<HTMLElement | null>(null);
   const allocations = bookings.filter((booking) => !booking.startTime);
   const scheduled = bookings.filter((booking) => booking.startTime).sort((a, b) => a.startTime!.localeCompare(b.startTime!));
-  const googleBlockingMinutes = googleEvents.reduce((sum, event) => {
-    if (!event.blocksTime) return sum;
-    return sum + (event.allDay ? capacity.dayCapacityMinutes : minutesBetween(event.startAt, event.endAt));
-  }, 0);
+  const googleBlockingMinutes = externalBookedMinutes(googleEvents, capacity);
   const googleAllocations = googleEvents.filter((event) => event.allDay);
   const googleScheduled = googleEvents
     .filter((event) => !event.allDay)
@@ -3251,14 +3480,7 @@ function DayColumn({
   const bookedMinutes = bookings.reduce((sum, booking) => sum + booking.durationMinutes, 0) + googleBlockingMinutes;
   const fillPercent = Math.min(100, (bookedMinutes / capacity.dayCapacityMinutes) * 100);
   const planningPercent = Math.min(100, (capacity.planningCapacityMinutes / capacity.dayCapacityMinutes) * 100);
-  const redCapacityThreshold =
-    capacity.planningCapacityMinutes + (capacity.dayCapacityMinutes - capacity.planningCapacityMinutes) * 0.8;
-  const capacityLevel =
-    bookedMinutes >= redCapacityThreshold
-      ? "over-plan"
-      : bookedMinutes >= capacity.planningCapacityMinutes * 0.8
-        ? "near-plan"
-        : "under-plan";
+  const capacityLevel = capacityLevelFor(bookedMinutes, capacity);
   const isOverflowingDay = bookedMinutes > capacity.dayCapacityMinutes;
   const timelineHeight = (calendarEndMinutes - calendarStartMinutes) * minuteHeight;
   const firstHour = Math.ceil(calendarStartMinutes / 60);

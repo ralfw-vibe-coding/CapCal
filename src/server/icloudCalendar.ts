@@ -1,6 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import { createRequire } from "node:module";
 import ICAL from "ical.js";
-import tsdav, { type DAVCalendar } from "tsdav";
+import type { DAVCalendar } from "tsdav";
 import type { AuthUser } from "./auth";
 import { ensureAuthSchema } from "./auth";
 import {
@@ -34,7 +35,8 @@ type ICloudCredentialsInput = {
 };
 
 const iCloudServerUrl = "https://caldav.icloud.com";
-const { createDAVClient } = tsdav;
+const require = createRequire(import.meta.url);
+const { createDAVClient } = require("tsdav") as typeof import("tsdav");
 
 function secret() {
   return getEnv("AUTH_SESSION_SECRET") ?? "capcal-local-dev-session-secret";

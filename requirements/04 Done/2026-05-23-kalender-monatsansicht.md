@@ -60,7 +60,7 @@ aber die flächige Einfärbung macht den Monatsüberblick auf einen Blick lesbar
 Dieselbe Logik wie in der Tagesansicht:
 
 ```
-Auslastung = (gebuchte Minuten + GCal-Event-Minuten) / Tageskapazität
+Auslastung = (gebuchte Minuten + externe Kalender-Event-Minuten) / Tageskapazität
 ```
 
 - 0 % → weiß / hellgrau
@@ -87,3 +87,25 @@ Auslastung = (gebuchte Minuten + GCal-Event-Minuten) / Tageskapazität
 ## Offene Fragen
 
 - Soll der aktuelle Tag hervorgehoben werden (z.B. Rahmen)?
+
+## Festlegung
+
+- Die Monatsansicht nutzt wie die Tagesansicht eine horizontal scrollbare Strecke.
+- Beim Öffnen ist zunächst der aktuelle Monat sichtbar.
+- Blättern nach links/rechts lädt weitere Monate zusätzlich; geladene Monate bleiben bis zum Reload sichtbar.
+- Die geladenen Monate werden nicht im App-State gespeichert.
+
+---
+
+## Abschlussnotiz 2026-05-23
+
+Umgesetzt wurde die erste Monatsansicht:
+
+- Im Kalender kann zwischen `Tage` und `Monat` umgeschaltet werden; die Auswahl wird im App-State gespeichert.
+- Die Monatsansicht startet mit dem aktuellen Monat.
+- Pfeile laden vorherige/nächste Monate zusätzlich; die geladenen Monate bleiben horizontal scrollbar sichtbar.
+- Monatskacheln zeigen pro Tag die gebuchte Kapazität aus CapCal-Buchungen plus externen Kalender-Events.
+- Die Kacheln sind flächig nach Auslastung eingefärbt und übernehmen die grün/gelb/rot-Logik der Tageskapazität.
+- Wochenenden folgen der bestehenden Einstellung `Wochenende anzeigen`.
+- Klick auf eine Tageskachel wechselt zurück in die Tagesansicht und springt zu diesem Tag.
+- Der heutige Tag wird auch in der Monatsansicht mit einem kräftigeren Rahmen hervorgehoben.
