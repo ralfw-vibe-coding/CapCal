@@ -25,3 +25,8 @@
   from = "/api/gcal/*"
   to = "/.netlify/functions/gcal"
   status = 200
+
+[[redirects]]
+  from = "/api/icloud/*"
+  to = "/.netlify/functions/icloud"
+  status = 200

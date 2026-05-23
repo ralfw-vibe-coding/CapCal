@@ -308,3 +308,17 @@ In den Taskspace-Einstellungen unter "Google Calendar":
 - Ganztages-Events in der Kapazität einbeziehen: default nein, aber konfigurierbar
 - Soll die GCal-Verbindung pro User oder pro Taskspace konfiguriert werden?
   (Empfehlung: pro User, da jeder seinen eigenen Google-Account hat)
+
+---
+
+## Abschlussnotiz 2026-05-23
+
+Umgesetzt wurde die erste produktive Stufe der Google-Calendar-Integration:
+
+- Google Calendar kann pro User per OAuth verbunden und wieder getrennt werden.
+- Der User kann relevante Google-Kalender auswählen und die Auswahl später ändern.
+- Google-Events werden separat von CapCal-Buchungen geladen und gecacht, nicht als Buchungen in den Taskspace geschrieben.
+- Der sichtbare Cal-Zeitraum lädt die passenden Google-Events nach; ein manueller Refresh aktualisiert den Event-Cache sofort.
+- Google-Events werden read-only im Kalender angezeigt, visuell von CapCal-Buchungen unterschieden und über ein Detailpanel geöffnet.
+- Nur busy Events zählen in die gebuchte Tageskapazität; busy Ganztagesevents zählen mit der Tageskapazität.
+- Export von CapCal-Buchungen nach Google Calendar und bidirektionale Synchronisation bleiben bewusst spätere Ausbaustufen.

@@ -1,16 +1,23 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { neon } from "@neondatabase/serverless";
 import type { AuthUser } from "./auth";
 import { ensureAuthSchema } from "./auth";
+import {
+  addIsoDays,
+  dateTimeForDate,
+  deleteExternalEvent,
+  ensureExternalCalendarSchema,
+  hasFreshCacheWindow,
+  normalizeDateParam,
+  readExternalEvents,
+  rememberCacheWindow,
+  sql,
+  upsertExternalEvent,
+  type ExternalCalendarEvent,
+  type ExternalCalendarItem
+} from "./externalCalendarCache";
 import { getEnv } from "./storage/env";
 
-export type GoogleCalendarItem = {
-  id: string;
-  summary: string;
-  color?: string;
-  selected: boolean;
-  syncedAt?: string;
-};
+export type GoogleCalendarItem = ExternalCalendarItem;
 
 export type GoogleCalendarSettings = {
   connected: boolean;
@@ -21,32 +28,9 @@ export type GoogleCalendarSettings = {
   updatedAt?: string;
 };
 
-export type GoogleCalendarExternalEvent = {
-  id: string;
-  calendarId: string;
-  calendarSummary: string;
-  calendarColor?: string;
-  summary: string;
-  startAt: string;
-  endAt: string;
-  allDay: boolean;
-  blocksTime: boolean;
-  htmlLink?: string;
-  location?: string;
-  description?: string;
-  organizer?: string;
-  creator?: string;
-  attendeeSummary?: string;
-};
+export type GoogleCalendarExternalEvent = ExternalCalendarEvent;
 
 const googleScopes = ["openid", "email", "https://www.googleapis.com/auth/calendar.readonly"];
-const eventCacheMaxAgeMinutes = 5;
-
-function sql() {
-  const databaseUrl = getEnv("DATABASE_URL");
-  if (!databaseUrl) throw new Error("DATABASE_URL is required for Google Calendar");
-  return neon(databaseUrl);
-}
 
 function secret() {
   return getEnv("AUTH_SESSION_SECRET") ?? "capcal-local-dev-session-secret";
@@ -177,35 +161,7 @@ async function saveStoredSettings(userId: number, settings: GoogleCalendarSettin
 async function ensureGoogleSchema() {
   await ensureAuthSchema();
   await sql()`ALTER TABLE users ADD COLUMN IF NOT EXISTS google_calendar JSONB NOT NULL DEFAULT '{}'`;
-  await sql()`
-    CREATE TABLE IF NOT EXISTS google_calendar_event_cache (
-      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      calendar_id TEXT NOT NULL,
-      event_id TEXT NOT NULL,
-      start_at TIMESTAMPTZ,
-      end_at TIMESTAMPTZ,
-      all_day BOOLEAN NOT NULL DEFAULT false,
-      summary TEXT,
-      transparency TEXT,
-      status TEXT,
-      html_link TEXT,
-      updated_at TIMESTAMPTZ,
-      raw JSONB,
-      cached_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      PRIMARY KEY (user_id, calendar_id, event_id)
-    )
-  `;
-  await sql()`CREATE INDEX IF NOT EXISTS google_calendar_event_cache_range ON google_calendar_event_cache (user_id, calendar_id, start_at, end_at)`;
-  await sql()`
-    CREATE TABLE IF NOT EXISTS google_calendar_cache_windows (
-      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      calendar_id TEXT NOT NULL,
-      from_date DATE NOT NULL,
-      to_date DATE NOT NULL,
-      cached_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      PRIMARY KEY (user_id, calendar_id, from_date, to_date)
-    )
-  `;
+  await ensureExternalCalendarSchema();
 }
 
 export async function googleCalendarStatus(user: AuthUser) {
@@ -281,25 +237,6 @@ async function fetchCalendars(accessToken: string, selectedIds = new Set<string>
     .filter((item): item is GoogleCalendarItem => Boolean(item));
 }
 
-function isDateString(value: string) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value);
-}
-
-function normalizeDateParam(value: string, name: string) {
-  if (!isDateString(value)) throw new Error(`${name} must be YYYY-MM-DD`);
-  return value;
-}
-
-function dateTimeForDate(date: string, endOfDay = false) {
-  return `${date}T${endOfDay ? "23:59:59" : "00:00:00"}`;
-}
-
-function addIsoDays(date: string, days: number) {
-  const next = new Date(`${date}T12:00:00Z`);
-  next.setUTCDate(next.getUTCDate() + days);
-  return next.toISOString().slice(0, 10);
-}
-
 function eventDateTime(raw: unknown, fallbackEnd = false) {
   const value = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   if (typeof value.dateTime === "string") return { value: value.dateTime, allDay: false };
@@ -365,71 +302,25 @@ async function fetchGoogleEvents(accessToken: string, calendarId: string, from: 
 
 async function refreshEventsForCalendar(userId: number, accessToken: string, calendarId: string, from: string, to: string) {
   const events = await fetchGoogleEvents(accessToken, calendarId, from, to);
-  const db = sql();
   for (const rawEvent of events) {
     if (!rawEvent.id) continue;
     if (rawEvent.status === "cancelled") {
-      await db`
-        DELETE FROM google_calendar_event_cache
-        WHERE user_id = ${userId}
-          AND calendar_id = ${calendarId}
-          AND event_id = ${rawEvent.id}
-      `;
+      await deleteExternalEvent("google", userId, calendarId, rawEvent.id);
       continue;
     }
     const event = normalizeGoogleEvent(rawEvent);
     if (!event) continue;
-    await db`
-      INSERT INTO google_calendar_event_cache (
-        user_id,
-        calendar_id,
-        event_id,
-        start_at,
-        end_at,
-        all_day,
-        summary,
-        transparency,
-        status,
-        html_link,
-        updated_at,
-        raw,
-        cached_at
-      )
-      VALUES (
-        ${userId},
-        ${calendarId},
-        ${event.eventId},
-        ${event.startAt},
-        ${event.endAt},
-        ${event.allDay},
-        ${event.summary},
-        ${event.transparency},
-        ${event.status},
-        ${event.htmlLink ?? null},
-        ${event.updatedAt ?? null},
-        ${JSON.stringify(rawEvent)}::jsonb,
-        NOW()
-      )
-      ON CONFLICT (user_id, calendar_id, event_id)
-      DO UPDATE SET
-        start_at = EXCLUDED.start_at,
-        end_at = EXCLUDED.end_at,
-        all_day = EXCLUDED.all_day,
-        summary = EXCLUDED.summary,
-        transparency = EXCLUDED.transparency,
-        status = EXCLUDED.status,
-        html_link = EXCLUDED.html_link,
-        updated_at = EXCLUDED.updated_at,
-        raw = EXCLUDED.raw,
-        cached_at = NOW()
-    `;
+    await upsertExternalEvent("google", userId, calendarId, {
+      ...event,
+      raw: {
+        ...rawEvent,
+        organizer: event.organizer,
+        creator: event.creator,
+        attendeeSummary: event.attendeeSummary
+      }
+    });
   }
-  await db`
-    INSERT INTO google_calendar_cache_windows (user_id, calendar_id, from_date, to_date, cached_at)
-    VALUES (${userId}, ${calendarId}, ${from}, ${to}, NOW())
-    ON CONFLICT (user_id, calendar_id, from_date, to_date)
-    DO UPDATE SET cached_at = NOW()
-  `;
+  await rememberCacheWindow("google", userId, calendarId, from, to);
 }
 
 export async function googleCalendarEvents(user: AuthUser, fromInput: string, toInput: string, forceRefresh = false) {
@@ -441,69 +332,14 @@ export async function googleCalendarEvents(user: AuthUser, fromInput: string, to
   const selectedCalendars = settings.calendars.filter((calendar) => calendar.selected);
   if (selectedCalendars.length === 0) return { events: [] };
 
-  const db = sql();
   const accessToken = await accessTokenFromRefreshToken(settings.refreshTokenEncrypted);
   for (const calendar of selectedCalendars) {
-    const freshWindowRows = (await db`
-      SELECT COUNT(*)::int AS count
-      FROM google_calendar_cache_windows
-      WHERE user_id = ${user.id}
-        AND calendar_id = ${calendar.id}
-        AND from_date <= ${from}::date
-        AND to_date >= ${to}::date
-        AND cached_at > NOW() - (${eventCacheMaxAgeMinutes} * INTERVAL '1 minute')
-    `) as { count: number }[];
-    if (forceRefresh || (freshWindowRows[0]?.count ?? 0) === 0) await refreshEventsForCalendar(user.id, accessToken, calendar.id, from, to);
+    if (forceRefresh || !(await hasFreshCacheWindow("google", user.id, calendar.id, from, to))) {
+      await refreshEventsForCalendar(user.id, accessToken, calendar.id, from, to);
+    }
   }
 
-  const calendarMetaById = new Map(selectedCalendars.map((calendar) => [calendar.id, calendar]));
-  const rows = (await db`
-    SELECT calendar_id, event_id, start_at, end_at, all_day, summary, transparency, status, html_link
-      , raw
-    FROM google_calendar_event_cache
-    WHERE user_id = ${user.id}
-      AND calendar_id = ANY(${selectedCalendars.map((calendar) => calendar.id)})
-      AND status <> 'cancelled'
-      AND start_at < ${addIsoDays(to, 1)}::timestamptz
-      AND end_at > ${from}::timestamptz
-    ORDER BY start_at
-  `) as {
-    calendar_id: string;
-    event_id: string;
-    start_at: Date | string;
-    end_at: Date | string;
-    all_day: boolean;
-    summary: string | null;
-    transparency: string | null;
-    status: string | null;
-    html_link: string | null;
-    raw: unknown;
-  }[];
-
-  return {
-    events: rows.map((row): GoogleCalendarExternalEvent => {
-      const calendar = calendarMetaById.get(row.calendar_id);
-      const transparency = row.transparency ?? "opaque";
-      const raw = row.raw && typeof row.raw === "object" ? (row.raw as GoogleRawEvent) : {};
-      return {
-        id: `${row.calendar_id}:${row.event_id}`,
-        calendarId: row.calendar_id,
-        calendarSummary: calendar?.summary ?? row.calendar_id,
-        calendarColor: calendar?.color,
-        summary: row.summary ?? "(Ohne Titel)",
-        startAt: new Date(row.start_at).toISOString(),
-        endAt: new Date(row.end_at).toISOString(),
-        allDay: row.all_day,
-        blocksTime: transparency !== "transparent",
-        htmlLink: row.html_link ?? undefined,
-        location: raw.location,
-        description: raw.description,
-        organizer: raw.organizer?.displayName ?? raw.organizer?.email,
-        creator: raw.creator?.displayName ?? raw.creator?.email,
-        attendeeSummary: Array.isArray(raw.attendees) && raw.attendees.length > 0 ? `${raw.attendees.length} Gäste` : undefined
-      };
-    })
-  };
+  return { events: await readExternalEvents("google", user.id, selectedCalendars, from, to) };
 }
 
 export async function googleCalendarCallback(code: string, state: string) {

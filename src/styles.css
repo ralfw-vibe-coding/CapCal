@@ -1794,7 +1794,7 @@ button:disabled {
   top: 8px;
 }
 
-.google-logo-mark {
+.calendar-provider-mark {
   background: linear-gradient(90deg, #4285f4 0 28%, #34a853 28% 48%, #fbbc05 48% 68%, #ea4335 68% 100%);
   background-clip: text;
   color: transparent;
@@ -1805,6 +1805,14 @@ button:disabled {
   line-height: 1;
   position: absolute;
   top: 14px;
+}
+
+.icloud-provider-mark {
+  background: none;
+  color: #1f2925;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+  font-size: 15px;
+  letter-spacing: 0;
 }
 
 .google-event-editor-actions .icon-button {

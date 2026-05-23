@@ -22,6 +22,14 @@ import {
   refreshGoogleCalendars,
   updateGoogleCalendarSelection
 } from "../src/server/googleCalendar";
+import {
+  connectICloudCalendar,
+  disconnectICloudCalendar,
+  iCloudCalendarEvents,
+  iCloudCalendarStatus,
+  refreshICloudCalendars,
+  updateICloudCalendarSelection
+} from "../src/server/icloudCalendar";
 import { createStateProvider } from "../src/server/storage";
 
 async function readBody(request: AsyncIterable<Uint8Array>) {
@@ -166,6 +174,71 @@ const server = createServer(async (request, response) => {
         return;
       }
       send(response, 200, await disconnectGoogleCalendar(user));
+      return;
+    }
+
+    if (url.pathname === "/api/icloud/status" && request.method === "GET") {
+      if (!user) {
+        send(response, 401, { error: "Unauthorized" });
+        return;
+      }
+      send(response, 200, await iCloudCalendarStatus(user));
+      return;
+    }
+
+    if (url.pathname === "/api/icloud/connect" && request.method === "POST") {
+      if (!user) {
+        send(response, 401, { error: "Unauthorized" });
+        return;
+      }
+      const body = JSON.parse(await readBody(request));
+      send(response, 200, await connectICloudCalendar(user, body));
+      return;
+    }
+
+    if (url.pathname === "/api/icloud/calendars" && request.method === "GET") {
+      if (!user) {
+        send(response, 401, { error: "Unauthorized" });
+        return;
+      }
+      send(response, 200, await refreshICloudCalendars(user));
+      return;
+    }
+
+    if (url.pathname === "/api/icloud/calendars" && request.method === "PUT") {
+      if (!user) {
+        send(response, 401, { error: "Unauthorized" });
+        return;
+      }
+      const body = JSON.parse(await readBody(request));
+      send(response, 200, await updateICloudCalendarSelection(user, body.selectedCalendarIds));
+      return;
+    }
+
+    if (url.pathname === "/api/icloud/events" && request.method === "GET") {
+      if (!user) {
+        send(response, 401, { error: "Unauthorized" });
+        return;
+      }
+      send(
+        response,
+        200,
+        await iCloudCalendarEvents(
+          user,
+          url.searchParams.get("from") ?? "",
+          url.searchParams.get("to") ?? "",
+          url.searchParams.get("refresh") === "1"
+        )
+      );
+      return;
+    }
+
+    if (url.pathname === "/api/icloud/disconnect" && request.method === "POST") {
+      if (!user) {
+        send(response, 401, { error: "Unauthorized" });
+        return;
+      }
+      send(response, 200, await disconnectICloudCalendar(user));
       return;
     }
 

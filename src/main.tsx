@@ -67,6 +67,7 @@ type GoogleCalendarState = {
 };
 type GoogleCalendarEvent = {
   id: string;
+  provider: "google" | "icloud";
   calendarId: string;
   calendarSummary: string;
   calendarColor?: string;
@@ -81,6 +82,14 @@ type GoogleCalendarEvent = {
   organizer?: string;
   creator?: string;
   attendeeSummary?: string;
+};
+type ICloudCalendarItem = GoogleCalendarItem;
+type ICloudCalendarState = {
+  connected: boolean;
+  appleId?: string;
+  calendars: ICloudCalendarItem[];
+  connectedAt?: string;
+  updatedAt?: string;
 };
 
 type Task = {
@@ -491,7 +500,7 @@ function App() {
   const [calendarStartDate, setCalendarStartDate] = useState(today);
   const [loadedCalendarDays, setLoadedCalendarDays] = useState<string[]>([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [userPanel, setUserPanel] = useState<"menu" | "settings" | "gcal" | null>(null);
+  const [userPanel, setUserPanel] = useState<"menu" | "settings" | "gcal" | "icloud" | null>(null);
   const [userSettings, setUserSettings] = useState<UserSettingsState | null>(null);
   const [userSettingsError, setUserSettingsError] = useState("");
   const [googleCalendar, setGoogleCalendar] = useState<GoogleCalendarState | null>(null);
@@ -499,6 +508,11 @@ function App() {
   const [googleCalendarEvents, setGoogleCalendarEvents] = useState<GoogleCalendarEvent[]>([]);
   const [googleCalendarEventsError, setGoogleCalendarEventsError] = useState("");
   const [googleCalendarEventsLoading, setGoogleCalendarEventsLoading] = useState(false);
+  const [iCloudCalendar, setICloudCalendar] = useState<ICloudCalendarState | null>(null);
+  const [iCloudCalendarError, setICloudCalendarError] = useState("");
+  const [iCloudCalendarEvents, setICloudCalendarEvents] = useState<GoogleCalendarEvent[]>([]);
+  const [iCloudCalendarEventsError, setICloudCalendarEventsError] = useState("");
+  const [iCloudCalendarEventsLoading, setICloudCalendarEventsLoading] = useState(false);
   const [expandedTaskIds, setExpandedTaskIds] = useState<Set<string>>(() => new Set());
   const [collapsedHierarchyTaskIds, setCollapsedHierarchyTaskIds] = useState<Set<string>>(() => new Set());
   const [hierarchySortTargetId, setHierarchySortTargetId] = useState<string | null>(null);
@@ -602,6 +616,7 @@ function App() {
     prefetchedUserIdRef.current = authUser.id;
     void loadUserSettings();
     void loadGoogleCalendar(false);
+    void loadICloudCalendar(false);
   }, [authUser]);
 
   async function saveCurrentState(options: { keepalive?: boolean } = {}) {
@@ -775,6 +790,86 @@ function App() {
     }
   }
 
+  async function loadICloudCalendar(refresh = false) {
+    setICloudCalendarError("");
+    try {
+      const response = await fetch(refresh ? "/api/icloud/calendars" : "/api/icloud/status", { credentials: "same-origin" });
+      if (!response.ok) throw new Error(await apiErrorMessage(response));
+      setICloudCalendar((await response.json()) as ICloudCalendarState);
+    } catch (error) {
+      setICloudCalendarError(error instanceof Error ? error.message : "iCloud Kalender konnten nicht geladen werden.");
+    }
+  }
+
+  async function connectICloudCalendar(appleId: string, appPassword: string) {
+    setICloudCalendarError("");
+    try {
+      const response = await fetch("/api/icloud/connect", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ appleId, appPassword })
+      });
+      if (!response.ok) throw new Error(await apiErrorMessage(response));
+      setICloudCalendar((await response.json()) as ICloudCalendarState);
+    } catch (error) {
+      setICloudCalendarError(error instanceof Error ? error.message : "iCloud konnte nicht verbunden werden.");
+    }
+  }
+
+  async function updateICloudCalendarSelection(selectedCalendarIds: string[]) {
+    setICloudCalendarError("");
+    try {
+      const response = await fetch("/api/icloud/calendars", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ selectedCalendarIds })
+      });
+      if (!response.ok) throw new Error(await apiErrorMessage(response));
+      setICloudCalendar((await response.json()) as ICloudCalendarState);
+    } catch (error) {
+      setICloudCalendarError(error instanceof Error ? error.message : "iCloud-Kalenderauswahl konnte nicht gespeichert werden.");
+    }
+  }
+
+  async function disconnectICloudCalendar() {
+    setICloudCalendarError("");
+    try {
+      const response = await fetch("/api/icloud/disconnect", {
+        method: "POST",
+        credentials: "same-origin"
+      });
+      if (!response.ok) throw new Error(await apiErrorMessage(response));
+      setICloudCalendar((await response.json()) as ICloudCalendarState);
+    } catch (error) {
+      setICloudCalendarError(error instanceof Error ? error.message : "iCloud konnte nicht getrennt werden.");
+    }
+  }
+
+  async function loadICloudCalendarEvents(from: string, to: string, forceRefresh = false) {
+    if (!iCloudCalendar?.connected || !iCloudCalendar.calendars.some((calendar) => calendar.selected)) {
+      setICloudCalendarEvents([]);
+      setICloudCalendarEventsError("");
+      return;
+    }
+    setICloudCalendarEventsError("");
+    if (forceRefresh) setICloudCalendarEventsLoading(true);
+    try {
+      const response = await fetch(
+        `/api/icloud/events?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${forceRefresh ? "&refresh=1" : ""}`,
+        { credentials: "same-origin" }
+      );
+      if (!response.ok) throw new Error(await apiErrorMessage(response));
+      const payload = (await response.json()) as { events?: GoogleCalendarEvent[] };
+      setICloudCalendarEvents(payload.events ?? []);
+    } catch (error) {
+      setICloudCalendarEventsError(error instanceof Error ? error.message : "iCloud Events konnten nicht geladen werden.");
+    } finally {
+      if (forceRefresh) setICloudCalendarEventsLoading(false);
+    }
+  }
+
   async function logout() {
     try {
       await fetch("/api/auth/logout", {
@@ -908,14 +1003,18 @@ function App() {
   const days = loadedCalendarDays.length > 0 ? loadedCalendarDays : currentCalendarPeriod;
   const visibleRangeStart = days.length > 0 ? days[0] : calendarStartDate;
   const visibleRangeEnd = days.length > 0 ? days[days.length - 1] : calendarStartDate;
-  const googleEventsByDate = useMemo(() => {
+  const externalCalendarEvents = useMemo(
+    () => [...googleCalendarEvents, ...iCloudCalendarEvents],
+    [googleCalendarEvents, iCloudCalendarEvents]
+  );
+  const externalEventsByDate = useMemo(() => {
     const byDate = new Map<string, GoogleCalendarEvent[]>();
-    for (const event of googleCalendarEvents) {
+    for (const event of externalCalendarEvents) {
       const date = event.allDay ? dateFromDateTime(event.startAt) : dateFromDateTime(event.startAt);
       byDate.set(date, [...(byDate.get(date) ?? []), event]);
     }
     return byDate;
-  }, [googleCalendarEvents]);
+  }, [externalCalendarEvents]);
   const workspaceColumns = [
     settings.panelsCollapsed.tree
       ? "64px"
@@ -940,7 +1039,8 @@ function App() {
 
   useEffect(() => {
     void loadGoogleCalendarEvents(visibleRangeStart, visibleRangeEnd);
-  }, [visibleRangeStart, visibleRangeEnd, googleCalendar]);
+    void loadICloudCalendarEvents(visibleRangeStart, visibleRangeEnd);
+  }, [visibleRangeStart, visibleRangeEnd, googleCalendar, iCloudCalendar]);
 
   useEffect(() => {
     if (!settingsOpen) return;
@@ -958,6 +1058,7 @@ function App() {
     if (!userPanel) return;
     if (userPanel === "settings" && !userSettings) void loadUserSettings();
     if (userPanel === "gcal" && !googleCalendar) void loadGoogleCalendar(false);
+    if (userPanel === "icloud" && !iCloudCalendar) void loadICloudCalendar(false);
 
     function handlePointerDown(event: PointerEvent) {
       const target = event.target;
@@ -1849,6 +1950,10 @@ function App() {
                     <CalendarDays size={15} />
                     Google Calendar
                   </button>
+                  <button className="menu-row" onClick={() => setUserPanel("icloud")}>
+                    <CalendarDays size={15} />
+                    iCloud Kalender
+                  </button>
                 </div>
               )}
               {userPanel === "settings" && (
@@ -1871,6 +1976,17 @@ function App() {
                   onRefresh={() => void loadGoogleCalendar(true)}
                   onSelectionChange={updateGoogleCalendarSelection}
                   onDisconnect={disconnectGoogleCalendar}
+                  onClose={() => setUserPanel(null)}
+                />
+              )}
+              {userPanel === "icloud" && (
+                <ICloudCalendarPanel
+                  iCloudCalendar={iCloudCalendar}
+                  error={iCloudCalendarError}
+                  onConnect={connectICloudCalendar}
+                  onRefresh={() => void loadICloudCalendar(true)}
+                  onSelectionChange={updateICloudCalendarSelection}
+                  onDisconnect={disconnectICloudCalendar}
                   onClose={() => setUserPanel(null)}
                 />
               )}
@@ -2270,6 +2386,14 @@ function App() {
             >
               <RotateCcw size={15} />
             </button>
+            <button
+              className={`soft-button icon-button ${iCloudCalendarEventsLoading ? "syncing" : ""}`}
+              title={iCloudCalendarEventsLoading ? "iCloud Kalender wird aktualisiert" : "iCloud Events aktualisieren"}
+              disabled={iCloudCalendarEventsLoading}
+              onClick={() => void loadICloudCalendarEvents(visibleRangeStart, visibleRangeEnd, true)}
+            >
+              <RotateCcw size={15} />
+            </button>
           </div>
           <div className="calendar-scroll">
             <div className="calendar-grid" style={{ gridTemplateColumns: `repeat(${days.length}, minmax(220px, 1fr))` }}>
@@ -2278,7 +2402,7 @@ function App() {
                   key={date}
                   date={date}
                   bookings={state.bookings.filter((booking) => booking.date === date)}
-                  googleEvents={googleEventsByDate.get(date) ?? []}
+                  googleEvents={externalEventsByDate.get(date) ?? []}
                   capacity={state.dailyCapacities?.[date] ?? defaultCapacity}
                   calendarStartMinutes={calendarStartMinutes}
                   calendarEndMinutes={calendarEndMinutes}
@@ -2296,6 +2420,7 @@ function App() {
               ))}
             </div>
             {googleCalendarEventsError && <div className="calendar-error">{googleCalendarEventsError}</div>}
+            {iCloudCalendarEventsError && <div className="calendar-error">{iCloudCalendarEventsError}</div>}
           </div>
         </Panel>
       </section>
@@ -2540,6 +2665,105 @@ function GoogleCalendarPanel({
           <div className="gcal-account">
             <span>Verbunden als</span>
             <strong>{googleCalendar.googleEmail ?? "Google-Konto"}</strong>
+          </div>
+          <div className="settings-section google-calendar-list">
+            <h3>Relevante Kalender</h3>
+            {calendars.length === 0 ? (
+              <p>Keine Kalender gefunden.</p>
+            ) : (
+              calendars.map((calendar) => (
+                <label key={calendar.id} className="gcal-calendar-row">
+                  <input type="checkbox" checked={calendar.selected} onChange={() => toggleCalendar(calendar.id)} />
+                  <span className="gcal-color" style={{ background: calendar.color ?? "#d9dfd4" }} />
+                  <span>{calendar.summary}</span>
+                </label>
+              ))
+            )}
+          </div>
+        </>
+      )}
+      {error && <div className="login-error">{error}</div>}
+    </div>
+  );
+}
+
+function ICloudCalendarPanel({
+  iCloudCalendar,
+  error,
+  onConnect,
+  onRefresh,
+  onSelectionChange,
+  onDisconnect,
+  onClose
+}: {
+  iCloudCalendar: ICloudCalendarState | null;
+  error: string;
+  onConnect: (appleId: string, appPassword: string) => Promise<void>;
+  onRefresh: () => void;
+  onSelectionChange: (selectedCalendarIds: string[]) => Promise<void>;
+  onDisconnect: () => Promise<void>;
+  onClose: () => void;
+}) {
+  const [appleId, setAppleId] = useState("");
+  const [appPassword, setAppPassword] = useState("");
+  const calendars = iCloudCalendar?.calendars ?? [];
+  const selectedCalendarIds = calendars.filter((calendar) => calendar.selected).map((calendar) => calendar.id);
+
+  useEffect(() => {
+    if (iCloudCalendar?.appleId) setAppleId(iCloudCalendar.appleId);
+  }, [iCloudCalendar?.appleId]);
+
+  function toggleCalendar(calendarId: string) {
+    const selectedIds = new Set(selectedCalendarIds);
+    if (selectedIds.has(calendarId)) selectedIds.delete(calendarId);
+    else selectedIds.add(calendarId);
+    void onSelectionChange([...selectedIds]);
+  }
+
+  return (
+    <div className="settings-panel google-calendar-panel">
+      <div className="settings-header">
+        <h2>iCloud Kalender</h2>
+        <div className="settings-header-actions">
+          {iCloudCalendar?.connected && (
+            <>
+              <button className="icon-button ghost" title="Kalender aktualisieren" onClick={onRefresh}>
+                <ListRestart size={14} />
+              </button>
+              <button className="icon-button ghost danger-icon" title="Verbindung trennen" onClick={() => void onDisconnect()}>
+                <CloudOff size={14} />
+              </button>
+            </>
+          )}
+          <button className="icon-button ghost" title="iCloud Kalender schließen" onClick={onClose}>
+            <X size={14} />
+          </button>
+        </div>
+      </div>
+      {!iCloudCalendar?.connected ? (
+        <div className="settings-section google-calendar-connect">
+          <p>Verbinde iCloud mit deiner Apple ID und einem App-spezifischen Passwort.</p>
+          <input placeholder="Apple ID" value={appleId} onChange={(event) => setAppleId(event.target.value)} />
+          <input
+            placeholder="App-spezifisches Passwort"
+            type="password"
+            value={appPassword}
+            onChange={(event) => setAppPassword(event.target.value)}
+          />
+          <button
+            className="primary"
+            onClick={() => {
+              void onConnect(appleId, appPassword).then(() => setAppPassword(""));
+            }}
+          >
+            iCloud verbinden
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="gcal-account">
+            <span>Verbunden als</span>
+            <strong>{iCloudCalendar.appleId ?? "Apple ID"}</strong>
           </div>
           <div className="settings-section google-calendar-list">
             <h3>Relevante Kalender</h3>
@@ -3087,6 +3311,7 @@ function DayColumn({
       const currentDay = dayColumnRef.current;
       if (!currentDay?.contains(target)) {
         setEditingBookingId(null);
+        setEditingGoogleEventId(null);
         return;
       }
       const clickedEditor = (target as Element).closest(".booking-editor, .google-event-editor");
@@ -3347,7 +3572,7 @@ function GoogleEventCard({ event, compact = false, onOpen }: { event: GoogleCale
     : `${timeFromDateTime(event.startAt)}-${timeFromDateTime(event.endAt)}`;
   return (
     <article
-      className={`booking-card google-event-card ${event.blocksTime ? "google-event-busy" : "google-event-free"}`}
+      className={`booking-card google-event-card ${event.provider}-event-card ${event.blocksTime ? "google-event-busy" : "google-event-free"}`}
       title={`${event.calendarSummary} · ${timeLabel}`}
       data-gcal-event-id={event.id}
       onClick={onOpen}
@@ -3375,12 +3600,12 @@ function GoogleEventEditor({ event, onClose }: { event: GoogleCalendarEvent; onC
     : `${formatDate(dateFromDateTime(event.startAt))}, ${timeFromDateTime(event.startAt)}-${timeFromDateTime(event.endAt)}`;
   return (
     <aside className="google-event-editor" onClick={(event) => event.stopPropagation()}>
-      <span className="google-logo-mark" aria-hidden="true">
-        G
+      <span className={`calendar-provider-mark ${event.provider}-provider-mark`} aria-hidden="true">
+        {event.provider === "google" ? "G" : ""}
       </span>
       <div className="google-event-editor-actions">
         {event.htmlLink && (
-          <a className="icon-button ghost" title="In Google Calendar öffnen" href={event.htmlLink} target="_blank" rel="noreferrer">
+          <a className="icon-button ghost" title="Original öffnen" href={event.htmlLink} target="_blank" rel="noreferrer">
             <SquareArrowOutUpRight size={13} />
           </a>
         )}

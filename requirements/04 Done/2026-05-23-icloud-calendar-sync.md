@@ -161,3 +161,18 @@ iCloud Kalender
 - Soll iCloud-Schreiben (CapCal-Buchungen → iCloud) später nachgerüstet werden?
 - Was passiert, wenn das App-Specific Password vom User widerrufen wird?
   (API-Fehler 401 → User-Hinweis "iCloud-Verbindung unterbrochen")
+
+---
+
+## Abschlussnotiz 2026-05-23
+
+Umgesetzt wurde die erste produktive iCloud-Stufe analog zur Google-Calendar-Integration:
+
+- iCloud Kalender können pro User mit Apple ID und App-spezifischem Passwort verbunden und wieder getrennt werden.
+- Das App-spezifische Passwort wird verschlüsselt im User-Datensatz gespeichert.
+- Relevante iCloud-Kalender können ausgewählt und später aktualisiert werden.
+- iCloud-Events werden per CalDAV/iCalendar geladen, read-only behandelt und nicht als CapCal-Buchungen in den Taskspace geschrieben.
+- Google und iCloud verwenden nun einen gemeinsamen providerfähigen Event-Cache (`external_calendar_event_cache` / `external_calendar_cache_windows`).
+- iCloud-Events erscheinen im Cal zusammen mit Google-Events und werden in die Tageskapazität eingerechnet, sofern sie nicht als transparent/frei markiert sind.
+- Ein manueller iCloud-Refresh im Cal aktualisiert den Event-Cache sofort.
+- Schreiben nach iCloud und komplexere Kalenderprovider-Optionen bleiben spätere Ausbaustufen.
