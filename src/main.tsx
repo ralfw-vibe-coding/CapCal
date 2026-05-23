@@ -430,6 +430,16 @@ function createTimeOptions(startTime: string, endTime: string) {
   return Array.from({ length: count }, (_, index) => minutesToTime(startMinutes + index * 15));
 }
 
+function createCalendarPeriod(startDate: string, visibleDayCount: number, showWeekends: boolean) {
+  const nextDays: string[] = [];
+  let cursor = startDate;
+  while (nextDays.length < visibleDayCount) {
+    if (showWeekends || !isWeekend(cursor)) nextDays.push(cursor);
+    cursor = addDays(cursor, 1);
+  }
+  return nextDays;
+}
+
 function browserUtcOffset() {
   const offsetMinutes = -new Date().getTimezoneOffset();
   const sign = offsetMinutes >= 0 ? "+" : "-";
@@ -479,6 +489,7 @@ function App() {
   const [quickAdd, setQuickAdd] = useState({ prio: "", cal: "" });
   const [dragPayload, setDragPayload] = useState<DragPayload | null>(null);
   const [calendarStartDate, setCalendarStartDate] = useState(today);
+  const [loadedCalendarDays, setLoadedCalendarDays] = useState<string[]>([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [userPanel, setUserPanel] = useState<"menu" | "settings" | "gcal" | null>(null);
   const [userSettings, setUserSettings] = useState<UserSettingsState | null>(null);
@@ -890,18 +901,12 @@ function App() {
     });
   }, [state?.tasks, treeFilters.query, treeFilters.showArchived, treeFilters.statuses, treeFilters.tags]);
   const filteredTaskIds = useMemo(() => new Set(filteredTreeTasks.map((task) => task.id)), [filteredTreeTasks]);
-  const days = useMemo(
-    () => {
-      const nextDays: string[] = [];
-      let cursor = calendarStartDate;
-      while (nextDays.length < settings.visibleDayCount) {
-        if (settings.showWeekends || !isWeekend(cursor)) nextDays.push(cursor);
-        cursor = addDays(cursor, 1);
-      }
-      return nextDays;
-    },
+  const currentCalendarPeriod = useMemo(
+    () => createCalendarPeriod(calendarStartDate, settings.visibleDayCount, settings.showWeekends),
     [calendarStartDate, settings.showWeekends, settings.visibleDayCount]
   );
+  const days = loadedCalendarDays.length > 0 ? loadedCalendarDays : currentCalendarPeriod;
+  const visibleRangeStart = days.length > 0 ? days[0] : calendarStartDate;
   const visibleRangeEnd = days.length > 0 ? days[days.length - 1] : calendarStartDate;
   const googleEventsByDate = useMemo(() => {
     const byDate = new Map<string, GoogleCalendarEvent[]>();
@@ -930,8 +935,12 @@ function App() {
   }, [settings.defaultTreeDurationMinutes]);
 
   useEffect(() => {
-    void loadGoogleCalendarEvents(calendarStartDate, visibleRangeEnd);
-  }, [calendarStartDate, visibleRangeEnd, googleCalendar]);
+    setLoadedCalendarDays(currentCalendarPeriod);
+  }, [settings.showWeekends, settings.visibleDayCount]);
+
+  useEffect(() => {
+    void loadGoogleCalendarEvents(visibleRangeStart, visibleRangeEnd);
+  }, [visibleRangeStart, visibleRangeEnd, googleCalendar]);
 
   useEffect(() => {
     if (!settingsOpen) return;
@@ -1741,6 +1750,22 @@ function App() {
     URL.revokeObjectURL(url);
   }
 
+  function mergeCalendarDays(currentDays: string[], nextDays: string[]) {
+    return Array.from(new Set([...currentDays, ...nextDays])).sort((a, b) => a.localeCompare(b));
+  }
+
+  function loadCalendarPeriod(startDate: string) {
+    const period = createCalendarPeriod(startDate, settings.visibleDayCount, settings.showWeekends);
+    setCalendarStartDate(startDate);
+    setLoadedCalendarDays((currentDays) => mergeCalendarDays(currentDays.length > 0 ? currentDays : days, period));
+  }
+
+  function resetCalendarToToday() {
+    const period = createCalendarPeriod(today, settings.visibleDayCount, settings.showWeekends);
+    setCalendarStartDate(today);
+    setLoadedCalendarDays(period);
+  }
+
   async function importTaskspace(file: File | undefined) {
     if (!file) return;
     try {
@@ -2228,20 +2253,20 @@ function App() {
             >
               Wochenende
             </button>
-            <button className="soft-button icon-button" title="Zurück blättern" onClick={() => setCalendarStartDate(addDays(calendarStartDate, -settings.visibleDayCount))}>
+            <button className="soft-button icon-button" title="Vorherige Periode laden" onClick={() => loadCalendarPeriod(addDays(calendarStartDate, -settings.visibleDayCount))}>
               <ChevronLeft size={15} />
             </button>
-            <button className="soft-button today-button" onClick={() => setCalendarStartDate(today)}>
+            <button className="soft-button today-button" onClick={resetCalendarToToday}>
               Heute
             </button>
-            <button className="soft-button icon-button" title="Vorwärts blättern" onClick={() => setCalendarStartDate(addDays(calendarStartDate, settings.visibleDayCount))}>
+            <button className="soft-button icon-button" title="Nächste Periode laden" onClick={() => loadCalendarPeriod(addDays(calendarStartDate, settings.visibleDayCount))}>
               <ChevronRight size={15} />
             </button>
             <button
               className={`soft-button icon-button ${googleCalendarEventsLoading ? "syncing" : ""}`}
               title={googleCalendarEventsLoading ? "Google Calendar wird aktualisiert" : "Google Calendar Events aktualisieren"}
               disabled={googleCalendarEventsLoading}
-              onClick={() => void loadGoogleCalendarEvents(calendarStartDate, visibleRangeEnd, true)}
+              onClick={() => void loadGoogleCalendarEvents(visibleRangeStart, visibleRangeEnd, true)}
             >
               <RotateCcw size={15} />
             </button>

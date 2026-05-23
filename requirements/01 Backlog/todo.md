@@ -1,2 +1,0 @@
-
-- das blättern im cal gefällt mir noch nicht. dass ich mit "<" und ">" die eingestellte anzahl tage springe, ist gut. aber es werden dann auch wirklich nur diese tage angezeigt. ich kann nicht flüssig zwischen der periode und der vorherigen scrollen. spätestens sobald ich mit den buttons weitere perioden "geladen" habe, sollten sie ständig angezeigt werden. (das muss nicht im app state gespeichert werden. nah dem nächsten öffnen der seite, wird wieder nur eine periode gezeigt.)
