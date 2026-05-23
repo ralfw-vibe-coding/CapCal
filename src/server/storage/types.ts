@@ -5,6 +5,7 @@ export type AppState = {
   prioTaskIds: string[];
   prioDurations?: Record<string, number>;
   bookings: unknown[];
+  dayTemplates?: unknown[];
 };
 
 export type StateProvider = {
@@ -21,13 +22,16 @@ export const emptyState: AppState = {
     calendarStartTime: "06:00",
     calendarEndTime: "20:00",
     showWeekends: false,
-    visibleDayCount: 7,
-    taskView: "list",
-    treeFilters: {
-      query: "",
-      statuses: [],
-      tags: []
-    },
+      visibleDayCount: 7,
+      calendarView: "days",
+      taskView: "list",
+      hierarchyExpandedTaskIds: [],
+      treeFilters: {
+        query: "",
+        statuses: [],
+        tags: [],
+        showArchived: false
+      },
     boardHiddenStatuses: [],
     panelsCollapsed: {
       tree: false,
@@ -39,5 +43,6 @@ export const emptyState: AppState = {
   tasks: [],
   prioTaskIds: [],
   prioDurations: {},
-  bookings: []
+  bookings: [],
+  dayTemplates: []
 };

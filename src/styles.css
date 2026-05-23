@@ -923,6 +923,10 @@ button:disabled {
   padding: 6px 7px;
 }
 
+.task-card:has(.task-parent-menu) {
+  z-index: 60;
+}
+
 .task-row {
   align-items: center;
   display: flex;
@@ -965,6 +969,7 @@ button:disabled {
 }
 
 .task-compact-meta {
+  align-items: center;
   display: flex;
   flex: 0 1 auto;
   flex-wrap: nowrap;
@@ -974,13 +979,22 @@ button:disabled {
 
 .task-compact-meta span,
 .task-compact-meta button {
+  align-items: center;
   background: rgba(255, 255, 255, 0.65);
   border: 0;
   border-radius: 999px;
   color: var(--muted);
+  display: inline-flex;
   font-size: 11px;
   font-weight: 700;
+  justify-content: center;
+  line-height: 1;
+  max-width: 120px;
+  min-height: 22px;
+  overflow: hidden;
   padding: 3px 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .task-compact-meta .task-status-pill {
@@ -995,10 +1009,8 @@ button:disabled {
 }
 
 .task-compact-meta .task-booking-chip {
-  align-items: center;
   background: #e8f1f5;
   color: #416271;
-  display: inline-flex;
   gap: 3px;
 }
 
@@ -1042,6 +1054,15 @@ button:disabled {
   max-width: 110px;
 }
 
+.task-hierarchy-chip,
+.task-tag-chip {
+  flex-shrink: 0;
+}
+
+.task-hierarchy-chip {
+  justify-content: flex-start;
+}
+
 .task-archive-pill {
   align-items: center;
   background: #eef1ea;
@@ -1066,6 +1087,43 @@ button:disabled {
 .task-hierarchy-chip {
   background: #edf2f7 !important;
   color: #4b6172 !important;
+}
+
+.task-parent-chip-wrap {
+  display: inline-flex;
+  position: relative;
+}
+
+.task-compact-meta .task-parent-menu {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 10px 24px rgba(34, 44, 37, 0.16);
+  display: grid;
+  gap: 2px;
+  left: 0;
+  padding: 5px;
+  position: absolute;
+  top: calc(100% + 5px);
+  z-index: 80;
+}
+
+.task-compact-meta .task-parent-menu button {
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  min-height: 28px;
+  padding: 0 10px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.task-compact-meta .task-parent-menu button:hover {
+  background: var(--surface-2);
 }
 
 .task-deadline-pill.deadline-soon {

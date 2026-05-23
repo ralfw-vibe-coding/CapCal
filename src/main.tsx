@@ -162,6 +162,7 @@ type AppSettings = {
   visibleDayCount: number;
   calendarView: CalendarViewMode;
   taskView: TreeViewMode;
+  hierarchyExpandedTaskIds: string[];
   treeFilters: TreeFilterSettings;
   boardHiddenStatuses: TaskStatus[];
   panelsCollapsed: {
@@ -217,6 +218,7 @@ const defaultSettings: AppSettings = {
   visibleDayCount: 7,
   calendarView: "days",
   taskView: "list",
+  hierarchyExpandedTaskIds: [],
   treeFilters: {
     query: "",
     statuses: [],
@@ -560,6 +562,9 @@ function normalizeState(rawState: AppState): AppState {
       ...(rawState.settings ?? {}),
       calendarView: rawCalendarView === "month" ? "month" : "days",
       taskView: rawTaskView === "board" || rawTaskView === "hierarchy" ? rawTaskView : "list",
+      hierarchyExpandedTaskIds: Array.isArray(rawState.settings?.hierarchyExpandedTaskIds)
+        ? rawState.settings.hierarchyExpandedTaskIds.filter((id): id is string => typeof id === "string")
+        : [],
       treeFilters: normalizeTreeFilters(rawState.settings?.treeFilters),
       boardHiddenStatuses: normalizeTaskStatuses(rawState.settings?.boardHiddenStatuses),
       panelsCollapsed: {
@@ -670,7 +675,6 @@ function App() {
   const [iCloudCalendarEventsError, setICloudCalendarEventsError] = useState("");
   const [iCloudCalendarEventsLoading, setICloudCalendarEventsLoading] = useState(false);
   const [expandedTaskIds, setExpandedTaskIds] = useState<Set<string>>(() => new Set());
-  const [collapsedHierarchyTaskIds, setCollapsedHierarchyTaskIds] = useState<Set<string>>(() => new Set());
   const [hierarchySortTargetId, setHierarchySortTargetId] = useState<string | null>(null);
   const [hierarchyChildTargetId, setHierarchyChildTargetId] = useState<string | null>(null);
   const [taskDropTargetId, setTaskDropTargetId] = useState<string | null>(null);
@@ -1083,6 +1087,7 @@ function App() {
   }, []);
 
   const settings = state?.settings ?? defaultSettings;
+  const hierarchyExpandedTaskIds = settings.hierarchyExpandedTaskIds ?? [];
   const defaultCapacity: DailyCapacity = {
     dayCapacityMinutes: settings.defaultDayCapacityMinutes,
     planningCapacityMinutes: settings.defaultPlanningCapacityMinutes
@@ -1366,6 +1371,31 @@ function App() {
     });
   }
 
+  function expandHierarchyTask(taskId: string) {
+    const currentIds = settings.hierarchyExpandedTaskIds ?? [];
+    if (currentIds.includes(taskId)) return;
+    updateSettings({ hierarchyExpandedTaskIds: [...currentIds, taskId] });
+  }
+
+  function toggleHierarchyTask(taskId: string) {
+    const currentIds = settings.hierarchyExpandedTaskIds ?? [];
+    updateSettings({
+      hierarchyExpandedTaskIds: currentIds.includes(taskId)
+        ? currentIds.filter((id) => id !== taskId)
+        : [...currentIds, taskId]
+    });
+  }
+
+  function ancestorTaskIds(taskId: string) {
+    const ids: string[] = [];
+    let current = stateRef.current?.tasks.find((task) => task.id === taskId);
+    while (current?.parentId) {
+      ids.push(current.parentId);
+      current = stateRef.current?.tasks.find((task) => task.id === current?.parentId);
+    }
+    return ids;
+  }
+
   function upsertTask(title: string, target?: "prio" | "cal", date = today, initialStatus?: TaskStatus, parentId?: string): Task | null {
     const trimmed = title.trim();
     if (!trimmed) return null;
@@ -1446,10 +1476,20 @@ function App() {
     const created = upsertTask(title, undefined, today, "Ready", parentId);
     if (!created) return;
     setChildTaskTitles((current) => ({ ...current, [parentId]: "" }));
-    setCollapsedHierarchyTaskIds((current) => {
-      const next = new Set(current);
-      next.delete(parentId);
-      return next;
+    expandHierarchyTask(parentId);
+  }
+
+  function detachTaskFromParent(taskId: string) {
+    updateState((draft) => {
+      const maxRootTreeOrder = Math.max(-1, ...draft.tasks.filter((task) => !task.parentId).map((task) => task.treeOrder));
+      return {
+        ...draft,
+        tasks: normalizeTasks(
+          draft.tasks.map((task) =>
+            task.id === taskId ? { ...task, parentId: undefined, treeOrder: maxRootTreeOrder + 1 } : task
+          )
+        )
+      };
     });
   }
 
@@ -1522,11 +1562,7 @@ function App() {
       );
       return { ...draft, tasks: nextTasks };
     });
-    setCollapsedHierarchyTaskIds((current) => {
-      const next = new Set(current);
-      next.delete(parentId);
-      return next;
-    });
+    expandHierarchyTask(parentId);
   }
 
   function addToPrio(taskId: string) {
@@ -1905,7 +1941,12 @@ function App() {
   }
 
   function scrollToTask(taskId: string) {
-    updateSettings({ taskView: "hierarchy", panelsCollapsed: { ...settings.panelsCollapsed, tree: false } });
+    const expandedIds = new Set([...(settings.hierarchyExpandedTaskIds ?? []), ...ancestorTaskIds(taskId)]);
+    updateSettings({
+      taskView: "hierarchy",
+      hierarchyExpandedTaskIds: [...expandedIds],
+      panelsCollapsed: { ...settings.panelsCollapsed, tree: false }
+    });
     setExpandedTaskIds((current) => {
       const next = new Set(current);
       next.add(taskId);
@@ -1958,6 +1999,7 @@ function App() {
         onDescription={(description) => updateTask(task.id, { description })}
         onTags={(tags) => updateTask(task.id, { tags: normalizeTags(tags) })}
         onGoToHierarchy={() => scrollToTask(task.id)}
+        onDetachParent={() => detachTaskFromParent(task.id)}
         childTaskTitle={childTaskTitles[task.id] ?? ""}
         onChildTaskTitleChange={(title) => setChildTaskTitles((current) => ({ ...current, [task.id]: title }))}
         onAddChildTask={() => addChildTask(task.id)}
@@ -1976,7 +2018,7 @@ function App() {
       const children = tasksByParentId.get(task.id) ?? [];
       const visible = filteredTaskIds.has(task.id) || hasVisibleDescendant(task.id);
       if (!visible) return [];
-      const collapsed = collapsedHierarchyTaskIds.has(task.id);
+      const collapsed = children.length > 0 && !hierarchyExpandedTaskIds.includes(task.id);
       return [
         <div className="hierarchy-node" key={task.id} style={{ paddingLeft: depth * 18 }}>
           <div className="hierarchy-row">
@@ -1985,14 +2027,7 @@ function App() {
                 <button
                   className="hierarchy-collapse"
                   title={collapsed ? "Teilbaum öffnen" : "Teilbaum schließen"}
-                  onClick={() =>
-                    setCollapsedHierarchyTaskIds((current) => {
-                      const next = new Set(current);
-                      if (next.has(task.id)) next.delete(task.id);
-                      else next.add(task.id);
-                      return next;
-                    })
-                  }
+                  onClick={() => toggleHierarchyTask(task.id)}
                 >
                   {collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
                 </button>
@@ -2039,6 +2074,7 @@ function App() {
               onDescription={(description) => updateTask(task.id, { description })}
               onTags={(tags) => updateTask(task.id, { tags: normalizeTags(tags) })}
               onGoToHierarchy={() => scrollToTask(task.id)}
+              onDetachParent={() => detachTaskFromParent(task.id)}
               childTaskTitle={childTaskTitles[task.id] ?? ""}
               onChildTaskTitleChange={(title) => setChildTaskTitles((current) => ({ ...current, [task.id]: title }))}
               onAddChildTask={() => addChildTask(task.id)}
@@ -3263,6 +3299,7 @@ function TaskCard({
   onDescription,
   onTags,
   onGoToHierarchy,
+  onDetachParent,
   childTaskTitle,
   onChildTaskTitleChange,
   onAddChildTask,
@@ -3295,12 +3332,28 @@ function TaskCard({
   onDescription: (description: string) => void;
   onTags: (tags: string[]) => void;
   onGoToHierarchy: () => void;
+  onDetachParent: () => void;
   childTaskTitle: string;
   onChildTaskTitleChange: (title: string) => void;
   onAddChildTask: () => void;
   onArchive: () => void;
   onDelete: () => void;
 }) {
+  const [parentMenuOpen, setParentMenuOpen] = useState(false);
+  const parentMenuRef = useRef<HTMLSpanElement | null>(null);
+
+  useEffect(() => {
+    if (!parentMenuOpen) return;
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target;
+      if (target instanceof Node && !parentMenuRef.current?.contains(target)) setParentMenuOpen(false);
+    }
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    return () => window.removeEventListener("pointerdown", handlePointerDown);
+  }, [parentMenuOpen]);
+
   return (
     <article
       className={`task-card task-card-${variant} status-card ${statusMeta[task.status].className} ${task.archived ? "archived" : ""} ${isDropTarget ? "task-drop-target" : ""} ${isHierarchySortTarget ? "hierarchy-sort-target" : ""}`}
@@ -3344,10 +3397,41 @@ function TaskCard({
           {task.dueDate && <span className={`task-deadline-pill ${deadlineTone(task.dueDate)}`}>{formatOptionalDate(task.dueDate)}</span>}
           <TaskTimeChip task={task} bookedMinutes={bookedMinutes} />
           {parentTitle && (
-            <button className="task-hierarchy-chip" title={`Parent: ${parentTitle}`} onClick={onGoToHierarchy}>
-              <ArrowUpNarrowWide size={11} />
-              {parentTitle}
-            </button>
+            <span className="task-parent-chip-wrap" ref={parentMenuRef}>
+              <button
+                className="task-hierarchy-chip"
+                title={`Parent: ${parentTitle}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setParentMenuOpen((open) => !open);
+                }}
+              >
+                <ArrowUpNarrowWide size={11} />
+                {parentTitle}
+              </button>
+              {parentMenuOpen && (
+                <span className="task-parent-menu">
+                  <button
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onGoToHierarchy();
+                      setParentMenuOpen(false);
+                    }}
+                  >
+                    Anzeigen
+                  </button>
+                  <button
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onDetachParent();
+                      setParentMenuOpen(false);
+                    }}
+                  >
+                    Lösen
+                  </button>
+                </span>
+              )}
+            </span>
           )}
           {childCount > 0 && (
             <button className="task-hierarchy-chip" title={`${childCount} Unteraufgabe${childCount === 1 ? "" : "n"}`} onClick={onGoToHierarchy}>
