@@ -453,6 +453,7 @@ function App() {
   const hasLoadedRef = useRef(false);
   const saveTimerRef = useRef<number | null>(null);
   const stateVersionRef = useRef(0);
+  const prefetchedUserIdRef = useRef<number | null>(null);
   const saveCurrentStateRef = useRef<(options?: { keepalive?: boolean }) => Promise<void>>(async () => undefined);
 
   async function refreshAuthUser() {
@@ -533,6 +534,13 @@ function App() {
   useEffect(() => {
     if (saveState === "saved") setChangedTaskId(null);
   }, [saveState]);
+
+  useEffect(() => {
+    if (!authUser || prefetchedUserIdRef.current === authUser.id) return;
+    prefetchedUserIdRef.current = authUser.id;
+    void loadUserSettings();
+    void loadGoogleCalendar(false);
+  }, [authUser]);
 
   async function saveCurrentState(options: { keepalive?: boolean } = {}) {
     const currentState = stateRef.current;
@@ -696,6 +704,7 @@ function App() {
       hasLoadedRef.current = false;
       setState(null);
       setAuthUser(null);
+      prefetchedUserIdRef.current = null;
       setAuthRequired(true);
       setAuthStep("email");
       setAuthOtp("");
@@ -851,8 +860,8 @@ function App() {
 
   useEffect(() => {
     if (!userPanel) return;
-    if (userPanel === "settings") void loadUserSettings();
-    if (userPanel === "gcal") void loadGoogleCalendar(true);
+    if (userPanel === "settings" && !userSettings) void loadUserSettings();
+    if (userPanel === "gcal" && !googleCalendar) void loadGoogleCalendar(false);
 
     function handlePointerDown(event: PointerEvent) {
       const target = event.target;
