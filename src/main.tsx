@@ -6,6 +6,7 @@ import {
   ArchiveX,
   ArrowUpNarrowWide,
   CalendarDays,
+  CalendarPlus,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -554,7 +555,7 @@ function App() {
     Done: "",
     Aborted: ""
   });
-  const [quickAdd, setQuickAdd] = useState({ prio: "", cal: "" });
+  const [quickAdd, setQuickAdd] = useState({ prio: "" });
   const [dragPayload, setDragPayload] = useState<DragPayload | null>(null);
   const [calendarStartDate, setCalendarStartDate] = useState(today);
   const [dayCalendarStartDate, setDayCalendarStartDate] = useState(today);
@@ -1559,6 +1560,10 @@ function App() {
     }));
   }
 
+  function addDefaultLooseBooking(date: string) {
+    addLooseBooking("Neue Buchung", date);
+  }
+
   function linkBookingToTask(bookingId: string, taskId: string) {
     updateState((draft) => ({
       ...draft,
@@ -2490,29 +2495,6 @@ function App() {
           }
         >
           <div className="cal-tools">
-            <div className="quick-add">
-              <input
-                placeholder="Direkt heute in Cal anlegen"
-                value={quickAdd.cal}
-                onChange={(event) => setQuickAdd({ ...quickAdd, cal: event.target.value })}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    addLooseBooking(quickAdd.cal, today);
-                    setQuickAdd({ ...quickAdd, cal: "" });
-                  }
-                }}
-              />
-              <button
-                className="icon-button"
-                title="In Cal anlegen"
-                onClick={() => {
-                  addLooseBooking(quickAdd.cal, today);
-                  setQuickAdd({ ...quickAdd, cal: "" });
-                }}
-              >
-                <Plus size={17} />
-              </button>
-            </div>
             <select
               className="day-count-select"
               aria-label="Sichtbare Tage"
@@ -2599,6 +2581,7 @@ function App() {
                     onBookingDelete={deleteBooking}
                     onOpenTask={scrollToTask}
                     onCapacityChange={(patch) => updateDailyCapacity(date, patch)}
+                    onAddLooseBooking={addDefaultLooseBooking}
                   />
                 ))}
               </div>
@@ -3493,7 +3476,8 @@ function DayColumn({
   onBookingChange,
   onBookingDelete,
   onOpenTask,
-  onCapacityChange
+  onCapacityChange,
+  onAddLooseBooking
 }: {
   date: string;
   bookings: Booking[];
@@ -3511,6 +3495,7 @@ function DayColumn({
   onBookingDelete: (bookingId: string) => void;
   onOpenTask: (taskId: string) => void;
   onCapacityChange: (patch: Partial<DailyCapacity>) => void;
+  onAddLooseBooking: (date: string) => void;
 }) {
   const [editingBookingId, setEditingBookingId] = useState<string | null>(null);
   const [editingGoogleEventId, setEditingGoogleEventId] = useState<string | null>(null);
@@ -3603,7 +3588,16 @@ function DayColumn({
       data-calendar-date={date}
       ref={dayColumnRef}
     >
-      <header className={`${date === today ? "today" : ""} ${isWeekend(date) ? "weekend" : ""}`}>{formatDate(date)}</header>
+      <header className={`${date === today ? "today" : ""} ${isWeekend(date) ? "weekend" : ""}`}>
+        <span>{formatDate(date)}</span>
+        <button
+          className="icon-button ghost day-add-booking-button"
+          title="Neue Buchung als Reservierung anlegen"
+          onClick={() => onAddLooseBooking(date)}
+        >
+          <CalendarPlus size={14} />
+        </button>
+      </header>
       <div className="capacity-strip">
         <div className="capacity-label">
           <span>{minutesToLabel(bookedMinutes)} gebucht</span>
