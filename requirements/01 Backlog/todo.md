@@ -1,5 +1,2 @@
 
-
-
-- ein event eintrag von gcal soll im capcal cal mit einem kleinen google logo angezeigt werden. außerdem soll die farbe dezent sein und eher wie im hintergrund aussehen.
-aus einem gcal event soll man zum google calendar kommen, am besten zu dem event. dafür müssen ausreichende daten geladen werden.
+- das blättern im cal gefällt mir noch nicht. dass ich mit "<" und ">" die eingestellte anzahl tage springe, ist gut. aber es werden dann auch wirklich nur diese tage angezeigt. ich kann nicht flüssig zwischen der periode und der vorherigen scrollen. spätestens sobald ich mit den buttons weitere perioden "geladen" habe, sollten sie ständig angezeigt werden. (das muss nicht im app state gespeichert werden. nah dem nächsten öffnen der seite, wird wieder nur eine periode gezeigt.)

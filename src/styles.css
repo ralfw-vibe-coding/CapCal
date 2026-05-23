@@ -113,6 +113,10 @@ button:disabled {
   animation: spin 1.1s linear infinite;
 }
 
+.icon-button.syncing svg {
+  animation: spin 0.9s linear infinite;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);
@@ -1599,7 +1603,7 @@ button:disabled {
 
 .allocation-zone::before {
   color: var(--muted);
-  content: "Allokationen";
+  content: "Reservierungen";
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
@@ -1615,11 +1619,24 @@ button:disabled {
   padding: 8px;
 }
 
+.time-section {
+  border-top: 1px solid var(--line);
+}
+
 .time-grid {
   display: grid;
   grid-template-columns: 48px 1fr;
   overflow: visible;
   position: relative;
+}
+
+.time-section-label {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 8px 8px;
+  text-transform: uppercase;
 }
 
 .timeline-labels {
@@ -1726,7 +1743,7 @@ button:disabled {
   border-color: color-mix(in srgb, var(--gcal-color) 42%, var(--line));
   box-shadow: inset 4px 0 0 var(--gcal-color);
   color: #31413c;
-  cursor: default;
+  cursor: pointer;
   display: block;
   text-decoration: none;
 }
@@ -1751,6 +1768,90 @@ button:disabled {
   font-size: 11px;
   gap: 5px;
   margin-top: 4px;
+}
+
+.google-event-editor {
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--gcal-color, #4285f4) 38%, var(--line));
+  border-radius: 8px;
+  box-shadow: 0 12px 28px rgba(34, 44, 37, 0.18);
+  left: calc(100% + 8px);
+  max-height: min(520px, calc(100vh - 160px));
+  min-width: 230px;
+  overflow-y: auto;
+  padding: 38px 10px 10px;
+  position: absolute;
+  top: 0;
+  width: 280px;
+  z-index: 26;
+}
+
+.google-event-editor-actions {
+  display: flex;
+  gap: 4px;
+  position: absolute;
+  right: 8px;
+  top: 8px;
+}
+
+.google-logo-mark {
+  background: linear-gradient(90deg, #4285f4 0 28%, #34a853 28% 48%, #fbbc05 48% 68%, #ea4335 68% 100%);
+  background-clip: text;
+  color: transparent;
+  font-family: Arial, sans-serif;
+  font-size: 15px;
+  font-weight: 900;
+  left: 11px;
+  line-height: 1;
+  position: absolute;
+  top: 14px;
+}
+
+.google-event-editor-actions .icon-button {
+  height: 30px;
+  min-width: 30px;
+  width: 30px;
+}
+
+.google-event-editor-title {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+
+.google-event-editor-title strong {
+  color: #4f5a50;
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.google-event-editor-meta {
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 12px;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.google-event-editor-body {
+  color: #3d4842;
+  display: grid;
+  font-size: 13px;
+  gap: 8px;
+}
+
+.google-event-editor-body p {
+  margin: 0;
+}
+
+.google-event-editor-body pre {
+  font: inherit;
+  margin: 0;
+  max-height: 260px;
+  overflow: auto;
+  white-space: pre-wrap;
 }
 
 .booking-card.editing {

@@ -28,6 +28,7 @@ import {
   PanelLeftOpen,
   Plus,
   RotateCcw,
+  SquareArrowOutUpRight,
   SlidersHorizontal,
   Target,
   Trash2,
@@ -75,6 +76,11 @@ type GoogleCalendarEvent = {
   allDay: boolean;
   blocksTime: boolean;
   htmlLink?: string;
+  location?: string;
+  description?: string;
+  organizer?: string;
+  creator?: string;
+  attendeeSummary?: string;
 };
 
 type Task = {
@@ -254,6 +260,19 @@ function timeFromDateTime(value: string) {
 
 function minutesBetween(startAt: string, endAt: string) {
   return Math.max(0, Math.round((new Date(endAt).getTime() - new Date(startAt).getTime()) / 60_000));
+}
+
+function plainTextFromHtml(value?: string) {
+  if (!value) return "";
+  return value
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .trim();
 }
 
 function minutesToTimeLabel(minutes: number) {
@@ -468,6 +487,7 @@ function App() {
   const [googleCalendarError, setGoogleCalendarError] = useState("");
   const [googleCalendarEvents, setGoogleCalendarEvents] = useState<GoogleCalendarEvent[]>([]);
   const [googleCalendarEventsError, setGoogleCalendarEventsError] = useState("");
+  const [googleCalendarEventsLoading, setGoogleCalendarEventsLoading] = useState(false);
   const [expandedTaskIds, setExpandedTaskIds] = useState<Set<string>>(() => new Set());
   const [collapsedHierarchyTaskIds, setCollapsedHierarchyTaskIds] = useState<Set<string>>(() => new Set());
   const [hierarchySortTargetId, setHierarchySortTargetId] = useState<string | null>(null);
@@ -728,6 +748,7 @@ function App() {
       return;
     }
     setGoogleCalendarEventsError("");
+    if (forceRefresh) setGoogleCalendarEventsLoading(true);
     try {
       const response = await fetch(
         `/api/gcal/events?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${forceRefresh ? "&refresh=1" : ""}`,
@@ -738,6 +759,8 @@ function App() {
       setGoogleCalendarEvents(payload.events ?? []);
     } catch (error) {
       setGoogleCalendarEventsError(error instanceof Error ? error.message : "Google Calendar Events konnten nicht geladen werden.");
+    } finally {
+      if (forceRefresh) setGoogleCalendarEventsLoading(false);
     }
   }
 
@@ -2215,8 +2238,9 @@ function App() {
               <ChevronRight size={15} />
             </button>
             <button
-              className="soft-button icon-button"
-              title="Google Calendar Events aktualisieren"
+              className={`soft-button icon-button ${googleCalendarEventsLoading ? "syncing" : ""}`}
+              title={googleCalendarEventsLoading ? "Google Calendar wird aktualisiert" : "Google Calendar Events aktualisieren"}
+              disabled={googleCalendarEventsLoading}
               onClick={() => void loadGoogleCalendarEvents(calendarStartDate, visibleRangeEnd, true)}
             >
               <RotateCcw size={15} />
@@ -2960,6 +2984,7 @@ function DayColumn({
   onCapacityChange: (patch: Partial<DailyCapacity>) => void;
 }) {
   const [editingBookingId, setEditingBookingId] = useState<string | null>(null);
+  const [editingGoogleEventId, setEditingGoogleEventId] = useState<string | null>(null);
   const [dropPreview, setDropPreview] = useState<{ area: "allocation" | "time"; startTime?: string } | null>(null);
   const [resizingBooking, setResizingBooking] = useState<{ bookingId: string; startMinutes: number } | null>(null);
   const timelineRef = useRef<HTMLDivElement | null>(null);
@@ -3029,7 +3054,7 @@ function DayColumn({
   }, [calendarStartMinutes, onBookingChange, resizingBooking]);
 
   useEffect(() => {
-    if (!editingBookingId) return;
+    if (!editingBookingId && !editingGoogleEventId) return;
 
     function handlePointerDown(event: PointerEvent) {
       const target = event.target;
@@ -3039,14 +3064,18 @@ function DayColumn({
         setEditingBookingId(null);
         return;
       }
-      const clickedEditor = (target as Element).closest(".booking-editor");
-      const clickedOpenBooking = (target as Element).closest(`[data-booking-id="${editingBookingId}"]`);
-      if (!clickedEditor && !clickedOpenBooking) setEditingBookingId(null);
+      const clickedEditor = (target as Element).closest(".booking-editor, .google-event-editor");
+      const clickedOpenBooking = editingBookingId ? (target as Element).closest(`[data-booking-id="${editingBookingId}"]`) : null;
+      const clickedOpenGoogleEvent = editingGoogleEventId ? (target as Element).closest(`[data-gcal-event-id="${CSS.escape(editingGoogleEventId)}"]`) : null;
+      if (!clickedEditor && !clickedOpenBooking && !clickedOpenGoogleEvent) {
+        setEditingBookingId(null);
+        setEditingGoogleEventId(null);
+      }
     }
 
     window.addEventListener("pointerdown", handlePointerDown);
     return () => window.removeEventListener("pointerdown", handlePointerDown);
-  }, [editingBookingId]);
+  }, [editingBookingId, editingGoogleEventId]);
 
   return (
     <section className={`day-column ${isMonday(date) ? "week-start" : ""}`} ref={dayColumnRef}>
@@ -3134,103 +3163,110 @@ function DayColumn({
           </div>
         ))}
         {googleAllocations.map((event) => (
-          <GoogleEventCard key={event.id} event={event} />
+          <div className="booking-shell" key={event.id}>
+            <GoogleEventCard event={event} onOpen={() => setEditingGoogleEventId(event.id)} />
+            {editingGoogleEventId === event.id && <GoogleEventEditor event={event} onClose={() => setEditingGoogleEventId(null)} />}
+          </div>
         ))}
       </div>
-      <div className="time-grid">
-        <div className="timeline-labels" style={{ height: timelineHeight }}>
-          {hours.map((hour) => (
-            <div
-              className="timeline-hour-label"
-              key={hour}
-              style={{ top: (hour * 60 - calendarStartMinutes) * minuteHeight }}
-            >
-              {hour}:00
-            </div>
-          ))}
-        </div>
-        <div
-          className={`timeline ${isDragging ? "dragging-active" : ""}`}
-          ref={timelineRef}
-          style={{ height: timelineHeight }}
-          onDragOver={(event) => {
-            event.preventDefault();
-            setDropPreview({ area: "time", startTime: getTimelineDropTime(event) });
-          }}
-          onDragLeave={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropPreview(null);
-          }}
-          onDrop={(event) => {
-            event.preventDefault();
-            const startTime = getTimelineDropTime(event);
-            setDropPreview(null);
-            onDrop(date, startTime);
-          }}
-        >
-          {hours.map((hour) => (
-            <div
-              className="timeline-hour-line"
-              key={hour}
-              style={{ top: (hour * 60 - calendarStartMinutes) * minuteHeight }}
-            />
-          ))}
-          {scheduled.map((booking) => {
-            const startMinutes = timeToMinutes(booking.startTime!);
-            const top = Math.max(0, (startMinutes - calendarStartMinutes) * minuteHeight);
-            const height = Math.max(36, booking.durationMinutes * minuteHeight);
-            return (
-              <div className="scheduled-booking" key={booking.id} style={{ top, height }}>
-                <BookingCard
-                  booking={booking}
-                  task={booking.taskId ? taskById.get(booking.taskId) : undefined}
-                  isEditing={editingBookingId === booking.id}
-                  onDrag={() => onBookingDrag(booking.id)}
-                  onDragEnd={onBookingDragEnd}
-                  onOpen={() => setEditingBookingId(booking.id)}
-                  onResizeStart={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    setResizingBooking({ bookingId: booking.id, startMinutes });
-                  }}
-                />
-                {editingBookingId === booking.id && (
-                  <BookingEditor
+      <div className="time-section">
+        <div className="time-section-label">Termine</div>
+        <div className="time-grid">
+          <div className="timeline-labels" style={{ height: timelineHeight }}>
+            {hours.map((hour) => (
+              <div
+                className="timeline-hour-label"
+                key={hour}
+                style={{ top: (hour * 60 - calendarStartMinutes) * minuteHeight }}
+              >
+                {hour}:00
+              </div>
+            ))}
+          </div>
+          <div
+            className={`timeline ${isDragging ? "dragging-active" : ""}`}
+            ref={timelineRef}
+            style={{ height: timelineHeight }}
+            onDragOver={(event) => {
+              event.preventDefault();
+              setDropPreview({ area: "time", startTime: getTimelineDropTime(event) });
+            }}
+            onDragLeave={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropPreview(null);
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              const startTime = getTimelineDropTime(event);
+              setDropPreview(null);
+              onDrop(date, startTime);
+            }}
+          >
+            {hours.map((hour) => (
+              <div
+                className="timeline-hour-line"
+                key={hour}
+                style={{ top: (hour * 60 - calendarStartMinutes) * minuteHeight }}
+              />
+            ))}
+            {scheduled.map((booking) => {
+              const startMinutes = timeToMinutes(booking.startTime!);
+              const top = Math.max(0, (startMinutes - calendarStartMinutes) * minuteHeight);
+              const height = Math.max(36, booking.durationMinutes * minuteHeight);
+              return (
+                <div className="scheduled-booking" key={booking.id} style={{ top, height }}>
+                  <BookingCard
                     booking={booking}
                     task={booking.taskId ? taskById.get(booking.taskId) : undefined}
-                    timeOptions={timeOptions}
-                    onChange={onBookingChange}
-                    onOpenTask={() => {
-                      if (booking.taskId) onOpenTask(booking.taskId);
+                    isEditing={editingBookingId === booking.id}
+                    onDrag={() => onBookingDrag(booking.id)}
+                    onDragEnd={onBookingDragEnd}
+                    onOpen={() => setEditingBookingId(booking.id)}
+                    onResizeStart={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setResizingBooking({ bookingId: booking.id, startMinutes });
                     }}
-                    onDelete={(bookingId) => {
-                      onBookingDelete(bookingId);
-                      setEditingBookingId(null);
-                    }}
-                    onClose={() => setEditingBookingId(null)}
                   />
-                )}
-              </div>
-            );
-          })}
-          {googleScheduled.map((event) => {
-            const startMinutes = timeToMinutes(timeFromDateTime(event.startAt));
-            const top = Math.max(0, (startMinutes - calendarStartMinutes) * minuteHeight);
-            const height = Math.max(28, minutesBetween(event.startAt, event.endAt) * minuteHeight);
-            return (
-              <div className="scheduled-booking google-scheduled-event" key={event.id} style={{ top, height }}>
-                <GoogleEventCard event={event} compact />
-              </div>
-            );
-          })}
-        </div>
-        {dropPreview?.area === "time" && dropPreview.startTime && (
-          <div
-            className="timeline-drop-preview"
-            style={{ top: (timeToMinutes(dropPreview.startTime) - calendarStartMinutes) * minuteHeight }}
-          >
-            <span>{dropPreview.startTime}</span>
+                  {editingBookingId === booking.id && (
+                    <BookingEditor
+                      booking={booking}
+                      task={booking.taskId ? taskById.get(booking.taskId) : undefined}
+                      timeOptions={timeOptions}
+                      onChange={onBookingChange}
+                      onOpenTask={() => {
+                        if (booking.taskId) onOpenTask(booking.taskId);
+                      }}
+                      onDelete={(bookingId) => {
+                        onBookingDelete(bookingId);
+                        setEditingBookingId(null);
+                      }}
+                      onClose={() => setEditingBookingId(null)}
+                    />
+                  )}
+                </div>
+              );
+            })}
+            {googleScheduled.map((event) => {
+              const startMinutes = timeToMinutes(timeFromDateTime(event.startAt));
+              const top = Math.max(0, (startMinutes - calendarStartMinutes) * minuteHeight);
+              const height = Math.max(28, minutesBetween(event.startAt, event.endAt) * minuteHeight);
+              return (
+                <div className="scheduled-booking google-scheduled-event" key={event.id} style={{ top, height }}>
+                  <GoogleEventCard event={event} compact onOpen={() => setEditingGoogleEventId(event.id)} />
+                  {editingGoogleEventId === event.id && <GoogleEventEditor event={event} onClose={() => setEditingGoogleEventId(null)} />}
+                </div>
+              );
+            })}
           </div>
-        )}
+          {dropPreview?.area === "time" && dropPreview.startTime && (
+            <div
+              className="timeline-drop-preview"
+              style={{ top: (timeToMinutes(dropPreview.startTime) - calendarStartMinutes) * minuteHeight }}
+            >
+              <span>{dropPreview.startTime}</span>
+            </div>
+          )}
+        </div>
       </div>
     </section>
   );
@@ -3280,12 +3316,18 @@ function BookingCard({
   );
 }
 
-function GoogleEventCard({ event, compact = false }: { event: GoogleCalendarEvent; compact?: boolean }) {
+function GoogleEventCard({ event, compact = false, onOpen }: { event: GoogleCalendarEvent; compact?: boolean; onOpen: () => void }) {
   const timeLabel = event.allDay
     ? "Ganztägig"
     : `${timeFromDateTime(event.startAt)}-${timeFromDateTime(event.endAt)}`;
-  const content = (
-    <>
+  return (
+    <article
+      className={`booking-card google-event-card ${event.blocksTime ? "google-event-busy" : "google-event-free"}`}
+      title={`${event.calendarSummary} · ${timeLabel}`}
+      data-gcal-event-id={event.id}
+      onClick={onOpen}
+      style={{ "--gcal-color": event.calendarColor ?? "#4285f4" } as React.CSSProperties}
+    >
       <div className="booking-head">
         <CalendarDays size={14} />
         <strong>{event.summary}</strong>
@@ -3297,27 +3339,47 @@ function GoogleEventCard({ event, compact = false }: { event: GoogleCalendarEven
           {!event.blocksTime && <span>frei</span>}
         </div>
       )}
-    </>
-  );
-  return event.htmlLink ? (
-    <a
-      className={`booking-card google-event-card ${event.blocksTime ? "google-event-busy" : "google-event-free"}`}
-      href={event.htmlLink}
-      target="_blank"
-      rel="noreferrer"
-      title={`${event.calendarSummary} · ${timeLabel}`}
-      style={{ "--gcal-color": event.calendarColor ?? "#4285f4" } as React.CSSProperties}
-    >
-      {content}
-    </a>
-  ) : (
-    <article
-      className={`booking-card google-event-card ${event.blocksTime ? "google-event-busy" : "google-event-free"}`}
-      title={`${event.calendarSummary} · ${timeLabel}`}
-      style={{ "--gcal-color": event.calendarColor ?? "#4285f4" } as React.CSSProperties}
-    >
-      {content}
     </article>
+  );
+}
+
+function GoogleEventEditor({ event, onClose }: { event: GoogleCalendarEvent; onClose: () => void }) {
+  const description = plainTextFromHtml(event.description);
+  const timeLabel = event.allDay
+    ? "Ganztägig"
+    : `${formatDate(dateFromDateTime(event.startAt))}, ${timeFromDateTime(event.startAt)}-${timeFromDateTime(event.endAt)}`;
+  return (
+    <aside className="google-event-editor" onClick={(event) => event.stopPropagation()}>
+      <span className="google-logo-mark" aria-hidden="true">
+        G
+      </span>
+      <div className="google-event-editor-actions">
+        {event.htmlLink && (
+          <a className="icon-button ghost" title="In Google Calendar öffnen" href={event.htmlLink} target="_blank" rel="noreferrer">
+            <SquareArrowOutUpRight size={13} />
+          </a>
+        )}
+        <button className="icon-button ghost" title="Details schließen" onClick={onClose}>
+          <X size={13} />
+        </button>
+      </div>
+      <div className="google-event-editor-title">
+        <span className="gcal-color" style={{ background: event.calendarColor ?? "#4285f4" }} />
+        <strong>{event.summary}</strong>
+      </div>
+      <div className="google-event-editor-meta">
+        <span>{timeLabel}</span>
+        <span>{event.calendarSummary}</span>
+        <span>{event.blocksTime ? "Gebucht" : "Frei"}</span>
+      </div>
+      <div className="google-event-editor-body">
+        {event.location && <p>{event.location}</p>}
+        {event.attendeeSummary && <p>{event.attendeeSummary}</p>}
+        {event.organizer && <p>Organisiert von: {event.organizer}</p>}
+        {event.creator && event.creator !== event.organizer && <p>Erstellt von: {event.creator}</p>}
+        {description && <pre>{description}</pre>}
+      </div>
+    </aside>
   );
 }
 

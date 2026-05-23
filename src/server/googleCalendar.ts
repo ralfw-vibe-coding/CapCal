@@ -32,6 +32,11 @@ export type GoogleCalendarExternalEvent = {
   allDay: boolean;
   blocksTime: boolean;
   htmlLink?: string;
+  location?: string;
+  description?: string;
+  organizer?: string;
+  creator?: string;
+  attendeeSummary?: string;
 };
 
 const googleScopes = ["openid", "email", "https://www.googleapis.com/auth/calendar.readonly"];
@@ -305,12 +310,17 @@ function eventDateTime(raw: unknown, fallbackEnd = false) {
 type GoogleRawEvent = {
   id?: string;
   summary?: string;
+  description?: string;
+  location?: string;
   start?: unknown;
   end?: unknown;
   transparency?: string;
   status?: string;
   htmlLink?: string;
   updated?: string;
+  organizer?: { email?: string; displayName?: string };
+  creator?: { email?: string; displayName?: string };
+  attendees?: { email?: string; displayName?: string; responseStatus?: string }[];
 };
 
 function normalizeGoogleEvent(raw: GoogleRawEvent) {
@@ -326,9 +336,14 @@ function normalizeGoogleEvent(raw: GoogleRawEvent) {
     endAt: end.value,
     allDay,
     summary: raw.summary ?? "(Ohne Titel)",
+    description: raw.description,
+    location: raw.location,
     transparency,
     status: raw.status ?? "confirmed",
     htmlLink: raw.htmlLink,
+    organizer: raw.organizer?.displayName ?? raw.organizer?.email,
+    creator: raw.creator?.displayName ?? raw.creator?.email,
+    attendeeSummary: Array.isArray(raw.attendees) && raw.attendees.length > 0 ? `${raw.attendees.length} Gäste` : undefined,
     updatedAt: raw.updated
   };
 }
@@ -444,6 +459,7 @@ export async function googleCalendarEvents(user: AuthUser, fromInput: string, to
   const calendarMetaById = new Map(selectedCalendars.map((calendar) => [calendar.id, calendar]));
   const rows = (await db`
     SELECT calendar_id, event_id, start_at, end_at, all_day, summary, transparency, status, html_link
+      , raw
     FROM google_calendar_event_cache
     WHERE user_id = ${user.id}
       AND calendar_id = ANY(${selectedCalendars.map((calendar) => calendar.id)})
@@ -461,12 +477,14 @@ export async function googleCalendarEvents(user: AuthUser, fromInput: string, to
     transparency: string | null;
     status: string | null;
     html_link: string | null;
+    raw: unknown;
   }[];
 
   return {
     events: rows.map((row): GoogleCalendarExternalEvent => {
       const calendar = calendarMetaById.get(row.calendar_id);
       const transparency = row.transparency ?? "opaque";
+      const raw = row.raw && typeof row.raw === "object" ? (row.raw as GoogleRawEvent) : {};
       return {
         id: `${row.calendar_id}:${row.event_id}`,
         calendarId: row.calendar_id,
@@ -477,7 +495,12 @@ export async function googleCalendarEvents(user: AuthUser, fromInput: string, to
         endAt: new Date(row.end_at).toISOString(),
         allDay: row.all_day,
         blocksTime: transparency !== "transparent",
-        htmlLink: row.html_link ?? undefined
+        htmlLink: row.html_link ?? undefined,
+        location: raw.location,
+        description: raw.description,
+        organizer: raw.organizer?.displayName ?? raw.organizer?.email,
+        creator: raw.creator?.displayName ?? raw.creator?.email,
+        attendeeSummary: Array.isArray(raw.attendees) && raw.attendees.length > 0 ? `${raw.attendees.length} Gäste` : undefined
       };
     })
   };
