@@ -505,6 +505,51 @@ function normalizeDayTemplates(rawTemplates?: unknown[] | null): DayTemplate[] {
     .filter((template): template is DayTemplate => Boolean(template));
 }
 
+type TimedCalendarEntry =
+  | { kind: "booking"; id: string; startMinutes: number; endMinutes: number; booking: Booking }
+  | { kind: "external"; id: string; startMinutes: number; endMinutes: number; event: GoogleCalendarEvent };
+
+type TimedCalendarLayoutEntry = TimedCalendarEntry & {
+  columnIndex: number;
+  columnCount: number;
+};
+
+function layoutTimedEntries(entries: TimedCalendarEntry[]): TimedCalendarLayoutEntry[] {
+  const sortedEntries = [...entries].sort((a, b) => a.startMinutes - b.startMinutes || b.endMinutes - a.endMinutes);
+  const groups: TimedCalendarEntry[][] = [];
+  let activeGroup: TimedCalendarEntry[] = [];
+  let activeGroupEnd = -1;
+
+  for (const entry of sortedEntries) {
+    if (activeGroup.length === 0 || entry.startMinutes < activeGroupEnd) {
+      activeGroup.push(entry);
+      activeGroupEnd = Math.max(activeGroupEnd, entry.endMinutes);
+    } else {
+      groups.push(activeGroup);
+      activeGroup = [entry];
+      activeGroupEnd = entry.endMinutes;
+    }
+  }
+  if (activeGroup.length > 0) groups.push(activeGroup);
+
+  return groups.flatMap((group) => {
+    const columns: TimedCalendarEntry[][] = [];
+    const placed = group.map((entry) => {
+      let columnIndex = columns.findIndex((column) => {
+        const lastEntry = column[column.length - 1];
+        return lastEntry.endMinutes <= entry.startMinutes;
+      });
+      if (columnIndex === -1) {
+        columnIndex = columns.length;
+        columns.push([]);
+      }
+      columns[columnIndex].push(entry);
+      return { ...entry, columnIndex, columnCount: 1 };
+    });
+    return placed.map((entry) => ({ ...entry, columnCount: columns.length }));
+  });
+}
+
 function normalizeState(rawState: AppState): AppState {
   const rawTaskView = rawState.settings?.taskView;
   const rawCalendarView = rawState.settings?.calendarView;
@@ -3635,6 +3680,25 @@ function DayColumn({
   const googleScheduled = googleEvents
     .filter((event) => !event.allDay)
     .sort((a, b) => a.startAt.localeCompare(b.startAt));
+  const scheduledLayoutEntries = layoutTimedEntries([
+    ...scheduled.map((booking): TimedCalendarEntry => ({
+      kind: "booking",
+      id: booking.id,
+      startMinutes: timeToMinutes(booking.startTime!),
+      endMinutes: timeToMinutes(booking.startTime!) + booking.durationMinutes,
+      booking
+    })),
+    ...googleScheduled.map((event): TimedCalendarEntry => {
+      const startMinutes = timeToMinutes(timeFromDateTime(event.startAt));
+      return {
+        kind: "external",
+        id: event.id,
+        startMinutes,
+        endMinutes: startMinutes + minutesBetween(event.startAt, event.endAt),
+        event
+      };
+    })
+  ]);
   const bookedMinutes = bookings.reduce((sum, booking) => sum + booking.durationMinutes, 0) + googleBlockingMinutes;
   const fillPercent = Math.min(100, (bookedMinutes / capacity.dayCapacityMinutes) * 100);
   const planningPercent = Math.min(100, (capacity.planningCapacityMinutes / capacity.dayCapacityMinutes) * 100);
@@ -3955,12 +4019,28 @@ function DayColumn({
                 style={{ top: (hour * 60 - calendarStartMinutes) * minuteHeight }}
               />
             ))}
-            {scheduled.map((booking) => {
-              const startMinutes = timeToMinutes(booking.startTime!);
-              const top = Math.max(0, (startMinutes - calendarStartMinutes) * minuteHeight);
-              const height = Math.max(36, booking.durationMinutes * minuteHeight);
+            {scheduledLayoutEntries.map((entry) => {
+              const top = Math.max(0, (entry.startMinutes - calendarStartMinutes) * minuteHeight);
+              const width = `calc((100% - 12px - ${(entry.columnCount - 1) * 4}px) / ${entry.columnCount})`;
+              const left = `calc(6px + (${width} + 4px) * ${entry.columnIndex})`;
+              if (entry.kind === "external") {
+                const height = Math.max(28, (entry.endMinutes - entry.startMinutes) * minuteHeight);
+                return (
+                  <div
+                    className="scheduled-booking google-scheduled-event"
+                    key={`external-${entry.id}`}
+                    style={{ top, height, left, right: "auto", width }}
+                  >
+                    <GoogleEventCard event={entry.event} compact onOpen={() => setEditingGoogleEventId(entry.event.id)} />
+                    {editingGoogleEventId === entry.event.id && <GoogleEventEditor event={entry.event} onClose={() => setEditingGoogleEventId(null)} />}
+                  </div>
+                );
+              }
+              const booking = entry.booking;
+              const startMinutes = entry.startMinutes;
+              const height = Math.max(36, (entry.endMinutes - entry.startMinutes) * minuteHeight);
               return (
-                <div className="scheduled-booking" key={booking.id} style={{ top, height }}>
+                <div className="scheduled-booking" key={`booking-${booking.id}`} style={{ top, height, left, right: "auto", width }}>
                   <BookingCard
                     booking={booking}
                     task={booking.taskId ? taskById.get(booking.taskId) : undefined}
@@ -3990,17 +4070,6 @@ function DayColumn({
                       onClose={() => setEditingBookingId(null)}
                     />
                   )}
-                </div>
-              );
-            })}
-            {googleScheduled.map((event) => {
-              const startMinutes = timeToMinutes(timeFromDateTime(event.startAt));
-              const top = Math.max(0, (startMinutes - calendarStartMinutes) * minuteHeight);
-              const height = Math.max(28, minutesBetween(event.startAt, event.endAt) * minuteHeight);
-              return (
-                <div className="scheduled-booking google-scheduled-event" key={event.id} style={{ top, height }}>
-                  <GoogleEventCard event={event} compact onOpen={() => setEditingGoogleEventId(event.id)} />
-                  {editingGoogleEventId === event.id && <GoogleEventEditor event={event} onClose={() => setEditingGoogleEventId(null)} />}
                 </div>
               );
             })}
