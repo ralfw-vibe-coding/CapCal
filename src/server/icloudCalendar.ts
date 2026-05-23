@@ -1,7 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
-import { createRequire } from "node:module";
 import ICAL from "ical.js";
-import type { DAVCalendar } from "tsdav";
+import { xml2js } from "xml-js";
 import type { AuthUser } from "./auth";
 import { ensureAuthSchema } from "./auth";
 import {
@@ -35,8 +34,18 @@ type ICloudCredentialsInput = {
 };
 
 const iCloudServerUrl = "https://caldav.icloud.com";
-const require = createRequire(import.meta.url);
-const { createDAVClient } = require("tsdav") as typeof import("tsdav");
+
+type CalDavCalendar = {
+  url: string;
+  displayName: string;
+  color?: string;
+  components: string[];
+};
+
+type CalDavObject = {
+  url: string;
+  data: string;
+};
 
 function secret() {
   return getEnv("AUTH_SESSION_SECRET") ?? "capcal-local-dev-session-secret";
@@ -128,27 +137,186 @@ async function saveStoredSettings(userId: number, settings: ICloudCalendarSettin
   if (result.length === 0) throw new Error(`User ${userId} not found for iCloud Calendar settings`);
 }
 
-async function createICloudClient(appleId: string, appPassword: string) {
-  return createDAVClient({
-    serverUrl: iCloudServerUrl,
-    credentials: {
-      username: appleId,
-      password: appPassword
+function basicAuthHeader(appleId: string, appPassword: string) {
+  return `Basic ${Buffer.from(`${appleId}:${appPassword}`).toString("base64")}`;
+}
+
+function resolveDavUrl(href: string) {
+  return new URL(href, iCloudServerUrl).toString();
+}
+
+function asArray<T>(value: T | T[] | undefined): T[] {
+  if (!value) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+function childrenByLocalName(node: unknown, localName: string): unknown[] {
+  if (!node || typeof node !== "object") return [];
+  const values: unknown[] = [];
+  for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+    if (key === "_text" || key === "_attributes") continue;
+    const name = key.includes(":") ? key.slice(key.indexOf(":") + 1) : key;
+    if (name === localName) values.push(...asArray(value));
+  }
+  return values;
+}
+
+function firstChild(node: unknown, localName: string) {
+  return childrenByLocalName(node, localName)[0];
+}
+
+function textValue(node: unknown): string | undefined {
+  if (typeof node === "string") return node;
+  if (!node || typeof node !== "object") return undefined;
+  const text = (node as Record<string, unknown>)._text;
+  return typeof text === "string" ? text : undefined;
+}
+
+function childText(node: unknown, localName: string) {
+  return textValue(firstChild(node, localName));
+}
+
+function propFromResponse(response: unknown) {
+  for (const propstat of childrenByLocalName(response, "propstat")) {
+    const status = childText(propstat, "status");
+    if (status && !status.includes("200")) continue;
+    const prop = firstChild(propstat, "prop");
+    if (prop) return prop;
+  }
+  return firstChild(response, "prop");
+}
+
+async function davXmlRequest(
+  url: string,
+  method: "PROPFIND" | "REPORT",
+  appleId: string,
+  appPassword: string,
+  body: string,
+  depth: "0" | "1" = "0"
+) {
+  const response = await fetch(url, {
+    method,
+    headers: {
+      authorization: basicAuthHeader(appleId, appPassword),
+      depth,
+      "content-type": "application/xml; charset=utf-8"
     },
-    authMethod: "Basic",
-    defaultAccountType: "caldav"
+    body
   });
+  const text = await response.text();
+  if (!response.ok) throw new Error(`iCloud CalDAV ${method} failed (${response.status}): ${text.slice(0, 240)}`);
+  return xml2js(text, { compact: true, ignoreDeclaration: true }) as Record<string, unknown>;
+}
+
+function multistatusResponses(xml: unknown) {
+  const multistatus = firstChild(xml, "multistatus") ?? xml;
+  return childrenByLocalName(multistatus, "response");
+}
+
+async function discoverCalendarHomeUrl(appleId: string, appPassword: string) {
+  const principalXml = await davXmlRequest(
+    iCloudServerUrl,
+    "PROPFIND",
+    appleId,
+    appPassword,
+    `<D:propfind xmlns:D="DAV:"><D:prop><D:current-user-principal/></D:prop></D:propfind>`
+  );
+  const principalResponse = multistatusResponses(principalXml)[0];
+  const principalHref = childText(firstChild(propFromResponse(principalResponse), "current-user-principal"), "href");
+  if (!principalHref) throw new Error("iCloud did not return a CalDAV principal URL");
+
+  const homeXml = await davXmlRequest(
+    resolveDavUrl(principalHref),
+    "PROPFIND",
+    appleId,
+    appPassword,
+    `<D:propfind xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:prop><C:calendar-home-set/></D:prop></D:propfind>`
+  );
+  const homeResponse = multistatusResponses(homeXml)[0];
+  const homeHref = childText(firstChild(propFromResponse(homeResponse), "calendar-home-set"), "href");
+  if (!homeHref) throw new Error("iCloud did not return a calendar home URL");
+  return resolveDavUrl(homeHref);
+}
+
+function componentNames(prop: unknown) {
+  const supported = firstChild(prop, "supported-calendar-component-set");
+  const components = childrenByLocalName(supported, "comp");
+  return components
+    .map((component) => {
+      const attrs = component && typeof component === "object" ? (component as Record<string, unknown>)._attributes : undefined;
+      const name = attrs && typeof attrs === "object" ? (attrs as Record<string, unknown>).name : undefined;
+      return typeof name === "string" ? name.toUpperCase() : "";
+    })
+    .filter(Boolean);
+}
+
+async function fetchCalDavCalendars(appleId: string, appPassword: string): Promise<CalDavCalendar[]> {
+  const homeUrl = await discoverCalendarHomeUrl(appleId, appPassword);
+  const xml = await davXmlRequest(
+    homeUrl,
+    "PROPFIND",
+    appleId,
+    appPassword,
+    `<D:propfind xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:A="http://apple.com/ns/ical/"><D:prop><D:displayname/><D:resourcetype/><A:calendar-color/><C:supported-calendar-component-set/></D:prop></D:propfind>`,
+    "1"
+  );
+  return multistatusResponses(xml)
+    .map((response): CalDavCalendar | null => {
+      const href = childText(response, "href");
+      const prop = propFromResponse(response);
+      if (!href || !prop) return null;
+      const resourceType = firstChild(prop, "resourcetype");
+      const isCalendar = childrenByLocalName(resourceType, "calendar").length > 0;
+      if (!isCalendar) return null;
+      const components = componentNames(prop);
+      return {
+        url: resolveDavUrl(href),
+        displayName: childText(prop, "displayname") ?? href,
+        color: childText(prop, "calendar-color"),
+        components
+      };
+    })
+    .filter((calendar): calendar is CalDavCalendar => Boolean(calendar));
+}
+
+function compactDateTime(date: string) {
+  return `${date.replaceAll("-", "")}T000000Z`;
+}
+
+async function fetchCalDavCalendarObjects(
+  appleId: string,
+  appPassword: string,
+  calendarUrl: string,
+  from: string,
+  to: string
+): Promise<CalDavObject[]> {
+  const xml = await davXmlRequest(
+    calendarUrl,
+    "REPORT",
+    appleId,
+    appPassword,
+    `<C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:prop><D:getetag/><C:calendar-data/></D:prop><C:filter><C:comp-filter name="VCALENDAR"><C:comp-filter name="VEVENT"><C:time-range start="${compactDateTime(from)}" end="${compactDateTime(addIsoDays(to, 1))}"/></C:comp-filter></C:comp-filter></C:filter></C:calendar-query>`,
+    "1"
+  );
+  return multistatusResponses(xml)
+    .map((response): CalDavObject | null => {
+      const href = childText(response, "href");
+      const prop = propFromResponse(response);
+      const data = childText(prop, "calendar-data");
+      if (!href || !data) return null;
+      return { url: resolveDavUrl(href), data };
+    })
+    .filter((object): object is CalDavObject => Boolean(object));
 }
 
 async function fetchICloudCalendars(appleId: string, appPassword: string, selectedIds = new Set<string>()) {
-  const client = await createICloudClient(appleId, appPassword);
-  const calendars = await client.fetchCalendars();
+  const calendars = await fetchCalDavCalendars(appleId, appPassword);
   return calendars
     .filter((calendar) => (calendar.components ?? []).length === 0 || calendar.components?.includes("VEVENT"))
     .map((calendar): ICloudCalendarItem => ({
       id: calendar.url,
-      summary: typeof calendar.displayName === "string" ? calendar.displayName : calendar.url,
-      color: calendar.calendarColor,
+      summary: calendar.displayName,
+      color: calendar.color,
       selected: selectedIds.has(calendar.url),
       syncedAt: new Date().toISOString()
     }));
@@ -156,12 +324,6 @@ async function fetchICloudCalendars(appleId: string, appPassword: string, select
 
 function stripMailto(value?: string) {
   return value?.replace(/^mailto:/i, "");
-}
-
-function calendarByUrl(calendars: DAVCalendar[], url: string) {
-  const calendar = calendars.find((item) => item.url === url);
-  if (!calendar) throw new Error("iCloud calendar is no longer available");
-  return calendar;
 }
 
 function dateToIcalTime(date: string) {
@@ -240,20 +402,9 @@ function parseICloudEvents(data: string, objectUrl: string, from: string, to: st
 }
 
 async function refreshEventsForCalendar(userId: number, appleId: string, appPassword: string, calendarId: string, from: string, to: string) {
-  const client = await createICloudClient(appleId, appPassword);
-  const calendars = await client.fetchCalendars();
-  const calendar = calendarByUrl(calendars, calendarId);
-  const objects = await client.fetchCalendarObjects({
-    calendar,
-    timeRange: {
-      start: `${from}T00:00:00Z`,
-      end: `${addIsoDays(to, 1)}T00:00:00Z`
-    },
-    expand: true
-  });
+  const objects = await fetchCalDavCalendarObjects(appleId, appPassword, calendarId, from, to);
 
   for (const object of objects) {
-    if (typeof object.data !== "string") continue;
     const events = parseICloudEvents(object.data, object.url, from, to);
     for (const event of events) await upsertExternalEvent("icloud", userId, calendarId, event);
   }

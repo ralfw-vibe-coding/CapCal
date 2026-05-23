@@ -5,7 +5,6 @@
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
-  external_node_modules = ["tsdav"]
 
 [[redirects]]
   from = "/api/state"
