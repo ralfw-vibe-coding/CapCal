@@ -1464,9 +1464,20 @@ button:disabled {
   position: relative;
 }
 
+.day-column.today-column {
+  border-color: #0e7c6f;
+  border-width: 3px;
+  box-shadow: 0 0 0 1px rgba(14, 124, 111, 0.12);
+}
+
 .day-column.week-start {
   border-left-color: #899287;
   border-left-width: 3px;
+}
+
+.day-column.today-column.week-start {
+  border-color: #0e7c6f;
+  border-width: 3px;
 }
 
 .day-column > header {

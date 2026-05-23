@@ -3328,7 +3328,7 @@ function DayColumn({
   }, [editingBookingId, editingGoogleEventId]);
 
   return (
-    <section className={`day-column ${isMonday(date) ? "week-start" : ""}`} ref={dayColumnRef}>
+    <section className={`day-column ${date === today ? "today-column" : ""} ${isMonday(date) ? "week-start" : ""}`} ref={dayColumnRef}>
       <header className={`${date === today ? "today" : ""} ${isWeekend(date) ? "weekend" : ""}`}>{formatDate(date)}</header>
       <div className="capacity-strip">
         <div className="capacity-label">
