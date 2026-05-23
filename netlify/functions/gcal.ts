@@ -2,6 +2,7 @@ import type { Config } from "@netlify/functions";
 import { getSessionUser } from "../../src/server/auth";
 import {
   disconnectGoogleCalendar,
+  googleCalendarEvents,
   googleCalendarStatus,
   refreshGoogleCalendars,
   updateGoogleCalendarSelection
@@ -35,6 +36,17 @@ export default async (request: Request) => {
     if (url.pathname === "/api/gcal/calendars" && request.method === "PUT") {
       const body = (await request.json()) as { selectedCalendarIds?: unknown };
       return jsonResponse(await updateGoogleCalendarSelection(user, body.selectedCalendarIds));
+    }
+
+    if (url.pathname === "/api/gcal/events" && request.method === "GET") {
+      return jsonResponse(
+        await googleCalendarEvents(
+          user,
+          url.searchParams.get("from") ?? "",
+          url.searchParams.get("to") ?? "",
+          url.searchParams.get("refresh") === "1"
+        )
+      );
     }
 
     if (url.pathname === "/api/gcal/disconnect" && request.method === "POST") {

@@ -17,6 +17,7 @@ import {
   googleCalendarCallback,
   googleCalendarConnectUrl,
   googleCalendarErrorRedirect,
+  googleCalendarEvents,
   googleCalendarStatus,
   refreshGoogleCalendars,
   updateGoogleCalendarSelection
@@ -138,6 +139,24 @@ const server = createServer(async (request, response) => {
       }
       const body = JSON.parse(await readBody(request));
       send(response, 200, await updateGoogleCalendarSelection(user, body.selectedCalendarIds));
+      return;
+    }
+
+    if (url.pathname === "/api/gcal/events" && request.method === "GET") {
+      if (!user) {
+        send(response, 401, { error: "Unauthorized" });
+        return;
+      }
+      send(
+        response,
+        200,
+        await googleCalendarEvents(
+          user,
+          url.searchParams.get("from") ?? "",
+          url.searchParams.get("to") ?? "",
+          url.searchParams.get("refresh") === "1"
+        )
+      );
       return;
     }
 

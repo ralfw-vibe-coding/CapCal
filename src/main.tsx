@@ -64,6 +64,18 @@ type GoogleCalendarState = {
   connectedAt?: string;
   updatedAt?: string;
 };
+type GoogleCalendarEvent = {
+  id: string;
+  calendarId: string;
+  calendarSummary: string;
+  calendarColor?: string;
+  summary: string;
+  startAt: string;
+  endAt: string;
+  allDay: boolean;
+  blocksTime: boolean;
+  htmlLink?: string;
+};
 
 type Task = {
   id: string;
@@ -225,6 +237,23 @@ function deadlineTone(dueDate?: string) {
   if (daysUntilDue <= 0) return "deadline-due";
   if (daysUntilDue <= 3) return "deadline-soon";
   return "";
+}
+
+function dateFromDateTime(value: string) {
+  const date = new Date(value);
+  const year = date.getFullYear();
+  const month = (date.getMonth() + 1).toString().padStart(2, "0");
+  const day = date.getDate().toString().padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function timeFromDateTime(value: string) {
+  const date = new Date(value);
+  return `${date.getHours().toString().padStart(2, "0")}:${date.getMinutes().toString().padStart(2, "0")}`;
+}
+
+function minutesBetween(startAt: string, endAt: string) {
+  return Math.max(0, Math.round((new Date(endAt).getTime() - new Date(startAt).getTime()) / 60_000));
 }
 
 function minutesToTimeLabel(minutes: number) {
@@ -437,6 +466,8 @@ function App() {
   const [userSettingsError, setUserSettingsError] = useState("");
   const [googleCalendar, setGoogleCalendar] = useState<GoogleCalendarState | null>(null);
   const [googleCalendarError, setGoogleCalendarError] = useState("");
+  const [googleCalendarEvents, setGoogleCalendarEvents] = useState<GoogleCalendarEvent[]>([]);
+  const [googleCalendarEventsError, setGoogleCalendarEventsError] = useState("");
   const [expandedTaskIds, setExpandedTaskIds] = useState<Set<string>>(() => new Set());
   const [collapsedHierarchyTaskIds, setCollapsedHierarchyTaskIds] = useState<Set<string>>(() => new Set());
   const [hierarchySortTargetId, setHierarchySortTargetId] = useState<string | null>(null);
@@ -690,6 +721,26 @@ function App() {
     }
   }
 
+  async function loadGoogleCalendarEvents(from: string, to: string, forceRefresh = false) {
+    if (!googleCalendar?.connected || !googleCalendar.calendars.some((calendar) => calendar.selected)) {
+      setGoogleCalendarEvents([]);
+      setGoogleCalendarEventsError("");
+      return;
+    }
+    setGoogleCalendarEventsError("");
+    try {
+      const response = await fetch(
+        `/api/gcal/events?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${forceRefresh ? "&refresh=1" : ""}`,
+        { credentials: "same-origin" }
+      );
+      if (!response.ok) throw new Error(await apiErrorMessage(response));
+      const payload = (await response.json()) as { events?: GoogleCalendarEvent[] };
+      setGoogleCalendarEvents(payload.events ?? []);
+    } catch (error) {
+      setGoogleCalendarEventsError(error instanceof Error ? error.message : "Google Calendar Events konnten nicht geladen werden.");
+    }
+  }
+
   async function logout() {
     try {
       await fetch("/api/auth/logout", {
@@ -828,6 +879,15 @@ function App() {
     },
     [calendarStartDate, settings.showWeekends, settings.visibleDayCount]
   );
+  const visibleRangeEnd = days.length > 0 ? days[days.length - 1] : calendarStartDate;
+  const googleEventsByDate = useMemo(() => {
+    const byDate = new Map<string, GoogleCalendarEvent[]>();
+    for (const event of googleCalendarEvents) {
+      const date = event.allDay ? dateFromDateTime(event.startAt) : dateFromDateTime(event.startAt);
+      byDate.set(date, [...(byDate.get(date) ?? []), event]);
+    }
+    return byDate;
+  }, [googleCalendarEvents]);
   const workspaceColumns = [
     settings.panelsCollapsed.tree
       ? "64px"
@@ -845,6 +905,10 @@ function App() {
       current.title.trim() ? current : { ...current, estimateMinutes: settings.defaultTreeDurationMinutes }
     );
   }, [settings.defaultTreeDurationMinutes]);
+
+  useEffect(() => {
+    void loadGoogleCalendarEvents(calendarStartDate, visibleRangeEnd);
+  }, [calendarStartDate, visibleRangeEnd, googleCalendar]);
 
   useEffect(() => {
     if (!settingsOpen) return;
@@ -2150,6 +2214,13 @@ function App() {
             <button className="soft-button icon-button" title="Vorwärts blättern" onClick={() => setCalendarStartDate(addDays(calendarStartDate, settings.visibleDayCount))}>
               <ChevronRight size={15} />
             </button>
+            <button
+              className="soft-button icon-button"
+              title="Google Calendar Events aktualisieren"
+              onClick={() => void loadGoogleCalendarEvents(calendarStartDate, visibleRangeEnd, true)}
+            >
+              <RotateCcw size={15} />
+            </button>
           </div>
           <div className="calendar-scroll">
             <div className="calendar-grid" style={{ gridTemplateColumns: `repeat(${days.length}, minmax(220px, 1fr))` }}>
@@ -2158,6 +2229,7 @@ function App() {
                   key={date}
                   date={date}
                   bookings={state.bookings.filter((booking) => booking.date === date)}
+                  googleEvents={googleEventsByDate.get(date) ?? []}
                   capacity={state.dailyCapacities?.[date] ?? defaultCapacity}
                   calendarStartMinutes={calendarStartMinutes}
                   calendarEndMinutes={calendarEndMinutes}
@@ -2174,6 +2246,7 @@ function App() {
                 />
               ))}
             </div>
+            {googleCalendarEventsError && <div className="calendar-error">{googleCalendarEventsError}</div>}
           </div>
         </Panel>
       </section>
@@ -2854,6 +2927,7 @@ function TaskTagPicker({ allTags, task, onTags }: { allTags: string[]; task: Tas
 function DayColumn({
   date,
   bookings,
+  googleEvents,
   capacity,
   calendarStartMinutes,
   calendarEndMinutes,
@@ -2870,6 +2944,7 @@ function DayColumn({
 }: {
   date: string;
   bookings: Booking[];
+  googleEvents: GoogleCalendarEvent[];
   capacity: DailyCapacity;
   calendarStartMinutes: number;
   calendarEndMinutes: number;
@@ -2891,7 +2966,15 @@ function DayColumn({
   const dayColumnRef = useRef<HTMLElement | null>(null);
   const allocations = bookings.filter((booking) => !booking.startTime);
   const scheduled = bookings.filter((booking) => booking.startTime).sort((a, b) => a.startTime!.localeCompare(b.startTime!));
-  const bookedMinutes = bookings.reduce((sum, booking) => sum + booking.durationMinutes, 0);
+  const googleBlockingMinutes = googleEvents.reduce((sum, event) => {
+    if (!event.blocksTime) return sum;
+    return sum + (event.allDay ? capacity.dayCapacityMinutes : minutesBetween(event.startAt, event.endAt));
+  }, 0);
+  const googleAllocations = googleEvents.filter((event) => event.allDay);
+  const googleScheduled = googleEvents
+    .filter((event) => !event.allDay)
+    .sort((a, b) => a.startAt.localeCompare(b.startAt));
+  const bookedMinutes = bookings.reduce((sum, booking) => sum + booking.durationMinutes, 0) + googleBlockingMinutes;
   const fillPercent = Math.min(100, (bookedMinutes / capacity.dayCapacityMinutes) * 100);
   const planningPercent = Math.min(100, (capacity.planningCapacityMinutes / capacity.dayCapacityMinutes) * 100);
   const redCapacityThreshold =
@@ -3050,6 +3133,9 @@ function DayColumn({
             )}
           </div>
         ))}
+        {googleAllocations.map((event) => (
+          <GoogleEventCard key={event.id} event={event} />
+        ))}
       </div>
       <div className="time-grid">
         <div className="timeline-labels" style={{ height: timelineHeight }}>
@@ -3126,6 +3212,16 @@ function DayColumn({
               </div>
             );
           })}
+          {googleScheduled.map((event) => {
+            const startMinutes = timeToMinutes(timeFromDateTime(event.startAt));
+            const top = Math.max(0, (startMinutes - calendarStartMinutes) * minuteHeight);
+            const height = Math.max(28, minutesBetween(event.startAt, event.endAt) * minuteHeight);
+            return (
+              <div className="scheduled-booking google-scheduled-event" key={event.id} style={{ top, height }}>
+                <GoogleEventCard event={event} compact />
+              </div>
+            );
+          })}
         </div>
         {dropPreview?.area === "time" && dropPreview.startTime && (
           <div
@@ -3180,6 +3276,47 @@ function BookingCard({
         {task?.archived && <Archive size={13} />}
       </div>
       {onResizeStart && <div className="booking-resize-handle" title="Dauer ändern" onPointerDown={onResizeStart} />}
+    </article>
+  );
+}
+
+function GoogleEventCard({ event, compact = false }: { event: GoogleCalendarEvent; compact?: boolean }) {
+  const timeLabel = event.allDay
+    ? "Ganztägig"
+    : `${timeFromDateTime(event.startAt)}-${timeFromDateTime(event.endAt)}`;
+  const content = (
+    <>
+      <div className="booking-head">
+        <CalendarDays size={14} />
+        <strong>{event.summary}</strong>
+      </div>
+      {!compact && (
+        <div className="google-event-meta">
+          <span>{timeLabel}</span>
+          <span>{event.calendarSummary}</span>
+          {!event.blocksTime && <span>frei</span>}
+        </div>
+      )}
+    </>
+  );
+  return event.htmlLink ? (
+    <a
+      className={`booking-card google-event-card ${event.blocksTime ? "google-event-busy" : "google-event-free"}`}
+      href={event.htmlLink}
+      target="_blank"
+      rel="noreferrer"
+      title={`${event.calendarSummary} · ${timeLabel}`}
+      style={{ "--gcal-color": event.calendarColor ?? "#4285f4" } as React.CSSProperties}
+    >
+      {content}
+    </a>
+  ) : (
+    <article
+      className={`booking-card google-event-card ${event.blocksTime ? "google-event-busy" : "google-event-free"}`}
+      title={`${event.calendarSummary} · ${timeLabel}`}
+      style={{ "--gcal-color": event.calendarColor ?? "#4285f4" } as React.CSSProperties}
+    >
+      {content}
     </article>
   );
 }

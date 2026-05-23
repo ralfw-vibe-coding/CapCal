@@ -1713,6 +1713,46 @@ button:disabled {
   position: relative;
 }
 
+.google-event-card {
+  --gcal-color: #4285f4;
+  background:
+    radial-gradient(
+      circle at 2px 2px,
+      color-mix(in srgb, var(--gcal-color) 34%, transparent) 1px,
+      transparent 1.6px
+    ),
+    color-mix(in srgb, var(--gcal-color) 10%, #ffffff);
+  background-size: 7px 7px, auto;
+  border-color: color-mix(in srgb, var(--gcal-color) 42%, var(--line));
+  box-shadow: inset 4px 0 0 var(--gcal-color);
+  color: #31413c;
+  cursor: default;
+  display: block;
+  text-decoration: none;
+}
+
+.google-event-card.google-event-free {
+  border-style: dashed;
+  opacity: 0.72;
+}
+
+.google-event-card:hover {
+  color: #31413c;
+}
+
+.google-event-card .booking-head strong {
+  color: #7b8580;
+}
+
+.google-event-meta {
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 11px;
+  gap: 5px;
+  margin-top: 4px;
+}
+
 .booking-card.editing {
   border-color: var(--accent);
   box-shadow: inset 3px 0 0 var(--accent);
@@ -1731,6 +1771,18 @@ button:disabled {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.calendar-error {
+  background: #fff3f1;
+  border: 1px solid #efc1ba;
+  border-radius: 8px;
+  color: #a13535;
+  font-size: 12px;
+  margin-top: 8px;
+  padding: 8px;
+  position: sticky;
+  left: 0;
 }
 
 .booking-resize-handle {
