@@ -1481,6 +1481,12 @@ button:disabled {
   overflow: hidden;
 }
 
+.month-panel.current-month-panel {
+  border-color: #0e7c6f;
+  border-width: 3px;
+  box-shadow: 0 0 0 1px rgba(14, 124, 111, 0.12);
+}
+
 .month-panel > header {
   align-items: center;
   background: var(--surface-2);

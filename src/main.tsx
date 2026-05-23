@@ -502,6 +502,12 @@ function createCalendarPeriod(startDate: string, visibleDayCount: number, showWe
   return nextDays;
 }
 
+function nextVisibleDate(date: string, showWeekends: boolean) {
+  let cursor = addDays(date, 1);
+  while (!showWeekends && isWeekend(cursor)) cursor = addDays(cursor, 1);
+  return cursor;
+}
+
 function browserUtcOffset() {
   const offsetMinutes = -new Date().getTimezoneOffset();
   const sign = offsetMinutes >= 0 ? "+" : "-";
@@ -551,6 +557,7 @@ function App() {
   const [quickAdd, setQuickAdd] = useState({ prio: "", cal: "" });
   const [dragPayload, setDragPayload] = useState<DragPayload | null>(null);
   const [calendarStartDate, setCalendarStartDate] = useState(today);
+  const [dayCalendarStartDate, setDayCalendarStartDate] = useState(today);
   const [loadedCalendarDays, setLoadedCalendarDays] = useState<string[]>([]);
   const [loadedCalendarMonths, setLoadedCalendarMonths] = useState<string[]>(() => [startOfMonth(today)]);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -1058,8 +1065,8 @@ function App() {
   }, [state?.tasks, treeFilters.query, treeFilters.showArchived, treeFilters.statuses, treeFilters.tags]);
   const filteredTaskIds = useMemo(() => new Set(filteredTreeTasks.map((task) => task.id)), [filteredTreeTasks]);
   const currentCalendarPeriod = useMemo(
-    () => createCalendarPeriod(calendarStartDate, settings.visibleDayCount, settings.showWeekends),
-    [calendarStartDate, settings.showWeekends, settings.visibleDayCount]
+    () => createCalendarPeriod(dayCalendarStartDate, settings.visibleDayCount, settings.showWeekends),
+    [dayCalendarStartDate, settings.showWeekends, settings.visibleDayCount]
   );
   const days = loadedCalendarDays.length > 0 ? loadedCalendarDays : currentCalendarPeriod;
   const calendarMonths = loadedCalendarMonths.length > 0 ? loadedCalendarMonths : [startOfMonth(calendarStartDate)];
@@ -1924,16 +1931,30 @@ function App() {
   }
 
   function mergeCalendarDays(currentDays: string[], nextDays: string[]) {
-    return Array.from(new Set([...currentDays, ...nextDays])).sort((a, b) => a.localeCompare(b));
+    const sorted = Array.from(new Set([...currentDays, ...nextDays])).sort((a, b) => a.localeCompare(b));
+    if (sorted.length < 2) return sorted;
+    const filled: string[] = [];
+    let cursor = sorted[0];
+    const end = sorted[sorted.length - 1];
+    while (cursor <= end) {
+      filled.push(cursor);
+      cursor = nextVisibleDate(cursor, settings.showWeekends);
+    }
+    return filled;
   }
 
   function mergeCalendarMonths(currentMonths: string[], nextMonths: string[]) {
     return Array.from(new Set([...currentMonths, ...nextMonths].map(startOfMonth))).sort((a, b) => a.localeCompare(b));
   }
 
+  function monthsForDays(dayList: string[]) {
+    return Array.from(new Set(dayList.map(startOfMonth)));
+  }
+
   function loadCalendarPeriod(startDate: string) {
     const period = createCalendarPeriod(startDate, settings.visibleDayCount, settings.showWeekends);
     setCalendarStartDate(startDate);
+    setDayCalendarStartDate(startDate);
     setLoadedCalendarDays((currentDays) => mergeCalendarDays(currentDays.length > 0 ? currentDays : days, period));
   }
 
@@ -1947,33 +1968,56 @@ function App() {
 
   function setCalendarView(calendarView: CalendarViewMode) {
     if (calendarView === "month") {
-      const anchorDate = days.includes(today) ? today : calendarStartDate;
+      const anchorDate = settings.calendarView === "days" ? dayCalendarStartDate : calendarStartDate;
       const monthStart = startOfMonth(anchorDate);
       setCalendarStartDate(anchorDate);
       setLoadedCalendarMonths((currentMonths) =>
-        currentMonths.includes(monthStart) ? currentMonths : mergeCalendarMonths(currentMonths, [monthStart])
+        mergeCalendarMonths(currentMonths.length > 0 ? currentMonths : calendarMonths, [
+          monthStart,
+          ...monthsForDays(loadedCalendarDays)
+        ])
       );
     } else {
-      const anchorDate =
-        calendarMonths.some((monthStart) => today >= monthStart && today <= endOfMonth(monthStart)) ? today : calendarStartDate;
+      const anchorDate = dayCalendarStartDate;
+      const period = createCalendarPeriod(anchorDate, settings.visibleDayCount, settings.showWeekends);
       setCalendarStartDate(anchorDate);
-      setLoadedCalendarDays(createCalendarPeriod(anchorDate, settings.visibleDayCount, settings.showWeekends));
+      setLoadedCalendarDays((currentDays) => mergeCalendarDays(currentDays.length > 0 ? currentDays : days, period));
     }
     updateSettings({ calendarView });
   }
 
   function resetCalendarToToday() {
-    const period = createCalendarPeriod(today, settings.visibleDayCount, settings.showWeekends);
     setCalendarStartDate(today);
-    setLoadedCalendarDays(period);
-    setLoadedCalendarMonths([startOfMonth(today)]);
+    if (settings.calendarView === "month") {
+      setLoadedCalendarMonths((currentMonths) => mergeCalendarMonths(currentMonths.length > 0 ? currentMonths : calendarMonths, [startOfMonth(today)]));
+      window.setTimeout(() => {
+        document
+          .querySelector(`[data-calendar-month="${startOfMonth(today)}"]`)
+          ?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+      }, 0);
+    } else {
+      const period = createCalendarPeriod(today, settings.visibleDayCount, settings.showWeekends);
+      setDayCalendarStartDate(today);
+      setLoadedCalendarDays((currentDays) => mergeCalendarDays(currentDays.length > 0 ? currentDays : days, period));
+      window.setTimeout(() => {
+        document
+          .querySelector(`[data-calendar-date="${today}"]`)
+          ?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+      }, 0);
+    }
   }
 
   function openDayFromMonth(date: string) {
     const period = createCalendarPeriod(date, settings.visibleDayCount, settings.showWeekends);
     setCalendarStartDate(date);
-    setLoadedCalendarDays(period);
-    setCalendarView("days");
+    setDayCalendarStartDate(date);
+    setLoadedCalendarDays((currentDays) => mergeCalendarDays(currentDays.length > 0 ? currentDays : days, period));
+    updateSettings({ calendarView: "days" });
+    window.setTimeout(() => {
+      document
+        .querySelector(`[data-calendar-date="${date}"]`)
+        ?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+    }, 0);
   }
 
   async function importTaskspace(file: File | undefined) {
@@ -3373,7 +3417,11 @@ function MonthCalendarView({
         const monthDays = createMonthDays(monthStart, showWeekends);
         const blanks = monthDays.length > 0 ? leadingCells(monthDays[0]) : 0;
         return (
-          <section className="month-panel" key={monthStart}>
+          <section
+            className={`month-panel ${monthStart === startOfMonth(today) ? "current-month-panel" : ""}`}
+            data-calendar-month={monthStart}
+            key={monthStart}
+          >
             <header>{formatMonthTitle(monthStart)}</header>
             <div className="month-weekdays" style={{ gridTemplateColumns: `repeat(${weekdayLabels.length}, minmax(92px, 1fr))` }}>
               {weekdayLabels.map((label) => (
@@ -3550,7 +3598,11 @@ function DayColumn({
   }, [editingBookingId, editingGoogleEventId]);
 
   return (
-    <section className={`day-column ${date === today ? "today-column" : ""} ${isMonday(date) ? "week-start" : ""}`} ref={dayColumnRef}>
+    <section
+      className={`day-column ${date === today ? "today-column" : ""} ${isMonday(date) ? "week-start" : ""}`}
+      data-calendar-date={date}
+      ref={dayColumnRef}
+    >
       <header className={`${date === today ? "today" : ""} ${isWeekend(date) ? "weekend" : ""}`}>{formatDate(date)}</header>
       <div className="capacity-strip">
         <div className="capacity-label">
