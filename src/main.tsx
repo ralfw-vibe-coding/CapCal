@@ -13,12 +13,14 @@ import {
   Circle,
   CircleDot,
   Clock3,
+  CloudOff,
   Copy,
   Download,
   FolderTree,
   GripVertical,
   Goal,
   Hourglass,
+  ListRestart,
   ListTree,
   Loader,
   LogOut,
@@ -47,6 +49,20 @@ type UserSettingsState = {
   apiKeyMasked?: string;
   apiKeyLastUsedAt?: string;
   apiKey?: string;
+};
+type GoogleCalendarItem = {
+  id: string;
+  summary: string;
+  color?: string;
+  selected: boolean;
+  syncedAt?: string;
+};
+type GoogleCalendarState = {
+  connected: boolean;
+  googleEmail?: string;
+  calendars: GoogleCalendarItem[];
+  connectedAt?: string;
+  updatedAt?: string;
 };
 
 type Task = {
@@ -416,9 +432,11 @@ function App() {
   const [dragPayload, setDragPayload] = useState<DragPayload | null>(null);
   const [calendarStartDate, setCalendarStartDate] = useState(today);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [userSettingsOpen, setUserSettingsOpen] = useState(false);
+  const [userPanel, setUserPanel] = useState<"menu" | "settings" | "gcal" | null>(null);
   const [userSettings, setUserSettings] = useState<UserSettingsState | null>(null);
   const [userSettingsError, setUserSettingsError] = useState("");
+  const [googleCalendar, setGoogleCalendar] = useState<GoogleCalendarState | null>(null);
+  const [googleCalendarError, setGoogleCalendarError] = useState("");
   const [expandedTaskIds, setExpandedTaskIds] = useState<Set<string>>(() => new Set());
   const [collapsedHierarchyTaskIds, setCollapsedHierarchyTaskIds] = useState<Set<string>>(() => new Set());
   const [hierarchySortTargetId, setHierarchySortTargetId] = useState<string | null>(null);
@@ -469,6 +487,17 @@ function App() {
 
   useEffect(() => {
     void loadState();
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const gcalStatus = params.get("gcal");
+    if (!gcalStatus) return;
+
+    setUserPanel("gcal");
+    if (gcalStatus === "error") setGoogleCalendarError(params.get("message") ?? "Google Calendar konnte nicht verbunden werden.");
+    if (gcalStatus === "connected") void loadGoogleCalendar(false);
+    window.history.replaceState({}, "", window.location.pathname);
   }, []);
 
   useEffect(() => {
@@ -600,6 +629,47 @@ function App() {
       setUserSettings((await response.json()) as UserSettingsState);
     } catch (error) {
       setUserSettingsError(error instanceof Error ? error.message : "API-Key konnte nicht erneuert werden.");
+    }
+  }
+
+  async function loadGoogleCalendar(refresh = false) {
+    setGoogleCalendarError("");
+    try {
+      const response = await fetch(refresh ? "/api/gcal/calendars" : "/api/gcal/status", { credentials: "same-origin" });
+      if (!response.ok) throw new Error(await apiErrorMessage(response));
+      setGoogleCalendar((await response.json()) as GoogleCalendarState);
+    } catch (error) {
+      setGoogleCalendarError(error instanceof Error ? error.message : "Google Calendar konnte nicht geladen werden.");
+    }
+  }
+
+  async function updateGoogleCalendarSelection(selectedCalendarIds: string[]) {
+    setGoogleCalendarError("");
+    try {
+      const response = await fetch("/api/gcal/calendars", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ selectedCalendarIds })
+      });
+      if (!response.ok) throw new Error(await apiErrorMessage(response));
+      setGoogleCalendar((await response.json()) as GoogleCalendarState);
+    } catch (error) {
+      setGoogleCalendarError(error instanceof Error ? error.message : "Kalenderauswahl konnte nicht gespeichert werden.");
+    }
+  }
+
+  async function disconnectGoogleCalendar() {
+    setGoogleCalendarError("");
+    try {
+      const response = await fetch("/api/gcal/disconnect", {
+        method: "POST",
+        credentials: "same-origin"
+      });
+      if (!response.ok) throw new Error(await apiErrorMessage(response));
+      setGoogleCalendar((await response.json()) as GoogleCalendarState);
+    } catch (error) {
+      setGoogleCalendarError(error instanceof Error ? error.message : "Google Calendar konnte nicht getrennt werden.");
     }
   }
 
@@ -770,17 +840,18 @@ function App() {
   }, [settingsOpen]);
 
   useEffect(() => {
-    if (!userSettingsOpen) return;
-    void loadUserSettings();
+    if (!userPanel) return;
+    if (userPanel === "settings") void loadUserSettings();
+    if (userPanel === "gcal") void loadGoogleCalendar(true);
 
     function handlePointerDown(event: PointerEvent) {
       const target = event.target;
-      if (target instanceof Node && !userMenuRef.current?.contains(target)) setUserSettingsOpen(false);
+      if (target instanceof Node && !userMenuRef.current?.contains(target)) setUserPanel(null);
     }
 
     window.addEventListener("pointerdown", handlePointerDown);
     return () => window.removeEventListener("pointerdown", handlePointerDown);
-  }, [userSettingsOpen]);
+  }, [userPanel]);
 
   if (authRequired) {
     return (
@@ -1634,17 +1705,42 @@ function App() {
           </div>
           {authUser && (
             <div className="settings-menu" ref={userMenuRef}>
-              <button className="icon-button ghost user-button" title="Benutzereinstellungen" onClick={() => setUserSettingsOpen((open) => !open)}>
+              <button className="icon-button ghost user-button" title="Benutzermenü" onClick={() => setUserPanel((panel) => (panel ? null : "menu"))}>
                 {userSettings?.profile.initials ? <span>{userSettings.profile.initials}</span> : <User size={16} />}
               </button>
-              {userSettingsOpen && (
+              {userPanel === "menu" && (
+                <div className="settings-panel user-menu-panel">
+                  <button className="menu-row" onClick={() => setUserPanel("settings")}>
+                    <User size={15} />
+                    Benutzereinstellungen
+                  </button>
+                  <button className="menu-row" onClick={() => setUserPanel("gcal")}>
+                    <CalendarDays size={15} />
+                    Google Calendar
+                  </button>
+                </div>
+              )}
+              {userPanel === "settings" && (
                 <UserSettingsPanel
                   authUser={authUser}
                   userSettings={userSettings}
                   error={userSettingsError}
                   onProfileChange={saveUserProfile}
                   onRotateApiKey={rotateUserApiKey}
-                  onClose={() => setUserSettingsOpen(false)}
+                  onClose={() => setUserPanel(null)}
+                />
+              )}
+              {userPanel === "gcal" && (
+                <GoogleCalendarPanel
+                  googleCalendar={googleCalendar}
+                  error={googleCalendarError}
+                  onConnect={() => {
+                    window.location.href = "/api/auth/gcal/connect";
+                  }}
+                  onRefresh={() => void loadGoogleCalendar(true)}
+                  onSelectionChange={updateGoogleCalendarSelection}
+                  onDisconnect={disconnectGoogleCalendar}
+                  onClose={() => setUserPanel(null)}
                 />
               )}
             </div>
@@ -2244,6 +2340,87 @@ function UserSettingsPanel({
   );
 }
 
+function GoogleCalendarPanel({
+  googleCalendar,
+  error,
+  onConnect,
+  onRefresh,
+  onSelectionChange,
+  onDisconnect,
+  onClose
+}: {
+  googleCalendar: GoogleCalendarState | null;
+  error: string;
+  onConnect: () => void;
+  onRefresh: () => void;
+  onSelectionChange: (selectedCalendarIds: string[]) => Promise<void>;
+  onDisconnect: () => Promise<void>;
+  onClose: () => void;
+}) {
+  const calendars = googleCalendar?.calendars ?? [];
+  const selectedCalendarIds = calendars.filter((calendar) => calendar.selected).map((calendar) => calendar.id);
+
+  function toggleCalendar(calendarId: string) {
+    const selectedIds = new Set(selectedCalendarIds);
+    if (selectedIds.has(calendarId)) selectedIds.delete(calendarId);
+    else selectedIds.add(calendarId);
+    void onSelectionChange([...selectedIds]);
+  }
+
+  return (
+    <div className="settings-panel google-calendar-panel">
+      <div className="settings-header">
+        <h2>Google Calendar</h2>
+        <div className="settings-header-actions">
+          {googleCalendar?.connected && (
+            <>
+              <button className="icon-button ghost" title="Kalender aktualisieren" onClick={onRefresh}>
+                <ListRestart size={14} />
+              </button>
+              <button className="icon-button ghost danger-icon" title="Verbindung trennen" onClick={() => void onDisconnect()}>
+                <CloudOff size={14} />
+              </button>
+            </>
+          )}
+          <button className="icon-button ghost" title="Google Calendar schließen" onClick={onClose}>
+            <X size={14} />
+          </button>
+        </div>
+      </div>
+      {!googleCalendar?.connected ? (
+        <div className="settings-section google-calendar-connect">
+          <p>Verbinde dein Google-Konto, um relevante Kalender für CapCal auszuwählen.</p>
+          <button className="primary" onClick={onConnect}>
+            Google Calendar verbinden
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="gcal-account">
+            <span>Verbunden als</span>
+            <strong>{googleCalendar.googleEmail ?? "Google-Konto"}</strong>
+          </div>
+          <div className="settings-section google-calendar-list">
+            <h3>Relevante Kalender</h3>
+            {calendars.length === 0 ? (
+              <p>Keine Kalender gefunden.</p>
+            ) : (
+              calendars.map((calendar) => (
+                <label key={calendar.id} className="gcal-calendar-row">
+                  <input type="checkbox" checked={calendar.selected} onChange={() => toggleCalendar(calendar.id)} />
+                  <span className="gcal-color" style={{ background: calendar.color ?? "#d9dfd4" }} />
+                  <span>{calendar.summary}</span>
+                </label>
+              ))
+            )}
+          </div>
+        </>
+      )}
+      {error && <div className="login-error">{error}</div>}
+    </div>
+  );
+}
+
 function SettingsPanel({
   settings,
   onSettingsChange,
@@ -2360,13 +2537,10 @@ function SettingsPanel({
             ))}
           </select>
         </label>
+        <div className="settings-check-spacer" />
         <label className="settings-check">
-          <input
-            type="checkbox"
-            checked={settings.showWeekends}
-            onChange={(event) => onSettingsChange({ showWeekends: event.target.checked })}
-          />
-          Wochenenden anzeigen
+          <input type="checkbox" checked={settings.showWeekends} onChange={(event) => onSettingsChange({ showWeekends: event.target.checked })} />
+          Wochenende anzeigen
         </label>
       </div>
     </div>

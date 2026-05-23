@@ -217,3 +217,9 @@ Bei Validierungsfehlern werden alle Fehler auf einmal zurückgegeben:
 - Soll ein Download einer bestimmten Version möglich sein?
   (`GET /api/v1/taskspaces/:id/state?version=42`)
 - Soll die API versioniert werden (`/v1/`)? Empfehlung: ja, von Anfang an.
+
+---
+
+## Umsetzung 2026-05-22
+
+Die Inhalte dieses Ready-Issues wurden in `requirements/01 Backlog/multi tenant/user-settings-api-access-stage-2.md` konsolidiert. Das alte Stufe-1-/Stufe-2-Mischdokument wurde aus Ready entfernt, damit die Ready-Spalte keine bereits ueberholte Aufgabe mehr enthaelt.

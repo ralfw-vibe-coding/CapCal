@@ -15,3 +15,13 @@
   from = "/api/auth/*"
   to = "/.netlify/functions/auth"
   status = 200
+
+[[redirects]]
+  from = "/api/user-settings*"
+  to = "/.netlify/functions/user-settings"
+  status = 200
+
+[[redirects]]
+  from = "/api/gcal/*"
+  to = "/.netlify/functions/gcal"
+  status = 200

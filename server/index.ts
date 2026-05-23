@@ -12,6 +12,15 @@ import {
   updateUserProfile,
   verifyOtp
 } from "../src/server/auth";
+import {
+  disconnectGoogleCalendar,
+  googleCalendarCallback,
+  googleCalendarConnectUrl,
+  googleCalendarErrorRedirect,
+  googleCalendarStatus,
+  refreshGoogleCalendars,
+  updateGoogleCalendarSelection
+} from "../src/server/googleCalendar";
 import { createStateProvider } from "../src/server/storage";
 
 async function readBody(request: AsyncIterable<Uint8Array>) {
@@ -29,6 +38,11 @@ function send(response: ServerResponse, status: number, payload: unknown, header
     ...headers
   });
   response.end(JSON.stringify(payload));
+}
+
+function redirect(response: ServerResponse, location: string) {
+  response.writeHead(302, { location });
+  response.end();
 }
 
 const server = createServer(async (request, response) => {
@@ -70,9 +84,69 @@ const server = createServer(async (request, response) => {
       return;
     }
 
+    if (url.pathname === "/api/auth/gcal/connect" && request.method === "GET") {
+      const user = getSessionUser(request.headers.cookie);
+      if (!user) {
+        send(response, 401, { error: "Unauthorized" });
+        return;
+      }
+      redirect(response, googleCalendarConnectUrl(user));
+      return;
+    }
+
+    if (url.pathname === "/api/auth/gcal/callback" && request.method === "GET") {
+      try {
+        const code = url.searchParams.get("code");
+        const state = url.searchParams.get("state");
+        if (!code || !state) throw new Error("Google callback is missing code or state");
+        redirect(response, await googleCalendarCallback(code, state));
+      } catch (error) {
+        console.error("[CapCal] Google Calendar callback failed:", error);
+        redirect(response, googleCalendarErrorRedirect(error));
+      }
+      return;
+    }
+
     const user = getSessionUser(request.headers.cookie) ?? (await getApiKeyUser(request.headers.authorization));
     if (isAuthRequired() && !user) {
       send(response, 401, { error: "Unauthorized" });
+      return;
+    }
+
+    if (url.pathname === "/api/gcal/status" && request.method === "GET") {
+      if (!user) {
+        send(response, 401, { error: "Unauthorized" });
+        return;
+      }
+      send(response, 200, await googleCalendarStatus(user));
+      return;
+    }
+
+    if (url.pathname === "/api/gcal/calendars" && request.method === "GET") {
+      if (!user) {
+        send(response, 401, { error: "Unauthorized" });
+        return;
+      }
+      send(response, 200, await refreshGoogleCalendars(user));
+      return;
+    }
+
+    if (url.pathname === "/api/gcal/calendars" && request.method === "PUT") {
+      if (!user) {
+        send(response, 401, { error: "Unauthorized" });
+        return;
+      }
+      const body = JSON.parse(await readBody(request));
+      send(response, 200, await updateGoogleCalendarSelection(user, body.selectedCalendarIds));
+      return;
+    }
+
+    if (url.pathname === "/api/gcal/disconnect" && request.method === "POST") {
+      if (!user) {
+        send(response, 401, { error: "Unauthorized" });
+        return;
+      }
+      send(response, 200, await disconnectGoogleCalendar(user));
       return;
     }
 

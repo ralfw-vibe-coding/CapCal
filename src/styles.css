@@ -184,6 +184,12 @@ button:disabled {
   justify-content: space-between;
 }
 
+.settings-header-actions {
+  align-items: center;
+  display: flex;
+  gap: 4px;
+}
+
 .settings-header h2 {
   font-size: 16px;
   margin: 0;
@@ -237,6 +243,30 @@ button:disabled {
   min-width: 360px;
 }
 
+.user-menu-panel {
+  gap: 4px;
+  min-width: 230px;
+  padding: 8px;
+}
+
+.menu-row {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text);
+  display: flex;
+  gap: 9px;
+  min-height: 34px;
+  padding: 0 9px;
+  text-align: left;
+  width: 100%;
+}
+
+.menu-row:hover {
+  background: var(--surface-2);
+}
+
 .user-profile-section,
 .user-api-section {
   grid-template-columns: 1fr 1fr;
@@ -276,15 +306,96 @@ button:disabled {
   margin-top: -6px;
 }
 
+.google-calendar-panel {
+  max-height: min(560px, calc(100vh - 120px));
+  min-width: 390px;
+  overflow: hidden;
+}
+
+.google-calendar-connect {
+  grid-template-columns: 1fr;
+}
+
+.google-calendar-connect p,
+.google-calendar-list p {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0;
+}
+
+.gcal-account {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+}
+
+.gcal-account span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.gcal-account strong {
+  font-size: 13px;
+}
+
+.google-calendar-list {
+  grid-template-columns: 1fr;
+  max-height: min(360px, calc(100vh - 285px));
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.gcal-calendar-row {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text) !important;
+  display: grid !important;
+  gap: 8px !important;
+  grid-template-columns: auto auto 1fr;
+  min-height: 34px;
+  padding: 6px 8px;
+}
+
+.gcal-calendar-row input {
+  height: 16px;
+  margin: 0;
+  width: 16px;
+}
+
+.gcal-color {
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 999px;
+  height: 12px;
+  width: 12px;
+}
+
+.danger-icon,
+.danger-soft {
+  color: #a13535;
+}
+
 .settings-check {
   align-items: center;
   display: flex !important;
   gap: 7px !important;
-  grid-column: 1 / -1;
+  grid-column: 1;
+  min-height: 20px;
 }
 
 .settings-check input {
   accent-color: var(--accent);
+  height: 13px;
+  margin: 0;
+  width: 13px;
+}
+
+.settings-check-spacer {
+  grid-column: 2;
 }
 
 .metric {
