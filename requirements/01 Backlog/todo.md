@@ -6,7 +6,7 @@ dasselbe gilt, wenn ich die gcal kalender lade. es gibt eine verzögerung.
 kann das durch früheres laden vermieden werden?
 
 
-- es gibt ein merkwürdiges phänomen: wenn ich die capcal öffne, wird sofort eine veränderung durch den punkt angezeigt und nach 5sek gespeichert. das sollte nicht sein.
+
 
 
 - die kalender kann ich nun bei gcal auswählen. jetzt muss mit ihnen etwas getan werden. ihre events müssen in die aktuelle ansicht des cal von capcal übernommen werden. events sind zu puffern. aber events müssen auch aktualisiert werden, damit die ansicht in capcal immer aktuell ist.

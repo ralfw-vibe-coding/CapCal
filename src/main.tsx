@@ -448,6 +448,7 @@ function App() {
   const userMenuRef = useRef<HTMLDivElement | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const stateRef = useRef<AppState | null>(null);
+  const cleanLoadedStateRef = useRef<AppState | null>(null);
   const dirtyRef = useRef(false);
   const hasLoadedRef = useRef(false);
   const saveTimerRef = useRef<number | null>(null);
@@ -475,6 +476,7 @@ function App() {
       if (!response.ok) throw new Error(await response.text());
       const normalizedState = normalizeState(await response.json());
       stateRef.current = normalizedState;
+      cleanLoadedStateRef.current = normalizedState;
       setState(normalizedState);
       setLoadError("");
       setAuthRequired(false);
@@ -503,6 +505,12 @@ function App() {
   useEffect(() => {
     if (!state) return;
     stateRef.current = state;
+    if (state === cleanLoadedStateRef.current) {
+      hasLoadedRef.current = true;
+      dirtyRef.current = false;
+      setSaveState("saved");
+      return;
+    }
     if (!hasLoadedRef.current) {
       hasLoadedRef.current = true;
       setSaveState("saved");
@@ -545,6 +553,7 @@ function App() {
       if (!response.ok) throw new Error(await response.text());
       if (version === stateVersionRef.current) {
         dirtyRef.current = false;
+        cleanLoadedStateRef.current = currentState;
         setSaveState("saved");
       } else {
         setSaveState("dirty");
@@ -682,6 +691,7 @@ function App() {
     } finally {
       if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
       stateRef.current = null;
+      cleanLoadedStateRef.current = null;
       dirtyRef.current = false;
       hasLoadedRef.current = false;
       setState(null);
