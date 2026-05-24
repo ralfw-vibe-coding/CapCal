@@ -2777,9 +2777,10 @@ function App() {
               if (!task || task.archived) return null;
               const prioDuration =
                 state.prioDurations?.[task.id] ?? durationForPlanning(task.estimateMinutes, settings.defaultPrioDurationMinutes);
+              const showStatusPresentation = normalizeTaskVisibleIn(task.visibleIn).board;
               return (
                 <div
-                  className={`prio-card status-card ${statusMeta[task.status].className}`}
+                  className={`prio-card status-card ${statusMeta[task.status].className} ${!showStatusPresentation ? "no-board-status" : ""}`}
                   key={task.id}
                   draggable
                   onDragStart={(event) => {
@@ -2798,7 +2799,7 @@ function App() {
                   }}
                 >
                   <GripVertical size={16} />
-                  <StatusIcon status={task.status} />
+                  {showStatusPresentation && <StatusIcon status={task.status} />}
                   <div className="prio-card-main">
                     <strong>{task.title}</strong>
                   </div>
@@ -3615,9 +3616,12 @@ function TaskCard({
     return () => window.removeEventListener("pointerdown", handlePointerDown);
   }, [deleteConfirm]);
 
+  const taskVisibleIn = normalizeTaskVisibleIn(task.visibleIn);
+  const showStatusPresentation = taskVisibleIn.board;
+
   return (
     <article
-      className={`task-card task-card-${variant} status-card ${statusMeta[task.status].className} ${task.archived ? "archived" : ""} ${isDropTarget ? "task-drop-target" : ""} ${isHierarchySortTarget ? "hierarchy-sort-target" : ""}`}
+      className={`task-card task-card-${variant} status-card ${statusMeta[task.status].className} ${!showStatusPresentation ? "no-board-status" : ""} ${task.archived ? "archived" : ""} ${isDropTarget ? "task-drop-target" : ""} ${isHierarchySortTarget ? "hierarchy-sort-target" : ""}`}
       data-task-id={task.id}
       draggable={!task.archived}
       onDragStart={(event) => {
@@ -3649,13 +3653,13 @@ function TaskCard({
           {task.done && <Check size={14} />}
         </button>
         <div className="task-main">
-          <StatusIcon status={task.status} />
+          {showStatusPresentation && <StatusIcon status={task.status} />}
           <strong>{task.title}</strong>
           {(task.checklist?.length ?? 0) > 0 && <ListTodo className="task-inline-icon" size={14} />}
           {showUnsavedDot && <span className="task-unsaved-dot" title="Ungespeicherte Änderung" />}
         </div>
         <div className="task-compact-meta">
-          <span className={`task-status-pill ${statusMeta[task.status].className}`}>{task.status}</span>
+          {showStatusPresentation && <span className={`task-status-pill ${statusMeta[task.status].className}`}>{task.status}</span>}
           {task.dueDate && <span className={`task-deadline-pill ${deadlineTone(task.dueDate)}`}>{formatOptionalDate(task.dueDate)}</span>}
           <TaskTimeChip task={task} bookedMinutes={bookedMinutes} />
           {parentTitle && (
@@ -4580,6 +4584,7 @@ function BookingCard({
   onResizeStart?: (event: React.PointerEvent<HTMLDivElement>) => void;
 }) {
   const title = task?.title ?? booking.label ?? "Buchung";
+  const showStatusPresentation = task ? normalizeTaskVisibleIn(task.visibleIn).board : true;
   const wasDraggedRef = useRef(false);
 
   function openFromPointer(event: React.PointerEvent<HTMLElement> | React.MouseEvent<HTMLElement>) {
@@ -4593,7 +4598,7 @@ function BookingCard({
 
   return (
     <article
-      className={`booking-card status-card ${task ? statusMeta[task.status].className : "loose-booking"} ${task?.archived ? "archived-booking" : ""} ${isEditing ? "editing" : ""}`}
+      className={`booking-card status-card ${task ? statusMeta[task.status].className : "loose-booking"} ${task && !showStatusPresentation ? "no-board-status" : ""} ${task?.archived ? "archived-booking" : ""} ${isEditing ? "editing" : ""}`}
       data-booking-id={booking.id}
       draggable
       onDragStart={(event) => {
@@ -4613,7 +4618,7 @@ function BookingCard({
       title="Buchung bearbeiten"
     >
       <div className="booking-head">
-        {task ? <StatusIcon status={task.status} /> : <CalendarDays size={14} />}
+        {task ? showStatusPresentation ? <StatusIcon status={task.status} /> : null : <CalendarDays size={14} />}
         <strong>{title}</strong>
         {(task?.checklist?.length ?? 0) > 0 && <ListTodo size={13} />}
         {task?.archived && <Archive size={13} />}

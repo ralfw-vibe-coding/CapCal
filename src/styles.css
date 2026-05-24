@@ -907,6 +907,14 @@ button:disabled {
   box-shadow: inset 4px 0 0 var(--status-color);
 }
 
+.status-card.no-board-status {
+  --status-color: #b8beb6;
+  --status-bg: #F8F8FF;
+  background: #F8F8FF;
+  border-color: #b8beb6;
+  box-shadow: none;
+}
+
 .status-card.loose-booking {
   --status-color: #8b9491;
   --status-bg: repeating-linear-gradient(
