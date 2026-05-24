@@ -713,6 +713,18 @@ button:disabled {
   color: var(--text);
 }
 
+.icon-button.confirm-delete {
+  background: #fff3d5;
+  border-color: #d69a2d;
+  color: #9a5f00;
+}
+
+.confirm-delete-mark {
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+}
+
 .primary {
   background: var(--accent);
   border: 1px solid var(--accent);

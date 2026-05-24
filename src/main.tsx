@@ -3340,7 +3340,9 @@ function TaskCard({
   onDelete: () => void;
 }) {
   const [parentMenuOpen, setParentMenuOpen] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
   const parentMenuRef = useRef<HTMLSpanElement | null>(null);
+  const deleteButtonRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     if (!parentMenuOpen) return;
@@ -3353,6 +3355,18 @@ function TaskCard({
     window.addEventListener("pointerdown", handlePointerDown);
     return () => window.removeEventListener("pointerdown", handlePointerDown);
   }, [parentMenuOpen]);
+
+  useEffect(() => {
+    if (!deleteConfirm) return;
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target;
+      if (target instanceof Node && !deleteButtonRef.current?.contains(target)) setDeleteConfirm(false);
+    }
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    return () => window.removeEventListener("pointerdown", handlePointerDown);
+  }, [deleteConfirm]);
 
   return (
     <article
@@ -3466,12 +3480,27 @@ function TaskCard({
           <Archive size={15} />
         </button>
         <button
-          className="icon-button ghost danger"
-          title={childCount > 0 ? "Aufgaben mit Unteraufgaben können noch nicht gelöscht werden" : "Aufgabe löschen"}
+          ref={deleteButtonRef}
+          className={`icon-button ghost danger ${deleteConfirm ? "confirm-delete" : ""}`}
+          title={
+            childCount > 0
+              ? "Aufgaben mit Unteraufgaben können noch nicht gelöscht werden"
+              : deleteConfirm
+                ? "Erneut klicken zum Löschen"
+                : "Aufgabe löschen"
+          }
           disabled={childCount > 0}
-          onClick={onDelete}
+          onClick={(event) => {
+            event.stopPropagation();
+            if (deleteConfirm) {
+              onDelete();
+              setDeleteConfirm(false);
+            } else {
+              setDeleteConfirm(true);
+            }
+          }}
         >
-          <Trash2 size={15} />
+          {deleteConfirm ? <span className="confirm-delete-mark">?</span> : <Trash2 size={15} />}
         </button>
       </div>
       {expanded && (
