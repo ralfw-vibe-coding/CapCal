@@ -17,21 +17,22 @@ export const emptyState: AppState = {
   settings: {
     defaultTreeDurationMinutes: 30,
     defaultPrioDurationMinutes: 30,
+    defaultTaskStatus: "Backlog",
     defaultDayCapacityMinutes: 480,
     defaultPlanningCapacityMinutes: 360,
     calendarStartTime: "06:00",
     calendarEndTime: "20:00",
     showWeekends: false,
-      visibleDayCount: 7,
-      calendarView: "days",
-      taskView: "list",
-      hierarchyExpandedTaskIds: [],
-      treeFilters: {
-        query: "",
-        statuses: [],
-        tags: [],
-        showArchived: false
-      },
+    visibleDayCount: 7,
+    calendarView: "days",
+    taskView: "list",
+    hierarchyExpandedTaskIds: [],
+    treeFilters: {
+      query: "",
+      statuses: [],
+      tags: [],
+      showArchived: false
+    },
     boardHiddenStatuses: [],
     panelsCollapsed: {
       tree: false,

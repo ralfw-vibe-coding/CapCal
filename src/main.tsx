@@ -154,6 +154,7 @@ type TreeFilterSettings = {
 type AppSettings = {
   defaultTreeDurationMinutes: number;
   defaultPrioDurationMinutes: number;
+  defaultTaskStatus: TaskStatus;
   defaultDayCapacityMinutes: number;
   defaultPlanningCapacityMinutes: number;
   calendarStartTime: string;
@@ -210,6 +211,7 @@ const today = new Date().toISOString().slice(0, 10);
 const defaultSettings: AppSettings = {
   defaultTreeDurationMinutes: 30,
   defaultPrioDurationMinutes: 30,
+  defaultTaskStatus: "Backlog",
   defaultDayCapacityMinutes: 480,
   defaultPlanningCapacityMinutes: 360,
   calendarStartTime: "06:00",
@@ -632,6 +634,9 @@ function normalizeState(rawState: AppState): AppState {
     settings: {
       ...defaultSettings,
       ...(rawState.settings ?? {}),
+      defaultTaskStatus: statuses.includes(rawState.settings?.defaultTaskStatus as TaskStatus)
+        ? (rawState.settings?.defaultTaskStatus as TaskStatus)
+        : defaultSettings.defaultTaskStatus,
       calendarView: rawCalendarView === "month" ? "month" : "days",
       taskView: rawTaskView === "board" || rawTaskView === "hierarchy" ? rawTaskView : "list",
       hierarchyExpandedTaskIds: Array.isArray(rawState.settings?.hierarchyExpandedTaskIds)
@@ -1481,7 +1486,7 @@ function App() {
     if (!trimmed) return null;
     const estimateMinutes = settings.defaultTreeDurationMinutes;
     const planningDurationMinutes = durationForPlanning(estimateMinutes, settings.defaultPrioDurationMinutes);
-    const status = initialStatus ?? (target === "cal" ? "Started" : "Ready");
+    const status = initialStatus ?? (target === "cal" ? "Started" : settings.defaultTaskStatus);
     const task: Task = {
       id: uid("task"),
       title: trimmed,
@@ -1553,7 +1558,7 @@ function App() {
   function addChildTask(parentId: string) {
     const title = childTaskTitles[parentId]?.trim();
     if (!title) return;
-    const created = upsertTask(title, undefined, today, "Ready", parentId);
+    const created = upsertTask(title, undefined, today, undefined, parentId);
     if (!created) return;
     setChildTaskTitles((current) => ({ ...current, [parentId]: "" }));
     expandHierarchyTask(parentId);
@@ -3264,6 +3269,16 @@ function SettingsPanel({
               if (defaultTreeDurationMinutes) onSettingsChange({ defaultTreeDurationMinutes });
             }}
           />
+        </label>
+        <label>
+          Default Status
+          <select value={settings.defaultTaskStatus} onChange={(event) => onSettingsChange({ defaultTaskStatus: event.target.value as TaskStatus })}>
+            {statuses.map((status) => (
+              <option key={status} value={status}>
+                {status}
+              </option>
+            ))}
+          </select>
         </label>
         <label>
           Priorisierung
