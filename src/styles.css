@@ -1225,6 +1225,38 @@ button:disabled {
   padding: 8px;
 }
 
+.task-view-toggles {
+  align-items: center;
+  display: inline-flex;
+  gap: 5px;
+}
+
+.task-view-toggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: #1f2721;
+  display: inline-flex;
+  height: 24px;
+  justify-content: center;
+  padding: 0;
+  width: 24px;
+}
+
+.task-view-toggle.disabled {
+  color: #a6aea5;
+}
+
+.task-view-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.task-view-toggle:not(:disabled):hover {
+  background: var(--surface-2);
+}
+
 .markdown-preview {
   background: var(--surface);
   border: 1px solid var(--line);

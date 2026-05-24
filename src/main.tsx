@@ -23,7 +23,9 @@ import {
   GripVertical,
   Goal,
   Hourglass,
+  Kanban,
   LayoutTemplate,
+  List as ListIcon,
   ListTodo,
   ListRestart,
   ListTree,
@@ -105,6 +107,7 @@ type Task = {
   description?: string;
   checklist?: TaskChecklistItem[];
   tags?: string[];
+  visibleIn?: TaskVisibleIn;
   dueDate?: string;
   estimateMinutes?: number;
   parentId?: string;
@@ -115,6 +118,12 @@ type Task = {
   treeOrder: number;
   listOrder: number;
   boardOrder: number;
+};
+
+type TaskVisibleIn = {
+  list: boolean;
+  board: boolean;
+  hierarchy: boolean;
 };
 
 type TaskChecklistItem = {
@@ -205,6 +214,7 @@ const estimateOptionGroups = [
 ];
 const estimateOptions = estimateOptionGroups.flatMap((group) => group.options);
 const minuteHeight = 1.1;
+const defaultTaskVisibleIn: TaskVisibleIn = { list: true, board: true, hierarchy: true };
 
 const statusMeta: Record<TaskStatus, { label: string; icon: typeof Circle; className: string }> = {
   Backlog: { label: "Backlog", icon: Circle, className: "status-backlog" },
@@ -483,6 +493,14 @@ function sortedBoardTasks(tasks: Task[]) {
   return sortByOrder(tasks, (task) => task.boardOrder);
 }
 
+function normalizeTaskVisibleIn(visibleIn?: Partial<TaskVisibleIn>): TaskVisibleIn {
+  return {
+    list: visibleIn?.list ?? true,
+    board: visibleIn?.board ?? true,
+    hierarchy: visibleIn?.hierarchy ?? true
+  };
+}
+
 function moveItemToDropTarget<T>(items: T[], fromIndex: number, toIndex: number) {
   if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return items;
   const next = [...items];
@@ -550,6 +568,7 @@ function normalizeTasks(tasks: Task[]): Task[] {
         };
       })
       .filter((item): item is TaskChecklistItem => Boolean(item)),
+    visibleIn: normalizeTaskVisibleIn(task.visibleIn),
     tags: normalizeTags(task.tags),
     archived: task.archived ?? false,
     treeOrder: task.treeOrder ?? legacyOrder,
@@ -1267,14 +1286,22 @@ function App() {
   const filteredTreeTasks = useMemo(() => {
     const query = treeFilters.query.trim().toLowerCase();
     return sortedListTasks(state?.tasks ?? []).filter((task) => {
+      const visibleIn = normalizeTaskVisibleIn(task.visibleIn);
+      const hierarchyLockedVisible = Boolean(task.parentId) || (childCountByTaskId.get(task.id) ?? 0) > 0;
+      const matchesView =
+        settings.taskView === "list"
+          ? visibleIn.list
+          : settings.taskView === "board"
+            ? visibleIn.board
+            : hierarchyLockedVisible || visibleIn.hierarchy;
       const matchesArchive = treeFilters.showArchived ? task.archived : !task.archived;
       const matchesQuery = !query || task.title.toLowerCase().includes(query);
       const matchesStatus = treeFilters.statuses.length === 0 || treeFilters.statuses.includes(task.status);
       const taskTags = task.tags ?? [];
       const matchesTags = treeFilters.tags.length === 0 || treeFilters.tags.every((tag) => taskTags.includes(tag));
-      return matchesArchive && matchesQuery && matchesStatus && matchesTags;
+      return matchesView && matchesArchive && matchesQuery && matchesStatus && matchesTags;
     });
-  }, [state?.tasks, treeFilters.query, treeFilters.showArchived, treeFilters.statuses, treeFilters.tags]);
+  }, [childCountByTaskId, settings.taskView, state?.tasks, treeFilters.query, treeFilters.showArchived, treeFilters.statuses, treeFilters.tags]);
   const filteredTaskIds = useMemo(() => new Set(filteredTreeTasks.map((task) => task.id)), [filteredTreeTasks]);
   const currentCalendarPeriod = useMemo(
     () => createCalendarPeriod(dayCalendarStartDate, settings.visibleDayCount, settings.showWeekends),
@@ -1520,6 +1547,7 @@ function App() {
       description: "",
       checklist: [],
       tags: [],
+      visibleIn: { ...defaultTaskVisibleIn },
       dueDate: target === "cal" ? date : undefined,
       estimateMinutes,
       parentId,
@@ -1917,7 +1945,9 @@ function App() {
         id: uid("task"),
         title,
         description: booking.description ?? "",
+        checklist: [],
         tags: [],
+        visibleIn: { ...defaultTaskVisibleIn },
         dueDate: undefined,
         estimateMinutes: undefined,
         parentId: mode === "hierarchy" ? targetTask.parentId : undefined,
@@ -2136,6 +2166,7 @@ function App() {
         onDescription={(description) => updateTask(task.id, { description })}
         onTags={(tags) => updateTask(task.id, { tags: normalizeTags(tags) })}
         onChecklist={(checklist) => updateTask(task.id, { checklist })}
+        onVisibility={(visibleIn) => updateTask(task.id, { visibleIn })}
         onGoToHierarchy={() => scrollToTask(task.id)}
         onDetachParent={() => detachTaskFromParent(task.id)}
         childTaskTitle={childTaskTitles[task.id] ?? ""}
@@ -2212,6 +2243,7 @@ function App() {
               onDescription={(description) => updateTask(task.id, { description })}
               onTags={(tags) => updateTask(task.id, { tags: normalizeTags(tags) })}
               onChecklist={(checklist) => updateTask(task.id, { checklist })}
+              onVisibility={(visibleIn) => updateTask(task.id, { visibleIn })}
               onGoToHierarchy={() => scrollToTask(task.id)}
               onDetachParent={() => detachTaskFromParent(task.id)}
               childTaskTitle={childTaskTitles[task.id] ?? ""}
@@ -3510,6 +3542,7 @@ function TaskCard({
   onDescription,
   onTags,
   onChecklist,
+  onVisibility,
   onGoToHierarchy,
   onDetachParent,
   childTaskTitle,
@@ -3544,6 +3577,7 @@ function TaskCard({
   onDescription: (description: string) => void;
   onTags: (tags: string[]) => void;
   onChecklist: (checklist: TaskChecklistItem[]) => void;
+  onVisibility: (visibleIn: TaskVisibleIn) => void;
   onGoToHierarchy: () => void;
   onDetachParent: () => void;
   childTaskTitle: string;
@@ -3719,6 +3753,11 @@ function TaskCard({
       </div>
       {expanded && (
         <div className="task-detail-panel">
+          <TaskVisibilityToggles
+            visibleIn={normalizeTaskVisibleIn(task.visibleIn)}
+            hierarchyLocked={Boolean(task.parentId) || childCount > 0}
+            onVisibility={onVisibility}
+          />
           <label>
             <input placeholder="Titel" value={task.title} onChange={(event) => onTitle(event.target.value)} />
           </label>
@@ -3791,6 +3830,47 @@ function TaskTimeChip({ task, bookedMinutes }: { task: Task; bookedMinutes: numb
         </>
       )}
     </span>
+  );
+}
+
+function TaskVisibilityToggles({
+  visibleIn,
+  hierarchyLocked,
+  onVisibility
+}: {
+  visibleIn: TaskVisibleIn;
+  hierarchyLocked: boolean;
+  onVisibility: (visibleIn: TaskVisibleIn) => void;
+}) {
+  const effectiveVisibleIn = { ...visibleIn, hierarchy: hierarchyLocked ? true : visibleIn.hierarchy };
+  const items: Array<{ key: keyof TaskVisibleIn; title: string; icon: typeof Circle; locked?: boolean }> = [
+    { key: "list", title: "In Liste anzeigen", icon: ListIcon },
+    { key: "board", title: "Im Board anzeigen", icon: Kanban },
+    { key: "hierarchy", title: hierarchyLocked ? "Hierarchie ist bei Parent/Child-Aufgaben erforderlich" : "In Hierarchie anzeigen", icon: FolderTree, locked: hierarchyLocked }
+  ];
+
+  function toggle(key: keyof TaskVisibleIn, locked?: boolean) {
+    if (locked) return;
+    const enabledCount = Object.values(effectiveVisibleIn).filter(Boolean).length;
+    if (effectiveVisibleIn[key] && enabledCount <= 1) return;
+    onVisibility({ ...effectiveVisibleIn, [key]: !effectiveVisibleIn[key] });
+  }
+
+  return (
+    <div className="task-view-toggles" aria-label="Aufgabe in Ansichten anzeigen">
+      {items.map(({ key, title, icon: Icon, locked }) => (
+        <button
+          className={`task-view-toggle ${effectiveVisibleIn[key] ? "enabled" : "disabled"}`}
+          disabled={locked}
+          key={key}
+          title={title}
+          type="button"
+          onClick={() => toggle(key, locked)}
+        >
+          <Icon size={14} />
+        </button>
+      ))}
+    </div>
   );
 }
 
