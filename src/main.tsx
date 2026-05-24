@@ -393,6 +393,64 @@ function estimateToLabel(minutes?: number) {
   return minutesToTimeLabel(minutes);
 }
 
+function safeMarkdownHref(href: string) {
+  const trimmed = href.trim();
+  const normalized = trimmed.startsWith("www.") ? `https://${trimmed}` : trimmed;
+  try {
+    const url = new URL(normalized);
+    return ["http:", "https:", "mailto:"].includes(url.protocol) ? normalized : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  const pattern = /(\[[^\]]+\]\([^)]+\)|`[^`]+`|\*\*[^*]+\*\*|(?<!\*)\*[^*\s][^*]*\*|_[^_\s][^_]*_|https?:\/\/[^\s<]+|www\.[^\s<]+)/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(text))) {
+    if (match.index > lastIndex) nodes.push(text.slice(lastIndex, match.index));
+    const token = match[0];
+    const key = `${keyPrefix}-${match.index}`;
+    const linkMatch = token.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+    if (linkMatch) {
+      const href = safeMarkdownHref(linkMatch[2]);
+      nodes.push(
+        href ? (
+          <a key={key} href={href} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>
+            {linkMatch[1]}
+          </a>
+        ) : (
+          token
+        )
+      );
+    } else if (token.startsWith("`") && token.endsWith("`")) {
+      nodes.push(<code key={key}>{token.slice(1, -1)}</code>);
+    } else if (token.startsWith("**") && token.endsWith("**")) {
+      nodes.push(<strong key={key}>{token.slice(2, -2)}</strong>);
+    } else if ((token.startsWith("*") && token.endsWith("*")) || (token.startsWith("_") && token.endsWith("_"))) {
+      nodes.push(<em key={key}>{token.slice(1, -1)}</em>);
+    } else {
+      const href = safeMarkdownHref(token);
+      nodes.push(
+        href ? (
+          <a key={key} href={href} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>
+            {token}
+          </a>
+        ) : (
+          token
+        )
+      );
+    }
+    lastIndex = pattern.lastIndex;
+  }
+
+  if (lastIndex < text.length) nodes.push(text.slice(lastIndex));
+  return nodes;
+}
+
 function sortByOrder<T extends { id: string }>(items: T[], order: (item: T) => number | undefined) {
   return [...items].sort((a, b) => (order(a) ?? 0) - (order(b) ?? 0) || a.id.localeCompare(b.id));
 }
@@ -3294,6 +3352,68 @@ function SettingsPanel({
   );
 }
 
+function EditableMarkdownField({
+  value,
+  onChange,
+  placeholder,
+  ariaLabel,
+  className = ""
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  ariaLabel: string;
+  className?: string;
+}) {
+  const [editing, setEditing] = useState(!value.trim());
+  const lines = value.split("\n");
+  const hasText = value.trim().length > 0;
+
+  if (editing || !hasText) {
+    return (
+      <textarea
+        className={className}
+        aria-label={ariaLabel}
+        placeholder={placeholder}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onFocus={() => setEditing(true)}
+        onBlur={() => setEditing(false)}
+        onDragStart={(event) => event.preventDefault()}
+      />
+    );
+  }
+
+  return (
+    <div
+      className={`markdown-preview ${className}`}
+      role="button"
+      tabIndex={0}
+      onClick={() => setEditing(true)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") setEditing(true);
+      }}
+    >
+      {lines.map((line, index) => {
+        const bullet = line.match(/^\s*[-*]\s+(.+)$/);
+        if (bullet) {
+          return (
+            <p className="markdown-bullet" key={index}>
+              <span>•</span>
+              <span>{renderInlineMarkdown(bullet[1], `${ariaLabel}-${index}`)}</span>
+            </p>
+          );
+        }
+        return line.trim() ? (
+          <p key={index}>{renderInlineMarkdown(line, `${ariaLabel}-${index}`)}</p>
+        ) : (
+          <p className="markdown-empty-line" key={index} />
+        );
+      })}
+    </div>
+  );
+}
+
 function TaskCard({
   task,
   allTags,
@@ -3531,11 +3651,11 @@ function TaskCard({
             <input placeholder="Titel" value={task.title} onChange={(event) => onTitle(event.target.value)} />
           </label>
           <label>
-            <textarea
+            <EditableMarkdownField
               placeholder="Beschreibung"
               value={task.description ?? ""}
-              onChange={(event) => onDescription(event.target.value)}
-              onDragStart={(event) => event.preventDefault()}
+              onChange={onDescription}
+              ariaLabel="Aufgabenbeschreibung"
             />
           </label>
           <TaskTagPicker allTags={allTags} task={task} onTags={onTags} />
@@ -4471,11 +4591,11 @@ function BookingEditor({
         </button>
         <label className="booking-description-field">
           <span>Beschreibung</span>
-          <textarea
-            aria-label="Buchungsbeschreibung"
+          <EditableMarkdownField
             placeholder="Beschreibung"
             value={booking.description ?? ""}
-            onChange={(event) => onChange(booking.id, { description: event.target.value })}
+            onChange={(description) => onChange(booking.id, { description })}
+            ariaLabel="Buchungsbeschreibung"
           />
         </label>
       </div>

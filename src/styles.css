@@ -1220,6 +1220,53 @@ button:disabled {
   padding: 8px;
 }
 
+.markdown-preview {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  cursor: text;
+  font-size: 13px;
+  line-height: 1.35;
+  min-height: 34px;
+  padding: 8px;
+  white-space: normal;
+  width: 100%;
+}
+
+.markdown-preview p {
+  margin: 0;
+}
+
+.markdown-preview p + p {
+  margin-top: 5px;
+}
+
+.markdown-preview a {
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdown-preview code {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  font-size: 12px;
+  padding: 1px 4px;
+}
+
+.markdown-bullet {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: auto 1fr;
+}
+
+.markdown-empty-line {
+  min-height: 8px;
+}
+
 .tag-picker {
   display: grid;
   gap: 6px;
@@ -2347,7 +2394,7 @@ button:disabled {
   gap: 3px;
 }
 
-.booking-controls label span {
+.booking-controls label > span {
   align-items: center;
   display: inline-flex;
   gap: 4px;
