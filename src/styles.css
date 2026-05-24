@@ -1495,6 +1495,11 @@ button:disabled {
   min-width: 0;
 }
 
+.prio-card-main strong {
+  font-size: 13px;
+  line-height: 1.2;
+}
+
 .prio-card-side {
   align-items: center;
   display: flex;
