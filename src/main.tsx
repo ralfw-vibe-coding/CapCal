@@ -395,6 +395,12 @@ function estimateToLabel(minutes?: number) {
   return minutesToTimeLabel(minutes);
 }
 
+function statusAfterMoveToPrio(status: TaskStatus) {
+  if (status === "Backlog") return "Ready";
+  if (status === "Blocked") return "Started";
+  return status;
+}
+
 function safeMarkdownHref(href: string) {
   const trimmed = href.trim();
   const normalized = trimmed.startsWith("www.") ? `https://${trimmed}` : trimmed;
@@ -1657,6 +1663,17 @@ function App() {
       if (!task || task.archived) return draft;
       return {
         ...draft,
+        tasks: normalizeTasks(
+          draft.tasks.map((candidate) =>
+            candidate.id === taskId
+              ? {
+                  ...candidate,
+                  status: statusAfterMoveToPrio(candidate.status),
+                  done: statusAfterMoveToPrio(candidate.status) === "Done" || statusAfterMoveToPrio(candidate.status) === "Aborted"
+                }
+              : candidate
+          )
+        ),
         prioTaskIds: [...draft.prioTaskIds, taskId],
         prioDurations: {
           ...(draft.prioDurations ?? {}),
@@ -1683,6 +1700,19 @@ function App() {
       const targetIndex = prioTaskIds.indexOf(targetTaskId);
       return {
         ...draft,
+        tasks: sourceWasNew
+          ? normalizeTasks(
+              draft.tasks.map((task) =>
+                task.id === sourceTaskId
+                  ? {
+                      ...task,
+                      status: statusAfterMoveToPrio(task.status),
+                      done: statusAfterMoveToPrio(task.status) === "Done" || statusAfterMoveToPrio(task.status) === "Aborted"
+                    }
+                  : task
+              )
+            )
+          : draft.tasks,
         prioDurations: sourceWasNew
           ? {
               ...(draft.prioDurations ?? {}),
