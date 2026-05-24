@@ -3903,7 +3903,7 @@ function TaskChecklistEditor({
       {checklist.length > 0 && (
         <div className="task-checklist-items">
           {checklist.map((item) => (
-            <div className="task-checklist-item" key={item.id}>
+            <div className={`task-checklist-item ${item.done ? "done" : ""}`} key={item.id}>
               <button
                 className={`check-button ${item.done ? "checked" : ""}`}
                 title="Checklisteneintrag abhaken"
@@ -3914,6 +3914,7 @@ function TaskChecklistEditor({
                 {item.done && <Check size={13} />}
               </button>
               <input
+                disabled={item.done}
                 value={item.text}
                 onChange={(event) =>
                   onChecklist(checklist.map((candidate) => (candidate.id === item.id ? { ...candidate, text: event.target.value } : candidate)))

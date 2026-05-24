@@ -1394,6 +1394,16 @@ button:disabled {
   width: 30px;
 }
 
+.task-checklist-item.done input {
+  color: #a8b0a8;
+  text-decoration: line-through;
+}
+
+.task-checklist-item.done input:disabled {
+  background: var(--surface-2);
+  opacity: 1;
+}
+
 .hierarchy-view {
   display: grid;
   gap: 5px;
