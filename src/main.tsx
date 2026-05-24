@@ -24,6 +24,7 @@ import {
   Goal,
   Hourglass,
   LayoutTemplate,
+  ListTodo,
   ListRestart,
   ListTree,
   Loader,
@@ -102,6 +103,7 @@ type Task = {
   id: string;
   title: string;
   description?: string;
+  checklist?: TaskChecklistItem[];
   tags?: string[];
   dueDate?: string;
   estimateMinutes?: number;
@@ -113,6 +115,12 @@ type Task = {
   treeOrder: number;
   listOrder: number;
   boardOrder: number;
+};
+
+type TaskChecklistItem = {
+  id: string;
+  text: string;
+  done: boolean;
 };
 
 type Booking = {
@@ -526,9 +534,22 @@ function normalizeTasks(tasks: Task[]): Task[] {
   const taskIds = new Set(tasks.map((task) => task.id));
   const cleanedTasks = tasks.map((task, index) => {
     const legacyOrder = task.treeOrder ?? index;
+    const rawChecklist = Array.isArray(task.checklist) ? task.checklist : [];
     return {
     ...task,
     parentId: task.parentId && task.parentId !== task.id && taskIds.has(task.parentId) ? task.parentId : undefined,
+    checklist: rawChecklist
+      .map((item, itemIndex): TaskChecklistItem | null => {
+        if (typeof item === "string") return { id: uid("check"), text: item, done: false };
+        if (!item || typeof item !== "object") return null;
+        const rawItem = item as Partial<TaskChecklistItem>;
+        return {
+          id: typeof rawItem.id === "string" ? rawItem.id : uid(`check-${index}-${itemIndex}`),
+          text: typeof rawItem.text === "string" ? rawItem.text : "",
+          done: Boolean(rawItem.done)
+        };
+      })
+      .filter((item): item is TaskChecklistItem => Boolean(item)),
     tags: normalizeTags(task.tags),
     archived: task.archived ?? false,
     treeOrder: task.treeOrder ?? legacyOrder,
@@ -1497,6 +1518,7 @@ function App() {
       id: uid("task"),
       title: trimmed,
       description: "",
+      checklist: [],
       tags: [],
       dueDate: target === "cal" ? date : undefined,
       estimateMinutes,
@@ -2113,6 +2135,7 @@ function App() {
         onDueDate={(dueDate) => updateTask(task.id, { dueDate: dueDate || undefined })}
         onDescription={(description) => updateTask(task.id, { description })}
         onTags={(tags) => updateTask(task.id, { tags: normalizeTags(tags) })}
+        onChecklist={(checklist) => updateTask(task.id, { checklist })}
         onGoToHierarchy={() => scrollToTask(task.id)}
         onDetachParent={() => detachTaskFromParent(task.id)}
         childTaskTitle={childTaskTitles[task.id] ?? ""}
@@ -2188,6 +2211,7 @@ function App() {
               onDueDate={(dueDate) => updateTask(task.id, { dueDate: dueDate || undefined })}
               onDescription={(description) => updateTask(task.id, { description })}
               onTags={(tags) => updateTask(task.id, { tags: normalizeTags(tags) })}
+              onChecklist={(checklist) => updateTask(task.id, { checklist })}
               onGoToHierarchy={() => scrollToTask(task.id)}
               onDetachParent={() => detachTaskFromParent(task.id)}
               childTaskTitle={childTaskTitles[task.id] ?? ""}
@@ -3485,6 +3509,7 @@ function TaskCard({
   onDueDate,
   onDescription,
   onTags,
+  onChecklist,
   onGoToHierarchy,
   onDetachParent,
   childTaskTitle,
@@ -3518,6 +3543,7 @@ function TaskCard({
   onDueDate: (date: string) => void;
   onDescription: (description: string) => void;
   onTags: (tags: string[]) => void;
+  onChecklist: (checklist: TaskChecklistItem[]) => void;
   onGoToHierarchy: () => void;
   onDetachParent: () => void;
   childTaskTitle: string;
@@ -3591,6 +3617,7 @@ function TaskCard({
         <div className="task-main">
           <StatusIcon status={task.status} />
           <strong>{task.title}</strong>
+          {(task.checklist?.length ?? 0) > 0 && <ListTodo className="task-inline-icon" size={14} />}
           {showUnsavedDot && <span className="task-unsaved-dot" title="Ungespeicherte Änderung" />}
         </div>
         <div className="task-compact-meta">
@@ -3703,20 +3730,6 @@ function TaskCard({
               ariaLabel="Aufgabenbeschreibung"
             />
           </label>
-          <TaskTagPicker allTags={allTags} task={task} onTags={onTags} />
-          <div className="child-task-form">
-            <input
-              placeholder="Neue Unteraufgabe"
-              value={childTaskTitle}
-              onChange={(event) => onChildTaskTitleChange(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") onAddChildTask();
-              }}
-            />
-            <button className="icon-button" title="Unteraufgabe anlegen" onClick={onAddChildTask}>
-              <Plus size={15} />
-            </button>
-          </div>
           <div className="task-detail-grid">
             <label>
               Deadline
@@ -3739,6 +3752,21 @@ function TaskCard({
                 onValueChange={onEstimate}
               />
             </label>
+          </div>
+          <TaskTagPicker allTags={allTags} task={task} onTags={onTags} />
+          <TaskChecklistEditor checklist={task.checklist ?? []} onChecklist={onChecklist} />
+          <div className="child-task-form">
+            <input
+              placeholder="Neue Unteraufgabe"
+              value={childTaskTitle}
+              onChange={(event) => onChildTaskTitleChange(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") onAddChildTask();
+              }}
+            />
+            <button className="icon-button" title="Unteraufgabe anlegen" onClick={onAddChildTask}>
+              <Plus size={15} />
+            </button>
           </div>
         </div>
       )}
@@ -3763,6 +3791,72 @@ function TaskTimeChip({ task, bookedMinutes }: { task: Task; bookedMinutes: numb
         </>
       )}
     </span>
+  );
+}
+
+function TaskChecklistEditor({
+  checklist,
+  onChecklist
+}: {
+  checklist: TaskChecklistItem[];
+  onChecklist: (checklist: TaskChecklistItem[]) => void;
+}) {
+  const [newItemText, setNewItemText] = useState("");
+
+  function addItem() {
+    const text = newItemText.trim();
+    if (!text) return;
+    onChecklist([...checklist, { id: uid("check"), text, done: false }]);
+    setNewItemText("");
+  }
+
+  return (
+    <div className="task-checklist">
+      <div className="task-checklist-header">
+        <ListTodo size={14} />
+        <span>Checkliste</span>
+      </div>
+      {checklist.length > 0 && (
+        <div className="task-checklist-items">
+          {checklist.map((item) => (
+            <div className="task-checklist-item" key={item.id}>
+              <button
+                className={`check-button ${item.done ? "checked" : ""}`}
+                title="Checklisteneintrag abhaken"
+                onClick={() =>
+                  onChecklist(checklist.map((candidate) => (candidate.id === item.id ? { ...candidate, done: !candidate.done } : candidate)))
+                }
+              >
+                {item.done && <Check size={13} />}
+              </button>
+              <input
+                value={item.text}
+                onChange={(event) =>
+                  onChecklist(checklist.map((candidate) => (candidate.id === item.id ? { ...candidate, text: event.target.value } : candidate)))
+                }
+                onBlur={() => onChecklist(checklist.filter((candidate) => candidate.text.trim()))}
+              />
+              <button className="icon-button ghost danger" title="Checklisteneintrag löschen" onClick={() => onChecklist(checklist.filter((candidate) => candidate.id !== item.id))}>
+                <Trash2 size={13} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="task-checklist-add">
+        <input
+          placeholder="Neuer Checklisteneintrag"
+          value={newItemText}
+          onChange={(event) => setNewItemText(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") addItem();
+          }}
+        />
+        <button className="icon-button" title="Checklisteneintrag hinzufügen" onClick={addItem}>
+          <Plus size={15} />
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -4441,6 +4535,7 @@ function BookingCard({
       <div className="booking-head">
         {task ? <StatusIcon status={task.status} /> : <CalendarDays size={14} />}
         <strong>{title}</strong>
+        {(task?.checklist?.length ?? 0) > 0 && <ListTodo size={13} />}
         {task?.archived && <Archive size={13} />}
       </div>
       {onResizeStart && <div className="booking-resize-handle" title="Dauer ändern" onPointerDown={onResizeStart} />}

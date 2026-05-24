@@ -980,6 +980,11 @@ button:disabled {
   width: 6px;
 }
 
+.task-inline-icon {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
 .task-compact-meta {
   align-items: center;
   display: flex;
@@ -1299,9 +1304,54 @@ button:disabled {
 }
 
 .child-task-form {
+  border-top: 1px solid var(--line);
   display: grid;
   gap: 6px;
   grid-template-columns: 1fr 34px;
+  padding-top: 8px;
+}
+
+.task-checklist {
+  display: grid;
+  gap: 6px;
+}
+
+.task-checklist-header {
+  align-items: center;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 700;
+  gap: 5px;
+}
+
+.task-checklist-items {
+  display: grid;
+  gap: 5px;
+}
+
+.task-checklist-item,
+.task-checklist-add {
+  align-items: center;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: 28px minmax(0, 1fr) 32px;
+}
+
+.task-checklist-add {
+  grid-template-columns: minmax(0, 1fr) 34px;
+}
+
+.task-checklist-item .check-button {
+  height: 28px;
+  min-width: 28px;
+  width: 28px;
+}
+
+.task-checklist-item > .icon-button {
+  height: 30px;
+  min-width: 30px;
+  width: 30px;
 }
 
 .hierarchy-view {
