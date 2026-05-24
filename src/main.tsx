@@ -1123,10 +1123,18 @@ function App() {
   const bookedMinutesByTaskId = useMemo(() => {
     const minutes = new Map<string, number>();
     for (const booking of state?.bookings ?? []) {
-      if (booking.taskId) minutes.set(booking.taskId, (minutes.get(booking.taskId) ?? 0) + booking.durationMinutes);
+      let taskId = booking.taskId;
+      const visitedTaskIds = new Set<string>();
+      while (taskId && !visitedTaskIds.has(taskId)) {
+        const task = taskById.get(taskId);
+        if (!task) break;
+        visitedTaskIds.add(taskId);
+        minutes.set(taskId, (minutes.get(taskId) ?? 0) + booking.durationMinutes);
+        taskId = task.parentId;
+      }
     }
     return minutes;
-  }, [state?.bookings]);
+  }, [state?.bookings, taskById]);
   const childCountByTaskId = useMemo(() => {
     const counts = new Map<string, number>();
     for (const task of state?.tasks ?? []) {
