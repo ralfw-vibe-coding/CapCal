@@ -2357,6 +2357,14 @@ button:disabled {
   min-width: 132px;
 }
 
+.booking-duration-controls {
+  display: block;
+}
+
+.booking-duration-controls input {
+  font-variant-numeric: tabular-nums;
+}
+
 .booking-controls input,
 .booking-controls textarea {
   background: var(--surface);

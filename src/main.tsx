@@ -363,6 +363,20 @@ function minutesToTimeLabel(minutes: number) {
   return `${h}:${m}`;
 }
 
+function parseDurationInput(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const timeMatch = trimmed.match(/^(\d{1,2}):([0-5]\d)$/);
+  if (timeMatch) return Number(timeMatch[1]) * 60 + Number(timeMatch[2]);
+  const minutesMatch = trimmed.match(/^(\d+)$/);
+  if (minutesMatch) return Number(minutesMatch[1]);
+  const hourMinuteMatch = trimmed.match(/^(\d+(?:[.,]\d+)?)\s*h(?:\s*(\d{1,2})\s*m?)?$/i);
+  if (hourMinuteMatch) {
+    return Math.round(Number(hourMinuteMatch[1].replace(",", ".")) * 60) + Number(hourMinuteMatch[2] ?? 0);
+  }
+  return undefined;
+}
+
 function minutesToLabel(minutes: number) {
   if (minutes < 60) return `${minutes}m`;
   const h = Math.floor(minutes / 60);
@@ -4345,6 +4359,22 @@ function BookingEditor({
   onDelete: (bookingId: string) => void;
   onClose: () => void;
 }) {
+  const [manualDuration, setManualDuration] = useState(minutesToTimeLabel(booking.durationMinutes));
+  const durationListId = `booking-duration-options-${booking.id}`;
+
+  useEffect(() => {
+    setManualDuration(minutesToTimeLabel(booking.durationMinutes));
+  }, [booking.durationMinutes]);
+
+  function commitManualDuration() {
+    const durationMinutes = parseDurationInput(manualDuration);
+    if (!durationMinutes || durationMinutes <= 0) {
+      setManualDuration(minutesToTimeLabel(booking.durationMinutes));
+      return;
+    }
+    onChange(booking.id, { durationMinutes });
+  }
+
   return (
     <aside className="booking-editor" onClick={(event) => event.stopPropagation()}>
       <button className="icon-button ghost booking-task-link" title="Zur Aufgabe scrollen" onClick={onOpenTask}>
@@ -4407,17 +4437,26 @@ function BookingEditor({
             <Timer size={13} />
             Dauer
           </span>
-          <select
-            aria-label="Dauer"
-            value={booking.durationMinutes}
-            onChange={(event) => onChange(booking.id, { durationMinutes: Number(event.target.value) })}
-          >
-            {durationOptions.map((minutes) => (
-              <option key={minutes} value={minutes}>
-                {minutesToTimeLabel(minutes)}
-              </option>
-            ))}
-          </select>
+          <div className="booking-duration-controls">
+            <input
+              aria-label="Dauer"
+              list={durationListId}
+              inputMode="numeric"
+              value={manualDuration}
+              onChange={(event) => setManualDuration(event.target.value)}
+              onBlur={commitManualDuration}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.currentTarget.blur();
+                }
+              }}
+            />
+            <datalist id={durationListId}>
+              {durationOptions.map((minutes) => (
+                <option key={minutes} value={minutesToTimeLabel(minutes)} />
+              ))}
+            </datalist>
+          </div>
         </label>
         <button className="icon-button ghost" title="Buchung löschen" onClick={() => onDelete(booking.id)}>
           <Trash2 size={14} />
