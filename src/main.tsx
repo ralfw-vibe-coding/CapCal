@@ -4149,6 +4149,10 @@ function DayColumn({
   const [templateMode, setTemplateMode] = useState<"actions" | "save" | "apply">("actions");
   const [templateName, setTemplateName] = useState("");
   const [templateMessage, setTemplateMessage] = useState("");
+  const [currentMinuteOfDay, setCurrentMinuteOfDay] = useState(() => {
+    const now = new Date();
+    return now.getHours() * 60 + now.getMinutes();
+  });
   const timelineRef = useRef<HTMLDivElement | null>(null);
   const dayColumnRef = useRef<HTMLElement | null>(null);
   const templateMenuRef = useRef<HTMLDivElement | null>(null);
@@ -4184,6 +4188,8 @@ function DayColumn({
   const capacityLevel = capacityLevelFor(bookedMinutes, capacity);
   const isOverflowingDay = bookedMinutes > capacity.dayCapacityMinutes;
   const timelineHeight = (calendarEndMinutes - calendarStartMinutes) * minuteHeight;
+  const showCurrentTimeLine = date === today && currentMinuteOfDay >= calendarStartMinutes && currentMinuteOfDay <= calendarEndMinutes;
+  const currentTimeLineTop = (currentMinuteOfDay - calendarStartMinutes) * minuteHeight;
   const firstHour = Math.ceil(calendarStartMinutes / 60);
   const lastHour = Math.floor(calendarEndMinutes / 60);
   const hours = Array.from({ length: Math.max(0, lastHour - firstHour + 1) }, (_, index) => firstHour + index);
@@ -4224,6 +4230,26 @@ function DayColumn({
       window.removeEventListener("pointerup", handlePointerUp);
     };
   }, [calendarStartMinutes, onBookingChange, resizingBooking]);
+
+  useEffect(() => {
+    if (date !== today) return;
+    function updateCurrentMinute() {
+      const now = new Date();
+      setCurrentMinuteOfDay(now.getHours() * 60 + now.getMinutes());
+    }
+    updateCurrentMinute();
+    let interval: number | undefined;
+    const now = new Date();
+    const delayToNextMinute = (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
+    const timeout = window.setTimeout(() => {
+      updateCurrentMinute();
+      interval = window.setInterval(updateCurrentMinute, 60_000);
+    }, delayToNextMinute);
+    return () => {
+      window.clearTimeout(timeout);
+      if (interval) window.clearInterval(interval);
+    };
+  }, [date]);
 
   useEffect(() => {
     if (!editingBookingId && !editingGoogleEventId) return;
@@ -4462,6 +4488,11 @@ function DayColumn({
       <div className="time-section">
         <div className="time-section-label">Termine</div>
         <div className="time-grid">
+          {showCurrentTimeLine && (
+            <div className="current-time-line" style={{ top: currentTimeLineTop }}>
+              <span>{minutesToTime(currentMinuteOfDay)}</span>
+            </div>
+          )}
           <div className="timeline-labels" style={{ height: timelineHeight }}>
             {hours.map((hour) => (
               <div
