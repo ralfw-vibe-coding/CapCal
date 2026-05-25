@@ -25,6 +25,7 @@ import {
   Hourglass,
   Kanban,
   LayoutTemplate,
+  Link,
   List as ListIcon,
   ListTodo,
   ListRestart,
@@ -867,6 +868,9 @@ function App() {
   const [hierarchySortTargetId, setHierarchySortTargetId] = useState<string | null>(null);
   const [hierarchyChildTargetId, setHierarchyChildTargetId] = useState<string | null>(null);
   const [taskDropTargetId, setTaskDropTargetId] = useState<string | null>(null);
+  const [pendingTaskScrollId, setPendingTaskScrollId] = useState<string | null>(null);
+  const [forcedHierarchyExpandedIds, setForcedHierarchyExpandedIds] = useState<Set<string>>(() => new Set());
+  const [highlightTaskId, setHighlightTaskId] = useState<string | null>(null);
   const [childTaskTitles, setChildTaskTitles] = useState<Record<string, string>>({});
   const [changedTaskId, setChangedTaskId] = useState<string | null>(null);
   const settingsMenuRef = useRef<HTMLDivElement | null>(null);
@@ -879,6 +883,7 @@ function App() {
   const saveTimerRef = useRef<number | null>(null);
   const stateVersionRef = useRef(0);
   const prefetchedUserIdRef = useRef<number | null>(null);
+  const handledTaskHashRef = useRef("");
   const saveCurrentStateRef = useRef<(options?: { keepalive?: boolean }) => Promise<void>>(async () => undefined);
 
   async function refreshAuthUser() {
@@ -1276,7 +1281,10 @@ function App() {
   }, []);
 
   const settings = state?.settings ?? defaultSettings;
-  const hierarchyExpandedTaskIds = settings.hierarchyExpandedTaskIds ?? [];
+  const hierarchyExpandedTaskIds = useMemo(
+    () => Array.from(new Set([...(settings.hierarchyExpandedTaskIds ?? []), ...forcedHierarchyExpandedIds])),
+    [forcedHierarchyExpandedIds, settings.hierarchyExpandedTaskIds]
+  );
   const defaultCapacity: DailyCapacity = {
     dayCapacityMinutes: settings.defaultDayCapacityMinutes,
     planningCapacityMinutes: settings.defaultPlanningCapacityMinutes
@@ -1454,6 +1462,59 @@ function App() {
     return () => window.removeEventListener("pointerdown", handlePointerDown);
   }, [userPanel]);
 
+  useEffect(() => {
+    if (!pendingTaskScrollId) return;
+    let cancelled = false;
+    let attempts = 0;
+
+    function tryScroll() {
+      if (cancelled) return;
+      const target = document.querySelector(`[data-task-id="${pendingTaskScrollId}"]`);
+      if (target) {
+        target.scrollIntoView({ behavior: "smooth", block: "center" });
+        setHighlightTaskId(pendingTaskScrollId);
+        setPendingTaskScrollId(null);
+        return;
+      }
+      attempts += 1;
+      if (attempts < 12) window.setTimeout(tryScroll, 50);
+    }
+
+    window.requestAnimationFrame(tryScroll);
+    return () => {
+      cancelled = true;
+    };
+  }, [pendingTaskScrollId, settings.taskView, settings.hierarchyExpandedTaskIds, filteredTaskIds]);
+
+  useEffect(() => {
+    if (!highlightTaskId) return;
+    const timeout = window.setTimeout(() => setHighlightTaskId(null), 1800);
+    return () => window.clearTimeout(timeout);
+  }, [highlightTaskId]);
+
+  useEffect(() => {
+    if (!state) return;
+
+    function openTaskHash(force = false) {
+      const hash = window.location.hash.replace(/^#/, "");
+      const params = new URLSearchParams(hash);
+      const taskId = params.get("task");
+      if (!taskId) return;
+      if (!force && handledTaskHashRef.current === window.location.hash) return;
+      if (!taskById.has(taskId)) return;
+      handledTaskHashRef.current = window.location.hash;
+      showTaskFromPermalink(taskId);
+    }
+
+    openTaskHash();
+    function handleHashChange() {
+      openTaskHash(true);
+    }
+
+    window.addEventListener("hashchange", handleHashChange);
+    return () => window.removeEventListener("hashchange", handleHashChange);
+  }, [state?.tasks, taskById]);
+
   if (authRequired) {
     return (
       <main className="login-screen">
@@ -1585,6 +1646,11 @@ function App() {
 
   function toggleHierarchyTask(taskId: string) {
     const currentIds = settings.hierarchyExpandedTaskIds ?? [];
+    setForcedHierarchyExpandedIds((current) => {
+      const next = new Set(current);
+      next.delete(taskId);
+      return next;
+    });
     updateSettings({
       hierarchyExpandedTaskIds: currentIds.includes(taskId)
         ? currentIds.filter((id) => id !== taskId)
@@ -2177,6 +2243,7 @@ function App() {
   function scrollToTask(taskId: string, options: { expandDetails?: boolean } = {}) {
     const shouldExpandDetails = options.expandDetails ?? true;
     const expandedIds = new Set([...(settings.hierarchyExpandedTaskIds ?? []), ...ancestorTaskIds(taskId)]);
+    setForcedHierarchyExpandedIds((current) => new Set([...current, ...ancestorTaskIds(taskId)]));
     updateSettings({
       taskView: "hierarchy",
       hierarchyExpandedTaskIds: [...expandedIds],
@@ -2189,9 +2256,54 @@ function App() {
         return next;
       });
     }
-    window.setTimeout(() => {
-      document.querySelector(`[data-task-id="${taskId}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 0);
+    setPendingTaskScrollId(taskId);
+  }
+
+  function taskPermalink(taskId: string) {
+    const url = new URL(window.location.href);
+    url.hash = `task=${encodeURIComponent(taskId)}`;
+    return url.toString();
+  }
+
+  async function copyTaskPermalink(taskId: string) {
+    const permalink = taskPermalink(taskId);
+    try {
+      await navigator.clipboard.writeText(permalink);
+    } catch {
+      const textArea = document.createElement("textarea");
+      textArea.value = permalink;
+      textArea.style.position = "fixed";
+      textArea.style.opacity = "0";
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textArea);
+    }
+  }
+
+  function showTaskFromPermalink(taskId: string) {
+    const task = taskById.get(taskId);
+    if (!task) return;
+    const visibleIn = normalizeTaskVisibleIn(task.visibleIn);
+    const hierarchyVisible = visibleIn.hierarchy || Boolean(task.parentId) || (childCountByTaskId.get(task.id) ?? 0) > 0;
+    const taskView: TreeViewMode = hierarchyVisible ? "hierarchy" : visibleIn.list ? "list" : "board";
+    const ancestorIds = ancestorTaskIds(taskId);
+    const expandedIds = new Set([...(settings.hierarchyExpandedTaskIds ?? []), ...ancestorIds]);
+    setForcedHierarchyExpandedIds((current) => new Set([...current, ...ancestorIds]));
+    updateSettings({
+      taskView,
+      hierarchyExpandedTaskIds: [...expandedIds],
+      treeFilters: {
+        ...settings.treeFilters,
+        query: "",
+        statuses: [],
+        tags: [],
+        showArchived: Boolean(task.archived)
+      },
+      boardHiddenStatuses: settings.boardHiddenStatuses.filter((status) => status !== task.status),
+      panelsCollapsed: { ...settings.panelsCollapsed, tree: false }
+    });
+    setPendingTaskScrollId(taskId);
   }
 
   function renderTreeTaskCard(task: Task, options?: { boardStatus?: TaskStatus }) {
@@ -2209,6 +2321,7 @@ function App() {
         expanded={expandedTaskIds.has(task.id)}
         showUnsavedDot={changedTaskId === task.id && saveState !== "saved" && saveState !== "idle"}
         isDropTarget={taskDropTargetId === task.id}
+        isHighlighted={highlightTaskId === task.id}
         onToggleExpanded={() => toggleTaskDetails(task.id)}
         onDragStart={() => setDragPayload({ kind: "tree-task", taskId: task.id })}
         onDragEnd={() => {
@@ -2238,6 +2351,7 @@ function App() {
         onChecklist={(checklist) => updateTask(task.id, { checklist })}
         onVisibility={(visibleIn) => updateTask(task.id, { visibleIn })}
         onGoToHierarchy={() => scrollToTask(task.id)}
+        onCopyPermalink={() => copyTaskPermalink(task.id)}
         onDetachParent={() => detachTaskFromParent(task.id)}
         childTaskTitle={childTaskTitles[task.id] ?? ""}
         onChildTaskTitleChange={(title) => setChildTaskTitles((current) => ({ ...current, [task.id]: title }))}
@@ -2284,6 +2398,7 @@ function App() {
               expanded={expandedTaskIds.has(task.id)}
               showUnsavedDot={changedTaskId === task.id && saveState !== "saved" && saveState !== "idle"}
               isHierarchySortTarget={hierarchySortTargetId === task.id}
+              isHighlighted={highlightTaskId === task.id}
               onToggleExpanded={() => toggleTaskDetails(task.id)}
               onDragStart={() => setDragPayload({ kind: "tree-task", taskId: task.id })}
               onDragEnd={() => {
@@ -2315,6 +2430,7 @@ function App() {
               onChecklist={(checklist) => updateTask(task.id, { checklist })}
               onVisibility={(visibleIn) => updateTask(task.id, { visibleIn })}
               onGoToHierarchy={() => scrollToTask(task.id)}
+              onCopyPermalink={() => copyTaskPermalink(task.id)}
               onDetachParent={() => detachTaskFromParent(task.id)}
               childTaskTitle={childTaskTitles[task.id] ?? ""}
               onChildTaskTitleChange={(title) => setChildTaskTitles((current) => ({ ...current, [task.id]: title }))}
@@ -3601,6 +3717,7 @@ function TaskCard({
   showUnsavedDot,
   isDropTarget = false,
   isHierarchySortTarget = false,
+  isHighlighted = false,
   onToggleExpanded,
   onDragStart,
   onDragEnd,
@@ -3617,6 +3734,7 @@ function TaskCard({
   onChecklist,
   onVisibility,
   onGoToHierarchy,
+  onCopyPermalink,
   onDetachParent,
   childTaskTitle,
   onChildTaskTitleChange,
@@ -3636,6 +3754,7 @@ function TaskCard({
   showUnsavedDot: boolean;
   isDropTarget?: boolean;
   isHierarchySortTarget?: boolean;
+  isHighlighted?: boolean;
   onToggleExpanded: () => void;
   onDragStart: () => void;
   onDragEnd: () => void;
@@ -3652,6 +3771,7 @@ function TaskCard({
   onChecklist: (checklist: TaskChecklistItem[]) => void;
   onVisibility: (visibleIn: TaskVisibleIn) => void;
   onGoToHierarchy: () => void;
+  onCopyPermalink: () => Promise<void>;
   onDetachParent: () => void;
   childTaskTitle: string;
   onChildTaskTitleChange: (title: string) => void;
@@ -3661,6 +3781,7 @@ function TaskCard({
 }) {
   const [parentMenuOpen, setParentMenuOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [permalinkCopied, setPermalinkCopied] = useState(false);
   const parentMenuRef = useRef<HTMLSpanElement | null>(null);
   const deleteButtonRef = useRef<HTMLButtonElement | null>(null);
 
@@ -3688,12 +3809,18 @@ function TaskCard({
     return () => window.removeEventListener("pointerdown", handlePointerDown);
   }, [deleteConfirm]);
 
+  useEffect(() => {
+    if (!permalinkCopied) return;
+    const timeout = window.setTimeout(() => setPermalinkCopied(false), 1400);
+    return () => window.clearTimeout(timeout);
+  }, [permalinkCopied]);
+
   const taskVisibleIn = normalizeTaskVisibleIn(task.visibleIn);
   const showStatusPresentation = taskVisibleIn.board;
 
   return (
     <article
-      className={`task-card task-card-${variant} status-card ${statusMeta[task.status].className} ${!showStatusPresentation ? "no-board-status" : ""} ${task.archived ? "archived" : ""} ${isDropTarget ? "task-drop-target" : ""} ${isHierarchySortTarget ? "hierarchy-sort-target" : ""}`}
+      className={`task-card task-card-${variant} status-card ${statusMeta[task.status].className} ${!showStatusPresentation ? "no-board-status" : ""} ${task.archived ? "archived" : ""} ${isDropTarget ? "task-drop-target" : ""} ${isHierarchySortTarget ? "hierarchy-sort-target" : ""} ${isHighlighted ? "task-reference-highlight" : ""}`}
       data-task-id={task.id}
       draggable={!task.archived}
       onDragStart={(event) => {
@@ -3783,6 +3910,16 @@ function TaskCard({
               {bookingCount}
             </span>
           )}
+          <button
+            className={`task-permalink-button ${permalinkCopied ? "copied" : ""}`}
+            title={permalinkCopied ? "Link kopiert" : "Permalink kopieren"}
+            onClick={(event) => {
+              event.stopPropagation();
+              void onCopyPermalink().then(() => setPermalinkCopied(true));
+            }}
+          >
+            {permalinkCopied ? <Check size={11} /> : <Link size={11} />}
+          </button>
           {(task.tags ?? []).map((tag) => (
             <span className="task-tag-chip" key={tag}>
               {tag}

@@ -899,6 +899,27 @@ button:disabled {
   opacity: 0.28;
 }
 
+@keyframes task-reference-pop {
+  0% {
+    box-shadow: inset 4px 0 0 var(--status-color), 0 0 0 0 rgba(14, 124, 111, 0);
+    transform: scale(1);
+  }
+  22% {
+    box-shadow: inset 4px 0 0 var(--status-color), 0 0 0 4px rgba(14, 124, 111, 0.22), 0 14px 30px rgba(14, 124, 111, 0.2);
+    transform: scale(1.015);
+  }
+  100% {
+    box-shadow: inset 4px 0 0 var(--status-color), 0 0 0 0 rgba(14, 124, 111, 0);
+    transform: scale(1);
+  }
+}
+
+.task-card.task-reference-highlight {
+  animation: task-reference-pop 1.45s ease-out;
+  position: relative;
+  z-index: 85;
+}
+
 .status-card {
   --status-color: var(--line);
   --status-bg: var(--surface);
@@ -1081,6 +1102,23 @@ button:disabled {
 
 .task-compact-meta .task-booking-chip svg {
   color: currentColor;
+}
+
+.task-compact-meta .task-permalink-button {
+  background: #eef1ea;
+  color: #4f5a50;
+  max-width: 24px;
+  min-width: 24px;
+  padding: 0;
+}
+
+.task-compact-meta .task-permalink-button svg {
+  color: currentColor;
+}
+
+.task-compact-meta .task-permalink-button.copied {
+  background: #e4f6ec;
+  color: #168456;
 }
 
 .task-time-chip {
