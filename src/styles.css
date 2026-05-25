@@ -957,18 +957,18 @@ button:disabled {
   min-width: 0;
 }
 
-.task-card-list .drag-handle,
-.task-card-hierarchy .drag-handle {
+.task-card-list .task-row > .drag-handle,
+.task-card-hierarchy .task-row > .drag-handle {
   grid-column: 1;
 }
 
-.task-card-list .task-expand-button,
-.task-card-hierarchy .task-expand-button {
+.task-card-list .task-row > .task-expand-button,
+.task-card-hierarchy .task-row > .task-expand-button {
   grid-column: 2;
 }
 
-.task-card-list .check-button,
-.task-card-hierarchy .check-button {
+.task-card-list .task-row > .check-button,
+.task-card-hierarchy .task-row > .check-button {
   grid-column: 3;
 }
 
@@ -1580,17 +1580,17 @@ button:disabled {
   row-gap: 7px;
 }
 
-.task-card-board .drag-handle {
+.task-card-board .task-row > .drag-handle {
   grid-column: 1;
   grid-row: 1;
 }
 
-.task-card-board .task-expand-button {
+.task-card-board .task-row > .task-expand-button {
   grid-column: 2;
   grid-row: 1;
 }
 
-.task-card-board .check-button {
+.task-card-board .task-row > .check-button {
   grid-column: 3;
   grid-row: 1;
 }

@@ -2174,18 +2174,21 @@ function App() {
     });
   }
 
-  function scrollToTask(taskId: string) {
+  function scrollToTask(taskId: string, options: { expandDetails?: boolean } = {}) {
+    const shouldExpandDetails = options.expandDetails ?? true;
     const expandedIds = new Set([...(settings.hierarchyExpandedTaskIds ?? []), ...ancestorTaskIds(taskId)]);
     updateSettings({
       taskView: "hierarchy",
       hierarchyExpandedTaskIds: [...expandedIds],
       panelsCollapsed: { ...settings.panelsCollapsed, tree: false }
     });
-    setExpandedTaskIds((current) => {
-      const next = new Set(current);
-      next.add(taskId);
-      return next;
-    });
+    if (shouldExpandDetails) {
+      setExpandedTaskIds((current) => {
+        const next = new Set(current);
+        next.add(taskId);
+        return next;
+      });
+    }
     window.setTimeout(() => {
       document.querySelector(`[data-task-id="${taskId}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
     }, 0);
@@ -3009,7 +3012,7 @@ function App() {
                     isDragging={dragPayload !== null}
                     onBookingChange={updateBooking}
                     onBookingDelete={deleteBooking}
-                    onOpenTask={scrollToTask}
+                    onOpenTask={(taskId) => scrollToTask(taskId, { expandDetails: false })}
                     onCapacityChange={(patch) => updateDailyCapacity(date, patch)}
                     onAddLooseBooking={addDefaultLooseBooking}
                     dayTemplates={state.dayTemplates ?? []}
