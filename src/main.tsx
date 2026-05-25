@@ -353,11 +353,25 @@ function minutesBetween(startAt: string, endAt: string) {
   return Math.max(0, Math.round((new Date(endAt).getTime() - new Date(startAt).getTime()) / 60_000));
 }
 
+function externalEventTimeLabel(event: GoogleCalendarEvent) {
+  const startDate = event.allDay ? datePart(event.startAt) : dateFromDateTime(event.startAt);
+  const endDate = event.allDay ? addDays(datePart(event.endAt), -1) : dateFromDateTime(event.endAt);
+  const formattedStartDate = formatDate(startDate);
+  const formattedEndDate = formatDate(endDate);
+  if (event.allDay) {
+    return startDate === endDate ? `${formattedStartDate}, ganztägig` : `${formattedStartDate} bis ${formattedEndDate}, ganztägig`;
+  }
+
+  const startTime = timeFromDateTime(event.startAt);
+  const endTime = timeFromDateTime(event.endAt);
+  return startDate === endDate
+    ? `${formattedStartDate}, ${startTime}-${endTime}`
+    : `${formattedStartDate}, ${startTime} bis ${formattedEndDate}, ${endTime}`;
+}
+
 function externalEventDates(event: GoogleCalendarEvent) {
   const startDate = event.allDay ? datePart(event.startAt) : dateFromDateTime(event.startAt);
-  if (!event.allDay) return [startDate];
-
-  const endDate = addDays(datePart(event.endAt), -1);
+  const endDate = event.allDay ? addDays(datePart(event.endAt), -1) : dateFromDateTime(event.endAt);
   const dates: string[] = [];
   let cursor = startDate;
   while (cursor <= endDate) {
@@ -367,10 +381,44 @@ function externalEventDates(event: GoogleCalendarEvent) {
   return dates.length > 0 ? dates : [startDate];
 }
 
-function externalBookedMinutes(events: GoogleCalendarEvent[], capacity: DailyCapacity) {
+function isMultiDayTimedExternalEvent(event: GoogleCalendarEvent) {
+  return !event.allDay && dateFromDateTime(event.startAt) !== dateFromDateTime(event.endAt);
+}
+
+function externalTimedSegmentForDate(
+  event: GoogleCalendarEvent,
+  date: string,
+  calendarStartMinutes: number,
+  calendarEndMinutes: number
+) {
+  const startDate = dateFromDateTime(event.startAt);
+  const endDate = dateFromDateTime(event.endAt);
+  const rawStartMinutes = date === startDate ? timeToMinutes(timeFromDateTime(event.startAt)) : 0;
+  const rawEndMinutes = date === endDate ? timeToMinutes(timeFromDateTime(event.endAt)) : 24 * 60;
+  const startMinutes = Math.max(calendarStartMinutes, rawStartMinutes);
+  const endMinutes = Math.min(calendarEndMinutes, rawEndMinutes);
+  if (endMinutes <= startMinutes) return null;
+  return { startMinutes, endMinutes };
+}
+
+function externalBookedMinutes(
+  events: GoogleCalendarEvent[],
+  capacity: DailyCapacity,
+  date?: string,
+  calendarStartMinutes?: number,
+  calendarEndMinutes?: number
+) {
   return events.reduce((sum, event) => {
     if (!event.blocksTime) return sum;
-    return sum + (event.allDay ? capacity.dayCapacityMinutes : minutesBetween(event.startAt, event.endAt));
+    if (event.allDay) return sum + capacity.dayCapacityMinutes;
+    if (isMultiDayTimedExternalEvent(event)) {
+      if (date === undefined || calendarStartMinutes === undefined || calendarEndMinutes === undefined) {
+        return sum + Math.min(capacity.dayCapacityMinutes, minutesBetween(event.startAt, event.endAt));
+      }
+      const segment = externalTimedSegmentForDate(event, date, calendarStartMinutes, calendarEndMinutes);
+      return sum + Math.min(capacity.dayCapacityMinutes, segment ? segment.endMinutes - segment.startMinutes : 0);
+    }
+    return sum + Math.min(capacity.dayCapacityMinutes, minutesBetween(event.startAt, event.endAt));
   }, 0);
 }
 
@@ -2938,6 +2986,8 @@ function App() {
                 externalEventsByDate={externalEventsByDate}
                 dailyCapacities={state.dailyCapacities ?? {}}
                 defaultCapacity={defaultCapacity}
+                calendarStartMinutes={calendarStartMinutes}
+                calendarEndMinutes={calendarEndMinutes}
                 onOpenDay={openDayFromMonth}
               />
             ) : (
@@ -4026,6 +4076,8 @@ function MonthCalendarView({
   externalEventsByDate,
   dailyCapacities,
   defaultCapacity,
+  calendarStartMinutes,
+  calendarEndMinutes,
   onOpenDay
 }: {
   months: string[];
@@ -4034,6 +4086,8 @@ function MonthCalendarView({
   externalEventsByDate: Map<string, GoogleCalendarEvent[]>;
   dailyCapacities: Record<string, DailyCapacity>;
   defaultCapacity: DailyCapacity;
+  calendarStartMinutes: number;
+  calendarEndMinutes: number;
   onOpenDay: (date: string) => void;
 }) {
   const bookingsByDate = useMemo(() => {
@@ -4074,7 +4128,7 @@ function MonthCalendarView({
                 const capacity = dailyCapacities[date] ?? defaultCapacity;
                 const capcalMinutes = (bookingsByDate.get(date) ?? []).reduce((sum, booking) => sum + booking.durationMinutes, 0);
                 const externalEvents = externalEventsByDate.get(date) ?? [];
-                const externalMinutes = externalBookedMinutes(externalEvents, capacity);
+                const externalMinutes = externalBookedMinutes(externalEvents, capacity, date, calendarStartMinutes, calendarEndMinutes);
                 const bookedMinutes = capcalMinutes + externalMinutes;
                 const bookingCount = (bookingsByDate.get(date) ?? []).length + externalEvents.length;
                 const bookedPercent = capacity.dayCapacityMinutes > 0 ? (bookedMinutes / capacity.dayCapacityMinutes) * 100 : 0;
@@ -4177,7 +4231,7 @@ function DayColumn({
   const templateMenuRef = useRef<HTMLDivElement | null>(null);
   const allocations = bookings.filter((booking) => !booking.startTime);
   const scheduled = bookings.filter((booking) => booking.startTime).sort((a, b) => a.startTime!.localeCompare(b.startTime!));
-  const googleBlockingMinutes = externalBookedMinutes(googleEvents, capacity);
+  const googleBlockingMinutes = externalBookedMinutes(googleEvents, capacity, date, calendarStartMinutes, calendarEndMinutes);
   const googleAllocations = googleEvents.filter((event) => event.allDay);
   const googleScheduled = googleEvents
     .filter((event) => !event.allDay)
@@ -4190,15 +4244,16 @@ function DayColumn({
       endMinutes: timeToMinutes(booking.startTime!) + booking.durationMinutes,
       booking
     })),
-    ...googleScheduled.map((event): TimedCalendarEntry => {
-      const startMinutes = timeToMinutes(timeFromDateTime(event.startAt));
-      return {
+    ...googleScheduled.flatMap((event): TimedCalendarEntry[] => {
+      const segment = externalTimedSegmentForDate(event, date, calendarStartMinutes, calendarEndMinutes);
+      if (!segment) return [];
+      return [{
         kind: "external",
         id: event.id,
-        startMinutes,
-        endMinutes: startMinutes + minutesBetween(event.startAt, event.endAt),
+        startMinutes: segment.startMinutes,
+        endMinutes: segment.endMinutes,
         event
-      };
+      }];
     })
   ]);
   const bookedMinutes = bookings.reduce((sum, booking) => sum + booking.durationMinutes, 0) + googleBlockingMinutes;
@@ -4680,9 +4735,7 @@ function BookingCard({
 }
 
 function GoogleEventCard({ event, compact = false, onOpen }: { event: GoogleCalendarEvent; compact?: boolean; onOpen: () => void }) {
-  const timeLabel = event.allDay
-    ? "Ganztägig"
-    : `${timeFromDateTime(event.startAt)}-${timeFromDateTime(event.endAt)}`;
+  const timeLabel = externalEventTimeLabel(event);
   return (
     <article
       className={`booking-card google-event-card ${event.provider}-event-card ${event.blocksTime ? "google-event-busy" : "google-event-free"}`}
@@ -4708,9 +4761,7 @@ function GoogleEventCard({ event, compact = false, onOpen }: { event: GoogleCale
 
 function GoogleEventEditor({ event, onClose }: { event: GoogleCalendarEvent; onClose: () => void }) {
   const description = plainTextFromHtml(event.description);
-  const timeLabel = event.allDay
-    ? "Ganztägig"
-    : `${formatDate(dateFromDateTime(event.startAt))}, ${timeFromDateTime(event.startAt)}-${timeFromDateTime(event.endAt)}`;
+  const timeLabel = externalEventTimeLabel(event);
   return (
     <aside className="google-event-editor" onClick={(event) => event.stopPropagation()}>
       <span className={`calendar-provider-mark ${event.provider}-provider-mark`} aria-hidden="true">
