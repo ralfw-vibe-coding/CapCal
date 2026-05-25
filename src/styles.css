@@ -2505,11 +2505,67 @@ button:disabled {
 }
 
 .booking-duration-controls {
-  display: block;
+  position: relative;
 }
 
-.booking-duration-controls input {
+.booking-duration-combo {
+  position: relative;
+}
+
+.booking-duration-combo input {
   font-variant-numeric: tabular-nums;
+  padding-right: 34px;
+}
+
+.booking-duration-toggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  cursor: pointer;
+  display: inline-flex;
+  height: 26px;
+  justify-content: center;
+  min-width: 26px;
+  padding: 0;
+  position: absolute;
+  right: 5px;
+  top: 4px;
+}
+
+.booking-duration-menu {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 14px 30px rgba(31, 42, 35, 0.16);
+  display: grid;
+  gap: 2px;
+  left: 0;
+  max-height: 190px;
+  overflow: auto;
+  padding: 5px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 180;
+}
+
+.booking-duration-menu button {
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  min-height: 30px;
+  padding: 4px 8px;
+  text-align: left;
+}
+
+.booking-duration-menu button:hover,
+.booking-duration-menu button.active {
+  background: var(--surface-2);
 }
 
 .booking-controls input,

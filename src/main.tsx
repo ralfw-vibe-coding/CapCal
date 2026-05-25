@@ -4714,11 +4714,24 @@ function BookingEditor({
   onClose: () => void;
 }) {
   const [manualDuration, setManualDuration] = useState(minutesToTimeLabel(booking.durationMinutes));
-  const durationListId = `booking-duration-options-${booking.id}`;
+  const [durationMenuOpen, setDurationMenuOpen] = useState(false);
+  const durationMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setManualDuration(minutesToTimeLabel(booking.durationMinutes));
   }, [booking.durationMinutes]);
+
+  useEffect(() => {
+    if (!durationMenuOpen) return;
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target;
+      if (target instanceof Node && !durationMenuRef.current?.contains(target)) {
+        setDurationMenuOpen(false);
+      }
+    }
+    window.addEventListener("pointerdown", handlePointerDown);
+    return () => window.removeEventListener("pointerdown", handlePointerDown);
+  }, [durationMenuOpen]);
 
   function commitManualDuration() {
     const durationMinutes = parseDurationInput(manualDuration);
@@ -4792,24 +4805,60 @@ function BookingEditor({
             Dauer
           </span>
           <div className="booking-duration-controls">
-            <input
-              aria-label="Dauer"
-              list={durationListId}
-              inputMode="numeric"
-              value={manualDuration}
-              onChange={(event) => setManualDuration(event.target.value)}
-              onBlur={commitManualDuration}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.currentTarget.blur();
-                }
-              }}
-            />
-            <datalist id={durationListId}>
-              {durationOptions.map((minutes) => (
-                <option key={minutes} value={minutesToTimeLabel(minutes)} />
-              ))}
-            </datalist>
+            <div className="booking-duration-combo" ref={durationMenuRef}>
+              <input
+                aria-label="Dauer"
+                inputMode="numeric"
+                value={manualDuration}
+                onFocus={() => setDurationMenuOpen(true)}
+                onChange={(event) => setManualDuration(event.target.value)}
+                onBlur={commitManualDuration}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.currentTarget.blur();
+                    setDurationMenuOpen(false);
+                  }
+                  if (event.key === "Escape") {
+                    setManualDuration(minutesToTimeLabel(booking.durationMinutes));
+                    setDurationMenuOpen(false);
+                    event.currentTarget.blur();
+                  }
+                }}
+              />
+              <button
+                className="booking-duration-toggle"
+                type="button"
+                title="Dauer auswählen"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => setDurationMenuOpen((open) => !open)}
+              >
+                <ChevronDown size={14} />
+              </button>
+              {durationMenuOpen && (
+                <div className="booking-duration-menu" role="listbox" aria-label="Dauervorschläge">
+                  {durationOptions.map((minutes) => {
+                    const label = minutesToTimeLabel(minutes);
+                    return (
+                      <button
+                        className={minutes === booking.durationMinutes ? "active" : ""}
+                        key={minutes}
+                        type="button"
+                        role="option"
+                        aria-selected={minutes === booking.durationMinutes}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => {
+                          setManualDuration(label);
+                          setDurationMenuOpen(false);
+                          onChange(booking.id, { durationMinutes: minutes });
+                        }}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </label>
         <button className="icon-button ghost" title="Buchung löschen" onClick={() => onDelete(booking.id)}>
