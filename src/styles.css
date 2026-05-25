@@ -947,6 +947,46 @@ button:disabled {
   z-index: 60;
 }
 
+.task-card-list .task-row,
+.task-card-hierarchy .task-row {
+  align-items: center;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: 15px 20px 24px minmax(120px, 1fr) auto auto;
+  grid-template-rows: auto;
+  min-width: 0;
+}
+
+.task-card-list .drag-handle,
+.task-card-hierarchy .drag-handle {
+  grid-column: 1;
+}
+
+.task-card-list .task-expand-button,
+.task-card-hierarchy .task-expand-button {
+  grid-column: 2;
+}
+
+.task-card-list .check-button,
+.task-card-hierarchy .check-button {
+  grid-column: 3;
+}
+
+.task-card-list .task-main,
+.task-card-hierarchy .task-main {
+  grid-column: 4;
+}
+
+.task-card-list .task-compact-meta,
+.task-card-hierarchy .task-compact-meta {
+  grid-column: 5;
+}
+
+.task-card-list .task-row > .icon-button,
+.task-card-hierarchy .task-row > .icon-button {
+  grid-column: auto;
+}
+
 .task-row {
   align-items: center;
   display: flex;
@@ -1570,14 +1610,13 @@ button:disabled {
   grid-row: 2;
 }
 
-@container (max-width: 640px) {
+@container (max-width: 860px) {
   .task-card-list .task-compact-meta,
   .task-card-hierarchy .task-compact-meta {
-    flex-basis: 100%;
+    grid-column: 3 / -1;
+    grid-row: 2;
     flex-wrap: wrap;
-    margin-left: 47px;
     min-width: 0;
-    order: 10;
   }
 }
 
