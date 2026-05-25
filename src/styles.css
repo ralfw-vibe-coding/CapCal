@@ -2290,6 +2290,11 @@ button:disabled {
   z-index: 1;
 }
 
+.allocation-booking-shell .booking-card {
+  height: 100%;
+  overflow: hidden;
+}
+
 .booking-card {
   border-color: rgba(25, 110, 98, 0.32);
   cursor: pointer;

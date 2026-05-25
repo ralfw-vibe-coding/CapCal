@@ -4451,7 +4451,7 @@ function DayColumn({
       >
         {dropPreview?.area === "allocation" && <div className="allocation-drop-preview">Hier als Allokation einbuchen</div>}
         {allocations.map((booking) => (
-          <div className="booking-shell" key={booking.id}>
+          <div className="booking-shell allocation-booking-shell" key={booking.id} style={{ height: Math.max(36, booking.durationMinutes * minuteHeight) }}>
             <BookingCard
               booking={booking}
               task={booking.taskId ? taskById.get(booking.taskId) : undefined}
