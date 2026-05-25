@@ -340,6 +340,10 @@ function dateFromDateTime(value: string) {
   return `${year}-${month}-${day}`;
 }
 
+function datePart(value: string) {
+  return value.slice(0, 10);
+}
+
 function timeFromDateTime(value: string) {
   const date = new Date(value);
   return `${date.getHours().toString().padStart(2, "0")}:${date.getMinutes().toString().padStart(2, "0")}`;
@@ -347,6 +351,20 @@ function timeFromDateTime(value: string) {
 
 function minutesBetween(startAt: string, endAt: string) {
   return Math.max(0, Math.round((new Date(endAt).getTime() - new Date(startAt).getTime()) / 60_000));
+}
+
+function externalEventDates(event: GoogleCalendarEvent) {
+  const startDate = event.allDay ? datePart(event.startAt) : dateFromDateTime(event.startAt);
+  if (!event.allDay) return [startDate];
+
+  const endDate = addDays(datePart(event.endAt), -1);
+  const dates: string[] = [];
+  let cursor = startDate;
+  while (cursor <= endDate) {
+    dates.push(cursor);
+    cursor = addDays(cursor, 1);
+  }
+  return dates.length > 0 ? dates : [startDate];
 }
 
 function externalBookedMinutes(events: GoogleCalendarEvent[], capacity: DailyCapacity) {
@@ -1328,8 +1346,9 @@ function App() {
   const externalEventsByDate = useMemo(() => {
     const byDate = new Map<string, GoogleCalendarEvent[]>();
     for (const event of externalCalendarEvents) {
-      const date = event.allDay ? dateFromDateTime(event.startAt) : dateFromDateTime(event.startAt);
-      byDate.set(date, [...(byDate.get(date) ?? []), event]);
+      for (const date of externalEventDates(event)) {
+        byDate.set(date, [...(byDate.get(date) ?? []), event]);
+      }
     }
     return byDate;
   }, [externalCalendarEvents]);
