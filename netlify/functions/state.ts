@@ -1,7 +1,7 @@
 import type { Config } from "@netlify/functions";
 import { getApiKeyUser, getSessionUser, isAuthRequired } from "../../src/server/auth";
-import { createStateProvider } from "../../src/server/storage";
-import type { AppState } from "../../src/server/storage/types";
+import { createBackendDomain } from "../../backend/body/domain/domain";
+import type { AppState } from "../../backend/body/domain/providers/stateProvider";
 
 function jsonResponse(payload: unknown, init?: ResponseInit) {
   return new Response(JSON.stringify(payload), {
@@ -15,18 +15,17 @@ function jsonResponse(payload: unknown, init?: ResponseInit) {
 
 export default async (request: Request) => {
   try {
-    const provider = createStateProvider();
+    const backend = createBackendDomain();
     const user = getSessionUser(request.headers.get("cookie") ?? "") ?? (await getApiKeyUser(request.headers.get("authorization")));
     if (isAuthRequired() && !user) return jsonResponse({ error: "Unauthorized" }, { status: 401 });
 
     if (request.method === "GET") {
-      return jsonResponse(await provider.load(user?.id));
+      return jsonResponse(await backend.loadState.process({ userId: user?.id }));
     }
 
     if (request.method === "PUT") {
       const state = (await request.json()) as AppState;
-      await provider.save(state, user?.id);
-      return jsonResponse(state);
+      return jsonResponse(await backend.saveState.process({ state, userId: user?.id }));
     }
 
     return jsonResponse({ error: "Method not allowed" }, { status: 405 });

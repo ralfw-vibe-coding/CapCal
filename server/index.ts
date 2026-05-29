@@ -30,7 +30,7 @@ import {
   refreshICloudCalendars,
   updateICloudCalendarSelection
 } from "../src/server/icloudCalendar";
-import { createStateProvider } from "../src/server/storage";
+import { createBackendDomain } from "../backend/body/domain/domain";
 
 async function readBody(request: AsyncIterable<Uint8Array>) {
   const chunks: Uint8Array[] = [];
@@ -56,7 +56,7 @@ function redirect(response: ServerResponse, location: string) {
 
 const server = createServer(async (request, response) => {
   try {
-    const provider = createStateProvider();
+    const backend = createBackendDomain();
     const url = new URL(request.url ?? "/", "http://127.0.0.1:3001");
 
     if (request.method === "OPTIONS") {
@@ -271,14 +271,13 @@ const server = createServer(async (request, response) => {
     }
 
     if (url.pathname === "/api/state" && request.method === "GET") {
-      send(response, 200, await provider.load(user?.id));
+      send(response, 200, await backend.loadState.process({ userId: user?.id }));
       return;
     }
 
     if (url.pathname === "/api/state" && request.method === "PUT") {
       const state = JSON.parse(await readBody(request));
-      await provider.save(state, user?.id);
-      send(response, 200, state);
+      send(response, 200, await backend.saveState.process({ state, userId: user?.id }));
       return;
     }
 
