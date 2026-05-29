@@ -7,9 +7,13 @@
 // internen Zustand.
 
 import { TaskspaceStateProvider } from "./providers/taskspaceStateProvider";
+import { AddLooseBookingRpu } from "./rpus/addLooseBookingRpu";
 import { AddToPrioRpu } from "./rpus/addToPrioRpu";
+import { BookTaskRpu } from "./rpus/bookTaskRpu";
 import { CommitTaskspaceRpu } from "./rpus/commitTaskspaceRpu";
 import { CreateTaskRpu } from "./rpus/createTaskRpu";
+import { CreateTaskFromBookingRpu } from "./rpus/createTaskFromBookingRpu";
+import { DeleteBookingRpu } from "./rpus/deleteBookingRpu";
 import { DeleteTaskRpu } from "./rpus/deleteTaskRpu";
 import { DetachTaskFromParentRpu } from "./rpus/detachTaskFromParentRpu";
 import { GetAvailableTagsRpu } from "./rpus/getAvailableTagsRpu";
@@ -30,6 +34,7 @@ import { MoveTaskInTreeRpu } from "./rpus/moveTaskInTreeRpu";
 import { RemoveFromPrioRpu } from "./rpus/removeFromPrioRpu";
 import { SaveTaskspaceRpu } from "./rpus/saveTaskspaceRpu";
 import { ToggleTaskArchivedRpu } from "./rpus/toggleTaskArchivedRpu";
+import { UpdateBookingRpu } from "./rpus/updateBookingRpu";
 import { UpdateTaskRpu } from "./rpus/updateTaskRpu";
 import { TaskspaceStore } from "./taskspaceStore";
 
@@ -72,7 +77,14 @@ export function createDomain() {
     // Command-RPUs (Priorisierung)
     addToPrio: new AddToPrioRpu(store),
     removeFromPrio: new RemoveFromPrioRpu(store),
-    moveInPrio: new MoveInPrioRpu(store)
+    moveInPrio: new MoveInPrioRpu(store),
+
+    // Command-RPUs (Buchungen)
+    bookTask: new BookTaskRpu(store),
+    addLooseBooking: new AddLooseBookingRpu(store),
+    createTaskFromBooking: new CreateTaskFromBookingRpu(store),
+    updateBooking: new UpdateBookingRpu(store),
+    deleteBooking: new DeleteBookingRpu(store)
   };
 }
 

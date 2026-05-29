@@ -59,8 +59,6 @@ import {
   datePart,
   deadlineTone,
   defaultSettings,
-  defaultTaskVisibleIn,
-  durationForPlanning,
   endOfMonth,
   estimateToLabel,
   externalEventDates,
@@ -1134,45 +1132,13 @@ function App() {
   }
 
   function bookTask(taskId: string, date: string, startTime?: string, source: "tree" | "prio" = "tree") {
-    updateState((draft) => {
-      const task = draft.tasks.find((candidate) => candidate.id === taskId);
-      if (!task || task.archived) return draft;
-      const durationMinutes =
-        source === "prio"
-          ? (draft.prioDurations?.[taskId] ?? durationForPlanning(task?.estimateMinutes, settings.defaultPrioDurationMinutes))
-          : durationForPlanning(task?.estimateMinutes, settings.defaultPrioDurationMinutes);
-      const { [taskId]: _removed, ...prioDurations } = draft.prioDurations ?? {};
-      return {
-        ...draft,
-        prioTaskIds: draft.prioTaskIds.filter((id) => id !== taskId),
-        prioDurations,
-        tasks: normalizeTasks(
-          draft.tasks.map((candidate) =>
-            candidate.id === taskId && candidate.status !== "Done" ? { ...candidate, status: "Started" } : candidate
-          )
-        ),
-        bookings: [...draft.bookings, { id: uid("booking"), taskId, date, startTime, durationMinutes }]
-      };
-    });
+    domain.bookTask.process({ taskId, date, startTime, source });
+    refreshState();
   }
 
   function addLooseBooking(label: string, date = today, startTime?: string) {
-    const trimmed = label.trim();
-    if (!trimmed) return;
-    updateState((draft) => ({
-      ...draft,
-      bookings: [
-        ...draft.bookings,
-        {
-          id: uid("booking"),
-          label: trimmed,
-          description: "",
-          date,
-          startTime,
-          durationMinutes: settings.defaultPrioDurationMinutes
-        }
-      ]
-    }));
+    domain.addLooseBooking.process({ label, date, startTime });
+    refreshState();
   }
 
   function addDefaultLooseBooking(date: string) {
@@ -1253,63 +1219,18 @@ function App() {
   }
 
   function createTaskFromBookingBefore(bookingId: string, targetTaskId: string, mode: "list" | "hierarchy" | "board" = "list") {
-    updateState((draft) => {
-      const booking = draft.bookings.find((candidate) => candidate.id === bookingId);
-      const targetTask = draft.tasks.find((candidate) => candidate.id === targetTaskId);
-      if (!booking || !targetTask) return draft;
-      const title = (booking.label || "Neue Aufgabe").trim();
-      const targetStatus = mode === "board" ? targetTask.status : "Started";
-      const maxRootTreeOrder = Math.max(-1, ...draft.tasks.filter((task) => !task.parentId).map((task) => task.treeOrder));
-      const maxListOrder = Math.max(-1, ...draft.tasks.map((task) => task.listOrder));
-      const task: Task = {
-        id: uid("task"),
-        title,
-        description: booking.description ?? "",
-        checklist: [],
-        tags: [],
-        visibleIn: { ...defaultTaskVisibleIn },
-        dueDate: undefined,
-        estimateMinutes: undefined,
-        parentId: mode === "hierarchy" ? targetTask.parentId : undefined,
-        archived: false,
-        status: targetStatus,
-        done: false,
-        treeOrder: mode === "hierarchy" ? targetTask.treeOrder : 0,
-        listOrder: mode === "list" ? targetTask.listOrder : 0,
-        boardOrder: mode === "board" ? targetTask.boardOrder : 0
-      };
-      const tasks = draft.tasks.map((existingTask) => ({
-        ...existingTask,
-        treeOrder:
-          (existingTask.parentId ?? "") === (task.parentId ?? "") &&
-          existingTask.treeOrder >= (mode === "hierarchy" ? targetTask.treeOrder : 0)
-            ? existingTask.treeOrder + 1
-            : existingTask.treeOrder,
-        listOrder: existingTask.listOrder >= (mode === "list" ? targetTask.listOrder : 0) ? existingTask.listOrder + 1 : existingTask.listOrder,
-        boardOrder:
-          existingTask.status === targetStatus && existingTask.boardOrder >= (mode === "board" ? targetTask.boardOrder : 0)
-            ? existingTask.boardOrder + 1
-            : existingTask.boardOrder
-      }));
-      return {
-        ...draft,
-        tasks: normalizeTasks([task, ...tasks]),
-        bookings: draft.bookings.map((candidate) =>
-          candidate.id === bookingId ? { ...candidate, taskId: task.id, label: "" } : candidate
-        )
-      };
-    });
+    domain.createTaskFromBooking.process({ bookingId, targetTaskId, mode });
+    refreshState();
   }
 
   function updateBooking(bookingId: string, patch: Partial<Booking>) {
-    updateState((draft) => ({
-      ...draft,
-      bookings: draft.bookings.map((booking) => (booking.id === bookingId ? { ...booking, ...patch } : booking))
-    }));
+    domain.updateBooking.process({ bookingId, patch });
+    refreshState();
   }
 
   function deleteBooking(bookingId: string) {
-    updateState((draft) => ({ ...draft, bookings: draft.bookings.filter((booking) => booking.id !== bookingId) }));
+    domain.deleteBooking.process({ bookingId });
+    refreshState();
   }
 
   function updateDailyCapacity(date: string, patch: Partial<DailyCapacity>) {
