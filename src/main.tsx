@@ -92,7 +92,6 @@ import {
   sortByOrder,
   sortedBoardTasks,
   startOfMonth,
-  statusAfterMoveToPrio,
   statuses,
   timeFromDateTime,
   timeToMinutes,
@@ -1110,71 +1109,18 @@ function App() {
   }
 
   function addToPrio(taskId: string) {
-    updateState((draft) => {
-      if (draft.prioTaskIds.includes(taskId)) return draft;
-      const task = draft.tasks.find((candidate) => candidate.id === taskId);
-      if (!task || task.archived) return draft;
-      return {
-        ...draft,
-        tasks: normalizeTasks(
-          draft.tasks.map((candidate) =>
-            candidate.id === taskId
-              ? {
-                  ...candidate,
-                  status: statusAfterMoveToPrio(candidate.status),
-                  done: statusAfterMoveToPrio(candidate.status) === "Done" || statusAfterMoveToPrio(candidate.status) === "Aborted"
-                }
-              : candidate
-          )
-        ),
-        prioTaskIds: [...draft.prioTaskIds, taskId],
-        prioDurations: {
-          ...(draft.prioDurations ?? {}),
-          [taskId]: durationForPlanning(task?.estimateMinutes, settings.defaultPrioDurationMinutes)
-        }
-      };
-    });
+    domain.addToPrio.process({ taskId });
+    refreshState();
   }
 
   function removeFromPrio(taskId: string) {
-    updateState((draft) => {
-      const { [taskId]: _removed, ...prioDurations } = draft.prioDurations ?? {};
-      return { ...draft, prioTaskIds: draft.prioTaskIds.filter((id) => id !== taskId), prioDurations };
-    });
+    domain.removeFromPrio.process({ taskId });
+    refreshState();
   }
 
   function moveBeforeInPrio(sourceTaskId: string, targetTaskId: string) {
-    updateState((draft) => {
-      const sourceWasNew = !draft.prioTaskIds.includes(sourceTaskId);
-      const sourceTask = draft.tasks.find((task) => task.id === sourceTaskId);
-      if (!sourceTask || sourceTask.archived) return draft;
-      const prioTaskIds = draft.prioTaskIds.includes(sourceTaskId) ? [...draft.prioTaskIds] : [...draft.prioTaskIds, sourceTaskId];
-      const sourceIndex = prioTaskIds.indexOf(sourceTaskId);
-      const targetIndex = prioTaskIds.indexOf(targetTaskId);
-      return {
-        ...draft,
-        tasks: sourceWasNew
-          ? normalizeTasks(
-              draft.tasks.map((task) =>
-                task.id === sourceTaskId
-                  ? {
-                      ...task,
-                      status: statusAfterMoveToPrio(task.status),
-                      done: statusAfterMoveToPrio(task.status) === "Done" || statusAfterMoveToPrio(task.status) === "Aborted"
-                    }
-                  : task
-              )
-            )
-          : draft.tasks,
-        prioDurations: sourceWasNew
-          ? {
-              ...(draft.prioDurations ?? {}),
-              [sourceTaskId]: durationForPlanning(sourceTask?.estimateMinutes, settings.defaultPrioDurationMinutes)
-            }
-          : draft.prioDurations,
-        prioTaskIds: moveItemToDropTarget(prioTaskIds, sourceIndex, targetIndex)
-      };
-    });
+    domain.moveInPrio.process({ sourceTaskId, targetTaskId });
+    refreshState();
   }
 
   function deleteTask(taskId: string) {

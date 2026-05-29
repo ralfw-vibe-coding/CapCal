@@ -7,6 +7,7 @@
 // internen Zustand.
 
 import { TaskspaceStateProvider } from "./providers/taskspaceStateProvider";
+import { AddToPrioRpu } from "./rpus/addToPrioRpu";
 import { CommitTaskspaceRpu } from "./rpus/commitTaskspaceRpu";
 import { CreateTaskRpu } from "./rpus/createTaskRpu";
 import { DeleteTaskRpu } from "./rpus/deleteTaskRpu";
@@ -22,9 +23,11 @@ import { GetTaskspaceRpu } from "./rpus/getTaskspaceRpu";
 import { GetVisibleBoardStatusesRpu } from "./rpus/getVisibleBoardStatusesRpu";
 import { ImportTaskspaceRpu } from "./rpus/importTaskspaceRpu";
 import { LoadTaskspaceRpu } from "./rpus/loadTaskspaceRpu";
+import { MoveInPrioRpu } from "./rpus/moveInPrioRpu";
 import { MoveTaskAsChildRpu } from "./rpus/moveTaskAsChildRpu";
 import { MoveTaskInListRpu } from "./rpus/moveTaskInListRpu";
 import { MoveTaskInTreeRpu } from "./rpus/moveTaskInTreeRpu";
+import { RemoveFromPrioRpu } from "./rpus/removeFromPrioRpu";
 import { SaveTaskspaceRpu } from "./rpus/saveTaskspaceRpu";
 import { ToggleTaskArchivedRpu } from "./rpus/toggleTaskArchivedRpu";
 import { UpdateTaskRpu } from "./rpus/updateTaskRpu";
@@ -64,7 +67,12 @@ export function createDomain() {
     // Command-RPUs (Reihenfolge / Hierarchie)
     moveTaskInList: new MoveTaskInListRpu(store),
     moveTaskInTree: new MoveTaskInTreeRpu(store),
-    moveTaskAsChild: new MoveTaskAsChildRpu(store)
+    moveTaskAsChild: new MoveTaskAsChildRpu(store),
+
+    // Command-RPUs (Priorisierung)
+    addToPrio: new AddToPrioRpu(store),
+    removeFromPrio: new RemoveFromPrioRpu(store),
+    moveInPrio: new MoveInPrioRpu(store)
   };
 }
 
