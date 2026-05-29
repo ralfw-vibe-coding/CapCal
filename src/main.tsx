@@ -91,8 +91,6 @@ import {
   safeMarkdownHref,
   sortByOrder,
   sortedBoardTasks,
-  sortedListTasks,
-  sortedTasks,
   startOfMonth,
   statusAfterMoveToPrio,
   statuses,
@@ -1096,62 +1094,18 @@ function App() {
   }
 
   function moveTaskBeforeInList(sourceTaskId: string, targetTaskId: string) {
-    updateState((draft) => {
-      if (draft.tasks.find((task) => task.id === sourceTaskId)?.archived) return draft;
-      const tasks = sortedListTasks(draft.tasks);
-      const sourceIndex = tasks.findIndex((task) => task.id === sourceTaskId);
-      const targetIndex = tasks.findIndex((task) => task.id === targetTaskId);
-      return {
-        ...draft,
-        tasks: moveItemToDropTarget(tasks, sourceIndex, targetIndex).map((task, listOrder) => ({ ...task, listOrder }))
-      };
-    });
+    domain.moveTaskInList.process({ sourceTaskId, targetTaskId });
+    refreshState();
   }
 
   function moveTaskBeforeInTree(sourceTaskId: string, targetTaskId: string) {
-    updateState((draft) => {
-      const sourceTask = draft.tasks.find((task) => task.id === sourceTaskId);
-      const targetTask = draft.tasks.find((task) => task.id === targetTaskId);
-      if (sourceTask?.archived) return draft;
-      if (!sourceTask || !targetTask || sourceTask.id === targetTask.id) return draft;
-      const parentId = targetTask.parentId;
-      const movedTasks = draft.tasks.map((task) => (task.id === sourceTaskId ? { ...task, parentId } : task));
-      const siblings = sortedTasks(movedTasks.filter((task) => (task.parentId ?? "") === (parentId ?? "") && task.id !== sourceTaskId));
-      const targetIndex = siblings.findIndex((task) => task.id === targetTaskId);
-      const orderedSiblingIds = [
-        ...siblings.slice(0, targetIndex).map((task) => task.id),
-        sourceTaskId,
-        ...siblings.slice(targetIndex).map((task) => task.id)
-      ];
-      return {
-        ...draft,
-        tasks: normalizeTasks(
-          movedTasks.map((task) =>
-            orderedSiblingIds.includes(task.id) ? { ...task, treeOrder: orderedSiblingIds.indexOf(task.id) } : task
-          )
-        )
-      };
-    });
-  }
-
-  function isDescendant(tasks: Task[], taskId: string, possibleAncestorId: string): boolean {
-    let current = tasks.find((task) => task.id === taskId);
-    while (current?.parentId) {
-      if (current.parentId === possibleAncestorId) return true;
-      current = tasks.find((task) => task.id === current?.parentId);
-    }
-    return false;
+    domain.moveTaskInTree.process({ sourceTaskId, targetTaskId });
+    refreshState();
   }
 
   function moveTaskAsChild(sourceTaskId: string, parentId: string) {
-    updateState((draft) => {
-      if (draft.tasks.find((task) => task.id === sourceTaskId)?.archived) return draft;
-      if (sourceTaskId === parentId || isDescendant(draft.tasks, parentId, sourceTaskId)) return draft;
-      const nextTasks = normalizeTasks(
-        draft.tasks.map((task) => (task.id === sourceTaskId ? { ...task, parentId, treeOrder: Number.MAX_SAFE_INTEGER } : task))
-      );
-      return { ...draft, tasks: nextTasks };
-    });
+    domain.moveTaskAsChild.process({ sourceTaskId, parentId });
+    refreshState();
     expandHierarchyTask(parentId);
   }
 

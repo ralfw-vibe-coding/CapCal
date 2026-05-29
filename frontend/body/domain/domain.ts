@@ -22,6 +22,9 @@ import { GetTaskspaceRpu } from "./rpus/getTaskspaceRpu";
 import { GetVisibleBoardStatusesRpu } from "./rpus/getVisibleBoardStatusesRpu";
 import { ImportTaskspaceRpu } from "./rpus/importTaskspaceRpu";
 import { LoadTaskspaceRpu } from "./rpus/loadTaskspaceRpu";
+import { MoveTaskAsChildRpu } from "./rpus/moveTaskAsChildRpu";
+import { MoveTaskInListRpu } from "./rpus/moveTaskInListRpu";
+import { MoveTaskInTreeRpu } from "./rpus/moveTaskInTreeRpu";
 import { SaveTaskspaceRpu } from "./rpus/saveTaskspaceRpu";
 import { ToggleTaskArchivedRpu } from "./rpus/toggleTaskArchivedRpu";
 import { UpdateTaskRpu } from "./rpus/updateTaskRpu";
@@ -56,7 +59,12 @@ export function createDomain() {
     updateTask: new UpdateTaskRpu(store),
     deleteTask: new DeleteTaskRpu(store),
     toggleTaskArchived: new ToggleTaskArchivedRpu(store),
-    detachTaskFromParent: new DetachTaskFromParentRpu(store)
+    detachTaskFromParent: new DetachTaskFromParentRpu(store),
+
+    // Command-RPUs (Reihenfolge / Hierarchie)
+    moveTaskInList: new MoveTaskInListRpu(store),
+    moveTaskInTree: new MoveTaskInTreeRpu(store),
+    moveTaskAsChild: new MoveTaskAsChildRpu(store)
   };
 }
 
