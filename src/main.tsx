@@ -75,7 +75,6 @@ import {
   isMonday,
   isMultiDayTimedExternalEvent,
   isWeekend,
-  layoutTimedEntries,
   maskVisibleApiKey,
   minutesBetween,
   minutesToLabel,
@@ -120,8 +119,6 @@ import {
   type TaskChecklistItem,
   type TaskStatus,
   type TaskVisibleIn,
-  type TimedCalendarEntry,
-  type TimedCalendarLayoutEntry,
   type TreeFilterSettings,
   type TreeViewMode,
   type UserProfile,
@@ -144,6 +141,53 @@ const estimateOptionGroups = [
 ];
 const estimateOptions = estimateOptionGroups.flatMap((group) => group.options);
 const minuteHeight = 1.1;
+
+// Anzeige-Geometrie: ordnet sich ueberlappende Eintraege in Spalten an, damit
+// sie sich im Kalender nicht verdecken. Reine Portal-Darstellung.
+type TimedCalendarEntry =
+  | { kind: "booking"; id: string; startMinutes: number; endMinutes: number; booking: Booking }
+  | { kind: "external"; id: string; startMinutes: number; endMinutes: number; event: GoogleCalendarEvent };
+
+type TimedCalendarLayoutEntry = TimedCalendarEntry & {
+  columnIndex: number;
+  columnCount: number;
+};
+
+function layoutTimedEntries(entries: TimedCalendarEntry[]): TimedCalendarLayoutEntry[] {
+  const sortedEntries = [...entries].sort((a, b) => a.startMinutes - b.startMinutes || b.endMinutes - a.endMinutes);
+  const groups: TimedCalendarEntry[][] = [];
+  let activeGroup: TimedCalendarEntry[] = [];
+  let activeGroupEnd = -1;
+
+  for (const entry of sortedEntries) {
+    if (activeGroup.length === 0 || entry.startMinutes < activeGroupEnd) {
+      activeGroup.push(entry);
+      activeGroupEnd = Math.max(activeGroupEnd, entry.endMinutes);
+    } else {
+      groups.push(activeGroup);
+      activeGroup = [entry];
+      activeGroupEnd = entry.endMinutes;
+    }
+  }
+  if (activeGroup.length > 0) groups.push(activeGroup);
+
+  return groups.flatMap((group) => {
+    const columns: TimedCalendarEntry[][] = [];
+    const placed = group.map((entry) => {
+      let columnIndex = columns.findIndex((column) => {
+        const lastEntry = column[column.length - 1];
+        return lastEntry.endMinutes <= entry.startMinutes;
+      });
+      if (columnIndex === -1) {
+        columnIndex = columns.length;
+        columns.push([]);
+      }
+      columns[columnIndex].push(entry);
+      return { ...entry, columnIndex, columnCount: 1 };
+    });
+    return placed.map((entry) => ({ ...entry, columnCount: columns.length }));
+  });
+}
 
 const statusMeta: Record<TaskStatus, { label: string; icon: typeof Circle; className: string }> = {
   Backlog: { label: "Backlog", icon: Circle, className: "status-backlog" },
@@ -634,6 +678,7 @@ function App() {
       cleanLoadedStateRef.current = null;
       dirtyRef.current = false;
       hasLoadedRef.current = false;
+      domain.commitTaskspace.process({ state: null });
       setState(null);
       setAuthUser(null);
       prefetchedUserIdRef.current = null;
@@ -694,21 +739,10 @@ function App() {
     }
     return counts;
   }, [state?.bookings]);
-  const bookedMinutesByTaskId = useMemo(() => {
-    const minutes = new Map<string, number>();
-    for (const booking of state?.bookings ?? []) {
-      let taskId = booking.taskId;
-      const visitedTaskIds = new Set<string>();
-      while (taskId && !visitedTaskIds.has(taskId)) {
-        const task = taskById.get(taskId);
-        if (!task) break;
-        visitedTaskIds.add(taskId);
-        minutes.set(taskId, (minutes.get(taskId) ?? 0) + booking.durationMinutes);
-        taskId = task.parentId;
-      }
-    }
-    return minutes;
-  }, [state?.bookings, taskById]);
+  const bookedMinutesByTaskId = useMemo(
+    () => domain.getBookedMinutesByTask.process(),
+    [state]
+  );
   const childCountByTaskId = useMemo(() => {
     const counts = new Map<string, number>();
     for (const task of state?.tasks ?? []) {
@@ -978,7 +1012,11 @@ function App() {
   }
 
   function updateState(mutator: (draft: AppState) => AppState) {
-    setState((current) => (current ? mutator(current) : current));
+    const current = domain.getTaskspace.process();
+    if (!current) return;
+    const next = mutator(current);
+    domain.commitTaskspace.process({ state: next });
+    setState(next);
   }
 
   function updateSettings(patch: Partial<AppSettings>) {

@@ -10,12 +10,7 @@ import {
   timeFromDateTime,
   timeToMinutes
 } from "./dateTime";
-import type {
-  DailyCapacity,
-  GoogleCalendarEvent,
-  TimedCalendarEntry,
-  TimedCalendarLayoutEntry
-} from "./types";
+import type { DailyCapacity, GoogleCalendarEvent } from "./types";
 
 export function externalEventTimeLabel(event: GoogleCalendarEvent) {
   const startDate = event.allDay ? datePart(event.startAt) : dateFromDateTime(event.startAt);
@@ -92,40 +87,4 @@ export function capacityLevelFor(bookedMinutes: number, capacity: DailyCapacity)
   if (bookedMinutes >= redCapacityThreshold) return "over-plan";
   if (bookedMinutes >= capacity.planningCapacityMinutes * 0.8) return "near-plan";
   return "under-plan";
-}
-
-export function layoutTimedEntries(entries: TimedCalendarEntry[]): TimedCalendarLayoutEntry[] {
-  const sortedEntries = [...entries].sort((a, b) => a.startMinutes - b.startMinutes || b.endMinutes - a.endMinutes);
-  const groups: TimedCalendarEntry[][] = [];
-  let activeGroup: TimedCalendarEntry[] = [];
-  let activeGroupEnd = -1;
-
-  for (const entry of sortedEntries) {
-    if (activeGroup.length === 0 || entry.startMinutes < activeGroupEnd) {
-      activeGroup.push(entry);
-      activeGroupEnd = Math.max(activeGroupEnd, entry.endMinutes);
-    } else {
-      groups.push(activeGroup);
-      activeGroup = [entry];
-      activeGroupEnd = entry.endMinutes;
-    }
-  }
-  if (activeGroup.length > 0) groups.push(activeGroup);
-
-  return groups.flatMap((group) => {
-    const columns: TimedCalendarEntry[][] = [];
-    const placed = group.map((entry) => {
-      let columnIndex = columns.findIndex((column) => {
-        const lastEntry = column[column.length - 1];
-        return lastEntry.endMinutes <= entry.startMinutes;
-      });
-      if (columnIndex === -1) {
-        columnIndex = columns.length;
-        columns.push([]);
-      }
-      columns[columnIndex].push(entry);
-      return { ...entry, columnIndex, columnCount: 1 };
-    });
-    return placed.map((entry) => ({ ...entry, columnCount: columns.length }));
-  });
 }

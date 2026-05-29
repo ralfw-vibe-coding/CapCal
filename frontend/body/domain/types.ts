@@ -154,11 +154,3 @@ export type AppState = {
   dayTemplates?: DayTemplate[];
 };
 
-export type TimedCalendarEntry =
-  | { kind: "booking"; id: string; startMinutes: number; endMinutes: number; booking: Booking }
-  | { kind: "external"; id: string; startMinutes: number; endMinutes: number; event: GoogleCalendarEvent };
-
-export type TimedCalendarLayoutEntry = TimedCalendarEntry & {
-  columnIndex: number;
-  columnCount: number;
-};
