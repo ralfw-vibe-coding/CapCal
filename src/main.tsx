@@ -128,6 +128,9 @@ import {
   type UserProfile,
   type UserSettingsState
 } from "../frontend/body/domain";
+import { TaskspaceStateProvider } from "../frontend/body/domain/providers/taskspaceStateProvider";
+
+const taskspaceStateProvider = new TaskspaceStateProvider();
 
 type DragPayload =
   | { kind: "tree-task"; taskId: string }
@@ -296,13 +299,12 @@ function App() {
 
   async function loadState() {
     try {
-      const response = await fetch("/api/state", { credentials: "same-origin" });
-      if (response.status === 401) {
+      const result = await taskspaceStateProvider.load();
+      if (result.kind === "unauthorized") {
         setAuthRequired(true);
         return;
       }
-      if (!response.ok) throw new Error(await response.text());
-      const normalizedState = normalizeState(await response.json());
+      const normalizedState = normalizeState(result.rawState);
       stateRef.current = normalizedState;
       cleanLoadedStateRef.current = normalizedState;
       setState(normalizedState);
@@ -379,14 +381,7 @@ function App() {
     setSaveState("saving");
     setSaveError("");
     try {
-      const response = await fetch("/api/state", {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(currentState),
-        credentials: "same-origin",
-        keepalive: options.keepalive
-      });
-      if (!response.ok) throw new Error(await response.text());
+      await taskspaceStateProvider.save(currentState, { keepalive: options.keepalive });
       if (version === stateVersionRef.current) {
         dirtyRef.current = false;
         cleanLoadedStateRef.current = currentState;
