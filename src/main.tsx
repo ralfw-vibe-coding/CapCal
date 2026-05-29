@@ -429,45 +429,27 @@ function App() {
     }
   }
 
+  function applyUserSettingsResult(result: { kind: "ok"; settings: UserSettingsState } | { kind: "error"; message: string }) {
+    if (result.kind === "error") {
+      setUserSettingsError(result.message);
+      return;
+    }
+    setUserSettings(result.settings);
+  }
+
   async function loadUserSettings() {
     setUserSettingsError("");
-    try {
-      const response = await fetch("/api/user-settings", { credentials: "same-origin" });
-      if (!response.ok) throw new Error(await apiErrorMessage(response));
-      setUserSettings((await response.json()) as UserSettingsState);
-    } catch (error) {
-      setUserSettingsError(error instanceof Error ? error.message : "User Settings konnten nicht geladen werden.");
-    }
+    applyUserSettingsResult(await reactors.userSettings.load());
   }
 
   async function saveUserProfile(profile: UserProfile) {
     setUserSettingsError("");
-    try {
-      const response = await fetch("/api/user-settings", {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ profile })
-      });
-      if (!response.ok) throw new Error(await apiErrorMessage(response));
-      setUserSettings((await response.json()) as UserSettingsState);
-    } catch (error) {
-      setUserSettingsError(error instanceof Error ? error.message : "Profil konnte nicht gespeichert werden.");
-    }
+    applyUserSettingsResult(await reactors.userSettings.saveProfile(profile));
   }
 
   async function rotateUserApiKey() {
     setUserSettingsError("");
-    try {
-      const response = await fetch("/api/user-settings/api-key", {
-        method: "POST",
-        credentials: "same-origin"
-      });
-      if (!response.ok) throw new Error(await apiErrorMessage(response));
-      setUserSettings((await response.json()) as UserSettingsState);
-    } catch (error) {
-      setUserSettingsError(error instanceof Error ? error.message : "API-Key konnte nicht erneuert werden.");
-    }
+    applyUserSettingsResult(await reactors.userSettings.rotateApiKey());
   }
 
   async function loadGoogleCalendar(refresh = false) {
