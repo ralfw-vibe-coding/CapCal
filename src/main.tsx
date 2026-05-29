@@ -58,7 +58,6 @@ import {
   dateFromDateTime,
   datePart,
   deadlineTone,
-  defaultSettings,
   endOfMonth,
   estimateToLabel,
   externalEventDates,
@@ -704,22 +703,18 @@ function App() {
     };
   }, []);
 
-  const settings = state?.settings ?? defaultSettings;
+  const settings = useMemo(() => domain.getSettings.process(), [state]);
   const hierarchyExpandedTaskIds = useMemo(
     () => Array.from(new Set([...(settings.hierarchyExpandedTaskIds ?? []), ...forcedHierarchyExpandedIds])),
     [forcedHierarchyExpandedIds, settings.hierarchyExpandedTaskIds]
   );
-  const defaultCapacity: DailyCapacity = {
-    dayCapacityMinutes: settings.defaultDayCapacityMinutes,
-    planningCapacityMinutes: settings.defaultPlanningCapacityMinutes
-  };
   const calendarStartMinutes = timeToMinutes(settings.calendarStartTime);
   const calendarEndMinutes = timeToMinutes(settings.calendarEndTime);
   const timeOptions = useMemo(
     () => createTimeOptions(settings.calendarStartTime, settings.calendarEndTime),
     [settings.calendarEndTime, settings.calendarStartTime]
   );
-  const taskById = useMemo(() => new Map(state?.tasks.map((task) => [task.id, task]) ?? []), [state?.tasks]);
+  const taskById = useMemo(() => domain.getTaskById.process(), [state]);
   const taskMetrics = useMemo(() => domain.getTaskMetrics.process(), [state]);
   const bookingCountByTaskId = taskMetrics.bookingCountByTaskId;
   const bookedMinutesByTaskId = useMemo(
@@ -874,7 +869,7 @@ function App() {
 
     window.addEventListener("hashchange", handleHashChange);
     return () => window.removeEventListener("hashchange", handleHashChange);
-  }, [state?.tasks, taskById]);
+  }, [taskById]);
 
   if (authRequired) {
     return (
@@ -1557,8 +1552,7 @@ function App() {
     }
   }
 
-  const startedCount = state.tasks.filter((task) => task.status === "Started").length;
-  const blockedCount = state.tasks.filter((task) => task.status === "Blocked").length;
+  const { started: startedCount, blocked: blockedCount } = domain.getStatusCounts.process();
 
   return (
     <main className="app-shell">
@@ -2063,7 +2057,7 @@ function App() {
               <MonthCalendarView
                 months={calendarMonths}
                 showWeekends={settings.showWeekends}
-                bookings={state.bookings}
+                getBookingsForDate={(date) => domain.getBookingsForDate.process({ date })}
                 externalEventsByDate={externalEventsByDate}
                 getDayCapacity={getDayCapacity}
                 onOpenDay={openDayFromMonth}
@@ -2074,9 +2068,8 @@ function App() {
                   <DayColumn
                     key={date}
                     date={date}
-                    bookings={state.bookings.filter((booking) => booking.date === date)}
+                    bookings={domain.getBookingsForDate.process({ date })}
                     googleEvents={externalEventsByDate.get(date) ?? []}
-                    capacity={state.dailyCapacities?.[date] ?? defaultCapacity}
                     getDayCapacity={getDayCapacity}
                     calendarStartMinutes={calendarStartMinutes}
                     calendarEndMinutes={calendarEndMinutes}
@@ -2091,7 +2084,7 @@ function App() {
                     onOpenTask={(taskId) => scrollToTask(taskId, { expandDetails: false })}
                     onCapacityChange={(patch) => updateDailyCapacity(date, patch)}
                     onAddLooseBooking={addDefaultLooseBooking}
-                    dayTemplates={state.dayTemplates ?? []}
+                    dayTemplates={domain.getDayTemplates.process()}
                     onSaveTemplate={saveDayAsTemplate}
                     onApplyTemplate={applyDayTemplate}
                     onDeleteTemplate={deleteDayTemplate}
@@ -3172,23 +3165,18 @@ function TaskTagPicker({ allTags, task, onTags }: { allTags: string[]; task: Tas
 function MonthCalendarView({
   months,
   showWeekends,
-  bookings,
+  getBookingsForDate,
   externalEventsByDate,
   getDayCapacity,
   onOpenDay
 }: {
   months: string[];
   showWeekends: boolean;
-  bookings: Booking[];
+  getBookingsForDate: (date: string) => Booking[];
   externalEventsByDate: Map<string, GoogleCalendarEvent[]>;
   getDayCapacity: (date: string, externalEvents: GoogleCalendarEvent[]) => DayCapacity;
   onOpenDay: (date: string) => void;
 }) {
-  const bookingsByDate = useMemo(() => {
-    const byDate = new Map<string, Booking[]>();
-    for (const booking of bookings) byDate.set(booking.date, [...(byDate.get(booking.date) ?? []), booking]);
-    return byDate;
-  }, [bookings]);
   const weekdayLabels = showWeekends ? ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"] : ["Mo", "Di", "Mi", "Do", "Fr"];
 
   function leadingCells(firstVisibleDay: string) {
@@ -3221,7 +3209,7 @@ function MonthCalendarView({
               {monthDays.map((date) => {
                 const externalEvents = externalEventsByDate.get(date) ?? [];
                 const { capacity, bookedMinutes, level, isOverbooked } = getDayCapacity(date, externalEvents);
-                const bookingCount = (bookingsByDate.get(date) ?? []).length + externalEvents.length;
+                const bookingCount = getBookingsForDate(date).length + externalEvents.length;
                 const bookedPercent = capacity.dayCapacityMinutes > 0 ? (bookedMinutes / capacity.dayCapacityMinutes) * 100 : 0;
                 const fillPercent = Math.min(100, bookedPercent);
                 return (
@@ -3262,7 +3250,6 @@ function DayColumn({
   date,
   bookings,
   googleEvents,
-  capacity,
   getDayCapacity,
   calendarStartMinutes,
   calendarEndMinutes,
@@ -3285,7 +3272,6 @@ function DayColumn({
   date: string;
   bookings: Booking[];
   googleEvents: GoogleCalendarEvent[];
-  capacity: DailyCapacity;
   getDayCapacity: (date: string, externalEvents: GoogleCalendarEvent[]) => DayCapacity;
   calendarStartMinutes: number;
   calendarEndMinutes: number;
@@ -3347,6 +3333,7 @@ function DayColumn({
     })
   ]);
   const dayCapacity = getDayCapacity(date, googleEvents);
+  const capacity = dayCapacity.capacity;
   const bookedMinutes = dayCapacity.bookedMinutes;
   const fillPercent = Math.min(100, (bookedMinutes / capacity.dayCapacityMinutes) * 100);
   const planningPercent = Math.min(100, (capacity.planningCapacityMinutes / capacity.dayCapacityMinutes) * 100);

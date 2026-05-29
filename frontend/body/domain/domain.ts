@@ -20,9 +20,14 @@ import { DetachTaskFromParentRpu } from "./rpus/detachTaskFromParentRpu";
 import { LinkBookingToTaskRpu } from "./rpus/linkBookingToTaskRpu";
 import { GetAvailableTagsRpu } from "./rpus/getAvailableTagsRpu";
 import { GetBookedMinutesByTaskRpu } from "./rpus/getBookedMinutesByTaskRpu";
+import { GetBookingsForDateRpu } from "./rpus/getBookingsForDateRpu";
 import { GetDayCapacityRpu } from "./rpus/getDayCapacityRpu";
+import { GetDayTemplatesRpu } from "./rpus/getDayTemplatesRpu";
 import { GetFilteredTreeTasksRpu } from "./rpus/getFilteredTreeTasksRpu";
 import { GetPrioListRpu } from "./rpus/getPrioListRpu";
+import { GetSettingsRpu } from "./rpus/getSettingsRpu";
+import { GetStatusCountsRpu } from "./rpus/getStatusCountsRpu";
+import { GetTaskByIdMapRpu } from "./rpus/getTaskByIdMapRpu";
 import { GetTaskMetricsRpu } from "./rpus/getTaskMetricsRpu";
 import { GetTasksByParentRpu } from "./rpus/getTasksByParentRpu";
 import { GetTaskspaceRpu } from "./rpus/getTaskspaceRpu";
@@ -70,6 +75,11 @@ export function createDomain() {
     getAvailableTags: new GetAvailableTagsRpu(store),
     getVisibleBoardStatuses: new GetVisibleBoardStatusesRpu(store),
     getPrioList: new GetPrioListRpu(store),
+    getSettings: new GetSettingsRpu(store),
+    getTaskById: new GetTaskByIdMapRpu(store),
+    getStatusCounts: new GetStatusCountsRpu(store),
+    getBookingsForDate: new GetBookingsForDateRpu(store),
+    getDayTemplates: new GetDayTemplatesRpu(store),
 
     // Command-RPUs (Aufgaben-Lebenszyklus)
     createTask: new CreateTaskRpu(store),
