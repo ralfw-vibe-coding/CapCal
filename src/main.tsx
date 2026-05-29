@@ -966,6 +966,11 @@ function App() {
     setState(next);
   }
 
+  // Pull: nach einer Command-RPU den Render-Snapshot frisch aus dem Store ziehen.
+  function refreshState() {
+    setState(domain.getTaskspace.process());
+  }
+
   function updateSettings(patch: Partial<AppSettings>) {
     updateState((draft) => ({
       ...draft,
@@ -1045,63 +1050,9 @@ function App() {
   }
 
   function upsertTask(title: string, target?: "prio" | "cal", date = today, initialStatus?: TaskStatus, parentId?: string): Task | null {
-    const trimmed = title.trim();
-    if (!trimmed) return null;
-    const estimateMinutes = settings.defaultTreeDurationMinutes;
-    const planningDurationMinutes = durationForPlanning(estimateMinutes, settings.defaultPrioDurationMinutes);
-    const status = initialStatus ?? (target === "cal" ? "Started" : settings.defaultTaskStatus);
-    const task: Task = {
-      id: uid("task"),
-      title: trimmed,
-      description: "",
-      checklist: [],
-      tags: [],
-      visibleIn: { ...defaultTaskVisibleIn },
-      dueDate: target === "cal" ? date : undefined,
-      estimateMinutes,
-      parentId,
-      archived: false,
-      status,
-      done: status === "Done" || status === "Aborted",
-      treeOrder: 0,
-      listOrder: 0,
-      boardOrder: 0
-    };
-
-    updateState((draft) => {
-      const siblingKey = parentId ?? "";
-      const statusKey = task.status;
-      const tasks = normalizeTasks([
-        { ...task, treeOrder: 0, listOrder: 0, boardOrder: 0 },
-        ...draft.tasks.map((existingTask) =>
-          ({
-            ...existingTask,
-            treeOrder: (existingTask.parentId ?? "") === siblingKey ? existingTask.treeOrder + 1 : existingTask.treeOrder,
-            listOrder: existingTask.listOrder + 1,
-            boardOrder: existingTask.status === statusKey ? existingTask.boardOrder + 1 : existingTask.boardOrder
-          })
-        )
-      ]);
-      const next: AppState = {
-        ...draft,
-        tasks,
-        prioTaskIds: [...draft.prioTaskIds],
-        prioDurations: { ...(draft.prioDurations ?? {}) },
-        bookings: [...draft.bookings]
-      };
-      if (target === "prio") {
-        next.prioTaskIds.push(task.id);
-        next.prioDurations = {
-          ...(next.prioDurations ?? {}),
-          [task.id]: planningDurationMinutes
-        };
-      }
-      if (target === "cal") {
-        next.bookings.push({ id: uid("booking"), taskId: task.id, date, durationMinutes: planningDurationMinutes });
-      }
-      return next;
-    });
-    return task;
+    const created = domain.createTask.process({ title, target, date, initialStatus, parentId });
+    refreshState();
+    return created;
   }
 
   function addTreeTask() {
@@ -1130,25 +1081,14 @@ function App() {
   }
 
   function detachTaskFromParent(taskId: string) {
-    updateState((draft) => {
-      const maxRootTreeOrder = Math.max(-1, ...draft.tasks.filter((task) => !task.parentId).map((task) => task.treeOrder));
-      return {
-        ...draft,
-        tasks: normalizeTasks(
-          draft.tasks.map((task) =>
-            task.id === taskId ? { ...task, parentId: undefined, treeOrder: maxRootTreeOrder + 1 } : task
-          )
-        )
-      };
-    });
+    domain.detachTaskFromParent.process({ taskId });
+    refreshState();
   }
 
   function updateTask(taskId: string, patch: Partial<Task>) {
     setChangedTaskId(taskId);
-    updateState((draft) => ({
-      ...draft,
-      tasks: normalizeTasks(draft.tasks.map((task) => (task.id === taskId ? { ...task, ...patch } : task)))
-    }));
+    domain.updateTask.process({ taskId, patch });
+    refreshState();
   }
 
   function setTaskDone(taskId: string, done: boolean) {
@@ -1284,42 +1224,13 @@ function App() {
   }
 
   function deleteTask(taskId: string) {
-    updateState((draft) => {
-      if (draft.tasks.some((task) => task.parentId === taskId)) return draft;
-      return {
-        ...draft,
-        tasks: normalizeTasks(draft.tasks.filter((task) => task.id !== taskId)),
-        prioTaskIds: draft.prioTaskIds.filter((id) => id !== taskId),
-        prioDurations: Object.fromEntries(Object.entries(draft.prioDurations ?? {}).filter(([id]) => id !== taskId)),
-        bookings: draft.bookings.filter((booking) => booking.taskId !== taskId)
-      };
-    });
+    domain.deleteTask.process({ taskId });
+    refreshState();
   }
 
   function toggleTaskArchived(taskId: string) {
-    updateState((draft) => {
-      const task = draft.tasks.find((candidate) => candidate.id === taskId);
-      if (!task) return draft;
-      const hasActiveChildren = draft.tasks.some((candidate) => candidate.parentId === taskId && !candidate.archived);
-      if (!task.archived && hasActiveChildren) return draft;
-      const { [taskId]: _removed, ...prioDurations } = draft.prioDurations ?? {};
-      return {
-        ...draft,
-        tasks: normalizeTasks(
-          draft.tasks.map((candidate) =>
-            candidate.id === taskId
-              ? {
-                  ...candidate,
-                  archived: !candidate.archived,
-                  archivedAt: candidate.archived ? undefined : new Date().toISOString()
-                }
-              : candidate
-          )
-        ),
-        prioTaskIds: draft.prioTaskIds.filter((id) => id !== taskId),
-        prioDurations
-      };
-    });
+    domain.toggleTaskArchived.process({ taskId });
+    refreshState();
   }
 
   function bookTask(taskId: string, date: string, startTime?: string, source: "tree" | "prio" = "tree") {

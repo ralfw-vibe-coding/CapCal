@@ -8,6 +8,9 @@
 
 import { TaskspaceStateProvider } from "./providers/taskspaceStateProvider";
 import { CommitTaskspaceRpu } from "./rpus/commitTaskspaceRpu";
+import { CreateTaskRpu } from "./rpus/createTaskRpu";
+import { DeleteTaskRpu } from "./rpus/deleteTaskRpu";
+import { DetachTaskFromParentRpu } from "./rpus/detachTaskFromParentRpu";
 import { GetAvailableTagsRpu } from "./rpus/getAvailableTagsRpu";
 import { GetBookedMinutesByTaskRpu } from "./rpus/getBookedMinutesByTaskRpu";
 import { GetDayCapacityRpu } from "./rpus/getDayCapacityRpu";
@@ -20,6 +23,8 @@ import { GetVisibleBoardStatusesRpu } from "./rpus/getVisibleBoardStatusesRpu";
 import { ImportTaskspaceRpu } from "./rpus/importTaskspaceRpu";
 import { LoadTaskspaceRpu } from "./rpus/loadTaskspaceRpu";
 import { SaveTaskspaceRpu } from "./rpus/saveTaskspaceRpu";
+import { ToggleTaskArchivedRpu } from "./rpus/toggleTaskArchivedRpu";
+import { UpdateTaskRpu } from "./rpus/updateTaskRpu";
 import { TaskspaceStore } from "./taskspaceStore";
 
 export function createDomain() {
@@ -44,7 +49,14 @@ export function createDomain() {
     getFilteredTreeTasks: new GetFilteredTreeTasksRpu(store),
     getAvailableTags: new GetAvailableTagsRpu(store),
     getVisibleBoardStatuses: new GetVisibleBoardStatusesRpu(store),
-    getPrioList: new GetPrioListRpu(store)
+    getPrioList: new GetPrioListRpu(store),
+
+    // Command-RPUs (Aufgaben-Lebenszyklus)
+    createTask: new CreateTaskRpu(store),
+    updateTask: new UpdateTaskRpu(store),
+    deleteTask: new DeleteTaskRpu(store),
+    toggleTaskArchived: new ToggleTaskArchivedRpu(store),
+    detachTaskFromParent: new DetachTaskFromParentRpu(store)
   };
 }
 
