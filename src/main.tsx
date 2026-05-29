@@ -76,13 +76,10 @@ import {
   minutesToLabel,
   minutesToTime,
   minutesToTimeLabel,
-  moveItemToDropTarget,
   nextVisibleDate,
-  normalizeDayTemplates,
   normalizeTags,
   normalizeTaskStatuses,
   normalizeTaskVisibleIn,
-  normalizeTasks,
   normalizeTreeFilters,
   parseDurationInput,
   plainTextFromHtml,
@@ -102,7 +99,6 @@ import {
   type CalendarViewMode,
   type DailyCapacity,
   type DayTemplate,
-  type DayTemplateSlot,
   type GoogleCalendarEvent,
   type GoogleCalendarItem,
   type GoogleCalendarState,
@@ -1146,76 +1142,25 @@ function App() {
   }
 
   function saveDayAsTemplate(date: string, name: string) {
-    const trimmedName = name.trim();
-    if (!trimmedName) return { saved: false, count: 0 };
-    let slotCount = 0;
-    updateState((draft) => {
-      const slots = draft.bookings
-        .filter((booking) => booking.date === date && !booking.taskId)
-        .sort((a, b) => (a.startTime ?? "").localeCompare(b.startTime ?? ""))
-        .map((booking): DayTemplateSlot => ({
-          label: booking.label?.trim() || "Reservierung",
-          description: booking.description ?? "",
-          startTime: booking.startTime,
-          durationMinutes: booking.durationMinutes
-        }));
-      slotCount = slots.length;
-      if (slots.length === 0) return draft;
-      return {
-        ...draft,
-        dayTemplates: [
-          ...(draft.dayTemplates ?? []),
-          {
-            id: uid("template"),
-            name: trimmedName,
-            slots,
-            createdAt: new Date().toISOString()
-          }
-        ]
-      };
-    });
-    return { saved: slotCount > 0, count: slotCount };
+    const result = domain.saveDayAsTemplate.process({ date, name });
+    refreshState();
+    return result;
   }
 
   function applyDayTemplate(templateId: string, date: string) {
-    const template = stateRef.current?.dayTemplates?.find((candidate) => candidate.id === templateId);
-    if (!template) return 0;
-    updateState((draft) => ({
-      ...draft,
-      bookings: [
-        ...draft.bookings,
-        ...template.slots.map((slot) => ({
-          id: uid("booking"),
-          label: slot.label,
-          description: slot.description ?? "",
-          date,
-          startTime: slot.startTime,
-          durationMinutes: slot.durationMinutes
-        }))
-      ]
-    }));
-    return template.slots.length;
+    const count = domain.applyDayTemplate.process({ templateId, date });
+    refreshState();
+    return count;
   }
 
   function deleteDayTemplate(templateId: string) {
-    updateState((draft) => ({
-      ...draft,
-      dayTemplates: (draft.dayTemplates ?? []).filter((template) => template.id !== templateId)
-    }));
+    domain.deleteDayTemplate.process({ templateId });
+    refreshState();
   }
 
   function linkBookingToTask(bookingId: string, taskId: string) {
-    updateState((draft) => ({
-      ...draft,
-      tasks: normalizeTasks(
-        draft.tasks.map((task) =>
-          task.id === taskId && task.status !== "Done" ? { ...task, status: "Started" } : task
-        )
-      ),
-      bookings: draft.bookings.map((booking) =>
-        booking.id === bookingId ? { ...booking, taskId, label: "" } : booking
-      )
-    }));
+    domain.linkBookingToTask.process({ bookingId, taskId });
+    refreshState();
   }
 
   function createTaskFromBookingBefore(bookingId: string, targetTaskId: string, mode: "list" | "hierarchy" | "board" = "list") {
@@ -1323,29 +1268,8 @@ function App() {
   }
 
   function moveTaskToBoardStatus(taskId: string, status: TaskStatus, targetTaskId?: string) {
-    updateState((draft) => {
-      if (draft.tasks.find((task) => task.id === taskId)?.archived) return draft;
-      const statusTasks = sortedBoardTasks(
-        draft.tasks
-          .map((task) => (task.id === taskId ? { ...task, status, done: status === "Done" || status === "Aborted" } : task))
-          .filter((task) => task.status === status)
-      );
-      const orderedIds = statusTasks.map((task) => task.id);
-      if (!orderedIds.includes(taskId)) orderedIds.push(taskId);
-      const sourceIndex = orderedIds.indexOf(taskId);
-      const targetIndex = targetTaskId ? orderedIds.indexOf(targetTaskId) : orderedIds.length - 1;
-      const nextIds = targetIndex >= 0 ? moveItemToDropTarget(orderedIds, sourceIndex, targetIndex) : orderedIds;
-      return {
-        ...draft,
-        tasks: normalizeTasks(
-          draft.tasks.map((task) => {
-            if (task.id === taskId) return { ...task, status, done: status === "Done" || status === "Aborted", boardOrder: nextIds.indexOf(task.id) };
-            if (nextIds.includes(task.id)) return { ...task, boardOrder: nextIds.indexOf(task.id) };
-            return task;
-          })
-        )
-      };
-    });
+    domain.moveTaskToBoardStatus.process({ taskId, status, targetTaskId });
+    refreshState();
   }
 
   function scrollToTask(taskId: string, options: { expandDetails?: boolean } = {}) {

@@ -9,13 +9,16 @@
 import { TaskspaceStateProvider } from "./providers/taskspaceStateProvider";
 import { AddLooseBookingRpu } from "./rpus/addLooseBookingRpu";
 import { AddToPrioRpu } from "./rpus/addToPrioRpu";
+import { ApplyDayTemplateRpu } from "./rpus/applyDayTemplateRpu";
 import { BookTaskRpu } from "./rpus/bookTaskRpu";
 import { CommitTaskspaceRpu } from "./rpus/commitTaskspaceRpu";
 import { CreateTaskRpu } from "./rpus/createTaskRpu";
 import { CreateTaskFromBookingRpu } from "./rpus/createTaskFromBookingRpu";
 import { DeleteBookingRpu } from "./rpus/deleteBookingRpu";
+import { DeleteDayTemplateRpu } from "./rpus/deleteDayTemplateRpu";
 import { DeleteTaskRpu } from "./rpus/deleteTaskRpu";
 import { DetachTaskFromParentRpu } from "./rpus/detachTaskFromParentRpu";
+import { LinkBookingToTaskRpu } from "./rpus/linkBookingToTaskRpu";
 import { GetAvailableTagsRpu } from "./rpus/getAvailableTagsRpu";
 import { GetBookedMinutesByTaskRpu } from "./rpus/getBookedMinutesByTaskRpu";
 import { GetDayCapacityRpu } from "./rpus/getDayCapacityRpu";
@@ -31,7 +34,9 @@ import { MoveInPrioRpu } from "./rpus/moveInPrioRpu";
 import { MoveTaskAsChildRpu } from "./rpus/moveTaskAsChildRpu";
 import { MoveTaskInListRpu } from "./rpus/moveTaskInListRpu";
 import { MoveTaskInTreeRpu } from "./rpus/moveTaskInTreeRpu";
+import { MoveTaskToBoardStatusRpu } from "./rpus/moveTaskToBoardStatusRpu";
 import { RemoveFromPrioRpu } from "./rpus/removeFromPrioRpu";
+import { SaveDayAsTemplateRpu } from "./rpus/saveDayAsTemplateRpu";
 import { SaveTaskspaceRpu } from "./rpus/saveTaskspaceRpu";
 import { ToggleTaskArchivedRpu } from "./rpus/toggleTaskArchivedRpu";
 import { UpdateBookingRpu } from "./rpus/updateBookingRpu";
@@ -73,6 +78,7 @@ export function createDomain() {
     moveTaskInList: new MoveTaskInListRpu(store),
     moveTaskInTree: new MoveTaskInTreeRpu(store),
     moveTaskAsChild: new MoveTaskAsChildRpu(store),
+    moveTaskToBoardStatus: new MoveTaskToBoardStatusRpu(store),
 
     // Command-RPUs (Priorisierung)
     addToPrio: new AddToPrioRpu(store),
@@ -84,7 +90,13 @@ export function createDomain() {
     addLooseBooking: new AddLooseBookingRpu(store),
     createTaskFromBooking: new CreateTaskFromBookingRpu(store),
     updateBooking: new UpdateBookingRpu(store),
-    deleteBooking: new DeleteBookingRpu(store)
+    deleteBooking: new DeleteBookingRpu(store),
+    linkBookingToTask: new LinkBookingToTaskRpu(store),
+
+    // Command-RPUs (Tagesvorlagen)
+    saveDayAsTemplate: new SaveDayAsTemplateRpu(store),
+    applyDayTemplate: new ApplyDayTemplateRpu(store),
+    deleteDayTemplate: new DeleteDayTemplateRpu(store)
   };
 }
 
