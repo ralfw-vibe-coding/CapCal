@@ -11,6 +11,7 @@ import { CommitTaskspaceRpu } from "./rpus/commitTaskspaceRpu";
 import { GetAvailableTagsRpu } from "./rpus/getAvailableTagsRpu";
 import { GetBookedMinutesByTaskRpu } from "./rpus/getBookedMinutesByTaskRpu";
 import { GetFilteredTreeTasksRpu } from "./rpus/getFilteredTreeTasksRpu";
+import { GetPrioListRpu } from "./rpus/getPrioListRpu";
 import { GetTaskMetricsRpu } from "./rpus/getTaskMetricsRpu";
 import { GetTasksByParentRpu } from "./rpus/getTasksByParentRpu";
 import { GetTaskspaceRpu } from "./rpus/getTaskspaceRpu";
@@ -40,7 +41,8 @@ export function createDomain() {
     getTasksByParent: new GetTasksByParentRpu(store),
     getFilteredTreeTasks: new GetFilteredTreeTasksRpu(store),
     getAvailableTags: new GetAvailableTagsRpu(store),
-    getVisibleBoardStatuses: new GetVisibleBoardStatusesRpu(store)
+    getVisibleBoardStatuses: new GetVisibleBoardStatusesRpu(store),
+    getPrioList: new GetPrioListRpu(store)
   };
 }
 

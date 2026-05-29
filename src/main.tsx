@@ -746,6 +746,7 @@ function App() {
   const availableTags = useMemo(() => domain.getAvailableTags.process(), [state]);
   const visibleBoardStatuses = useMemo(() => domain.getVisibleBoardStatuses.process(), [state]);
   const filteredTreeTasks = useMemo(() => domain.getFilteredTreeTasks.process(), [state]);
+  const prioList = useMemo(() => domain.getPrioList.process(), [state]);
   const filteredTaskIds = useMemo(() => new Set(filteredTreeTasks.map((task) => task.id)), [filteredTreeTasks]);
   const currentCalendarPeriod = useMemo(
     () => createCalendarPeriod(dayCalendarStartDate, settings.visibleDayCount, settings.showWeekends),
@@ -2334,11 +2335,7 @@ function App() {
           </div>
           <div className="drop-hint">Aufgaben aus dem Tree hierher ziehen. In der Liste per Drag & Drop sortieren.</div>
           <div className="list prio-list">
-            {state.prioTaskIds.map((taskId) => {
-              const task = taskById.get(taskId);
-              if (!task || task.archived) return null;
-              const prioDuration =
-                state.prioDurations?.[task.id] ?? durationForPlanning(task.estimateMinutes, settings.defaultPrioDurationMinutes);
+            {prioList.map(({ task, durationMinutes: prioDuration }) => {
               const showStatusPresentation = normalizeTaskVisibleIn(task.visibleIn).board;
               return (
                 <div
