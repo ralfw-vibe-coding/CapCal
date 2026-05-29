@@ -7,6 +7,7 @@ import type { AppState } from "./types";
 
 export class TaskspaceStore {
   private state: AppState | null = null;
+  private rev = 0;
 
   read(): AppState | null {
     return this.state;
@@ -14,5 +15,12 @@ export class TaskspaceStore {
 
   write(state: AppState | null): void {
     this.state = state;
+    this.rev += 1;
+  }
+
+  // Monotone Revision: erhoeht sich bei jedem Schreibvorgang. Dient dem Portal
+  // als Render-Trigger und der Dirty-Erkennung, ohne den State offenzulegen.
+  revision(): number {
+    return this.rev;
   }
 }

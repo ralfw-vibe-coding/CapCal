@@ -25,6 +25,7 @@ import { GetDayCapacityRpu } from "./rpus/getDayCapacityRpu";
 import { GetDayTemplatesRpu } from "./rpus/getDayTemplatesRpu";
 import { GetFilteredTreeTasksRpu } from "./rpus/getFilteredTreeTasksRpu";
 import { GetPrioListRpu } from "./rpus/getPrioListRpu";
+import { GetRevisionRpu } from "./rpus/getRevisionRpu";
 import { GetSettingsRpu } from "./rpus/getSettingsRpu";
 import { GetStatusCountsRpu } from "./rpus/getStatusCountsRpu";
 import { GetTaskByIdMapRpu } from "./rpus/getTaskByIdMapRpu";
@@ -63,6 +64,7 @@ export function createDomain() {
     importTaskspace: new ImportTaskspaceRpu(store),
     resetTaskspace: new ResetTaskspaceRpu(store),
     getTaskspace: new GetTaskspaceRpu(store),
+    getRevision: new GetRevisionRpu(store),
 
     // Query-RPUs (Kapazitaet)
     getBookedMinutesByTask: new GetBookedMinutesByTaskRpu(store),

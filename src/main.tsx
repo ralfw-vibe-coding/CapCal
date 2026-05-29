@@ -251,7 +251,10 @@ async function apiErrorMessage(response: Response) {
 }
 
 function App() {
-  const [state, setState] = useState<AppState | null>(null);
+  // renderRevision: Render-Trigger, gespiegelt aus der Store-Revision (Pull).
+  // loaded: ob ein Taskspace im Store liegt. Das Portal haelt keinen AppState.
+  const [renderRevision, setRenderRevision] = useState(0);
+  const [loaded, setLoaded] = useState(false);
   const [authRequired, setAuthRequired] = useState(false);
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [authEmail, setAuthEmail] = useState("");
@@ -306,12 +309,8 @@ function App() {
   const settingsMenuRef = useRef<HTMLDivElement | null>(null);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
-  const stateRef = useRef<AppState | null>(null);
-  const cleanLoadedStateRef = useRef<AppState | null>(null);
-  const dirtyRef = useRef(false);
-  const hasLoadedRef = useRef(false);
+  const lastSavedRevisionRef = useRef(0);
   const saveTimerRef = useRef<number | null>(null);
-  const stateVersionRef = useRef(0);
   const prefetchedUserIdRef = useRef<number | null>(null);
   const handledTaskHashRef = useRef("");
   const saveCurrentStateRef = useRef<(options?: { keepalive?: boolean }) => Promise<void>>(async () => undefined);
@@ -334,10 +333,9 @@ function App() {
         setAuthRequired(true);
         return;
       }
-      const normalizedState = result.state;
-      stateRef.current = normalizedState;
-      cleanLoadedStateRef.current = normalizedState;
-      setState(normalizedState);
+      lastSavedRevisionRef.current = domain.getRevision.process();
+      setLoaded(true);
+      setRenderRevision(domain.getRevision.process());
       setLoadError("");
       setAuthRequired(false);
       void refreshAuthUser();
@@ -363,22 +361,12 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!state) return;
-    stateRef.current = state;
-    if (state === cleanLoadedStateRef.current) {
-      hasLoadedRef.current = true;
-      dirtyRef.current = false;
-      setSaveState("saved");
-      return;
-    }
-    if (!hasLoadedRef.current) {
-      hasLoadedRef.current = true;
+    if (!loaded) return;
+    if (renderRevision === lastSavedRevisionRef.current) {
       setSaveState("saved");
       return;
     }
 
-    stateVersionRef.current += 1;
-    dirtyRef.current = true;
     setSaveState("dirty");
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
     saveTimerRef.current = window.setTimeout(() => {
@@ -388,7 +376,7 @@ function App() {
     return () => {
       if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
     };
-  }, [state]);
+  }, [renderRevision, loaded]);
 
   useEffect(() => {
     if (saveState === "saved") setChangedTaskId(null);
@@ -403,24 +391,18 @@ function App() {
   }, [authUser]);
 
   async function saveCurrentState(options: { keepalive?: boolean } = {}) {
-    const currentState = stateRef.current;
-    if (!currentState || !dirtyRef.current) return;
+    const revisionToSave = domain.getRevision.process();
+    if (revisionToSave === lastSavedRevisionRef.current) return;
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
 
-    const version = stateVersionRef.current;
     setSaveState("saving");
     setSaveError("");
     try {
       await domain.saveTaskspace.process({ keepalive: options.keepalive });
-      if (version === stateVersionRef.current) {
-        dirtyRef.current = false;
-        cleanLoadedStateRef.current = currentState;
-        setSaveState("saved");
-      } else {
-        setSaveState("dirty");
-      }
+      lastSavedRevisionRef.current = revisionToSave;
+      // Waehrend des Speicherns kann sich der Store geaendert haben.
+      setSaveState(domain.getRevision.process() === revisionToSave ? "saved" : "dirty");
     } catch (error) {
-      dirtyRef.current = true;
       setSaveError(error instanceof Error ? error.message : "Speichern fehlgeschlagen.");
       setSaveState("error");
     }
@@ -661,12 +643,10 @@ function App() {
       });
     } finally {
       if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
-      stateRef.current = null;
-      cleanLoadedStateRef.current = null;
-      dirtyRef.current = false;
-      hasLoadedRef.current = false;
       domain.resetTaskspace.process();
-      setState(null);
+      lastSavedRevisionRef.current = domain.getRevision.process();
+      setLoaded(false);
+      setRenderRevision(domain.getRevision.process());
       setAuthUser(null);
       prefetchedUserIdRef.current = null;
       setAuthRequired(true);
@@ -686,7 +666,7 @@ function App() {
       if (document.visibilityState === "hidden") flush();
     };
     const retryOnOnline = () => {
-      if (dirtyRef.current) void saveCurrentStateRef.current();
+      if (domain.getRevision.process() !== lastSavedRevisionRef.current) void saveCurrentStateRef.current();
     };
 
     window.addEventListener("beforeunload", flush);
@@ -703,7 +683,7 @@ function App() {
     };
   }, []);
 
-  const settings = useMemo(() => domain.getSettings.process(), [state]);
+  const settings = useMemo(() => domain.getSettings.process(), [renderRevision]);
   const hierarchyExpandedTaskIds = useMemo(
     () => Array.from(new Set([...(settings.hierarchyExpandedTaskIds ?? []), ...forcedHierarchyExpandedIds])),
     [forcedHierarchyExpandedIds, settings.hierarchyExpandedTaskIds]
@@ -714,22 +694,22 @@ function App() {
     () => createTimeOptions(settings.calendarStartTime, settings.calendarEndTime),
     [settings.calendarEndTime, settings.calendarStartTime]
   );
-  const taskById = useMemo(() => domain.getTaskById.process(), [state]);
-  const taskMetrics = useMemo(() => domain.getTaskMetrics.process(), [state]);
+  const taskById = useMemo(() => domain.getTaskById.process(), [renderRevision]);
+  const taskMetrics = useMemo(() => domain.getTaskMetrics.process(), [renderRevision]);
   const bookingCountByTaskId = taskMetrics.bookingCountByTaskId;
   const bookedMinutesByTaskId = useMemo(
     () => domain.getBookedMinutesByTask.process(),
-    [state]
+    [renderRevision]
   );
   const childCountByTaskId = taskMetrics.childCountByTaskId;
   const activeChildCountByTaskId = taskMetrics.activeChildCountByTaskId;
   const parentTitleByTaskId = taskMetrics.parentTitleByTaskId;
-  const tasksByParentId = useMemo(() => domain.getTasksByParent.process(), [state]);
+  const tasksByParentId = useMemo(() => domain.getTasksByParent.process(), [renderRevision]);
   const treeFilters = settings.treeFilters;
-  const availableTags = useMemo(() => domain.getAvailableTags.process(), [state]);
-  const visibleBoardStatuses = useMemo(() => domain.getVisibleBoardStatuses.process(), [state]);
-  const filteredTreeTasks = useMemo(() => domain.getFilteredTreeTasks.process(), [state]);
-  const prioList = useMemo(() => domain.getPrioList.process(), [state]);
+  const availableTags = useMemo(() => domain.getAvailableTags.process(), [renderRevision]);
+  const visibleBoardStatuses = useMemo(() => domain.getVisibleBoardStatuses.process(), [renderRevision]);
+  const filteredTreeTasks = useMemo(() => domain.getFilteredTreeTasks.process(), [renderRevision]);
+  const prioList = useMemo(() => domain.getPrioList.process(), [renderRevision]);
   const getDayCapacity = (date: string, externalEvents: GoogleCalendarEvent[]) =>
     domain.getDayCapacity.process({ date, externalEvents, calendarStartMinutes, calendarEndMinutes });
   const filteredTaskIds = useMemo(() => new Set(filteredTreeTasks.map((task) => task.id)), [filteredTreeTasks]);
@@ -849,7 +829,7 @@ function App() {
   }, [highlightTaskId]);
 
   useEffect(() => {
-    if (!state) return;
+    if (!loaded) return;
 
     function openTaskHash(force = false) {
       const hash = window.location.hash.replace(/^#/, "");
@@ -921,7 +901,7 @@ function App() {
     );
   }
 
-  if (!state) {
+  if (!loaded) {
     return (
       <main className={`loading ${loadError ? "load-error" : ""}`}>
         {loadError ? (
@@ -942,9 +922,11 @@ function App() {
     );
   }
 
-  // Pull: nach einer Command-RPU den Render-Snapshot frisch aus dem Store ziehen.
+  // Pull: nach einer Command-RPU neu rendern, indem die Store-Revision
+  // in den Render-Trigger gespiegelt wird. Das Portal liest danach die
+  // betroffenen View-Modelle frisch ueber die Query-RPUs.
   function refreshState() {
-    setState(domain.getTaskspace.process());
+    setRenderRevision(domain.getRevision.process());
   }
 
   function updateSettings(patch: Partial<AppSettings>) {
@@ -978,11 +960,12 @@ function App() {
   }
 
   function ancestorTaskIds(taskId: string) {
+    const byId = domain.getTaskById.process();
     const ids: string[] = [];
-    let current = stateRef.current?.tasks.find((task) => task.id === taskId);
+    let current = byId.get(taskId);
     while (current?.parentId) {
       ids.push(current.parentId);
-      current = stateRef.current?.tasks.find((task) => task.id === current?.parentId);
+      current = byId.get(current.parentId);
     }
     return ids;
   }
@@ -1434,7 +1417,7 @@ function App() {
   }
 
   function exportTaskspace() {
-    const currentState = stateRef.current;
+    const currentState = domain.getTaskspace.process();
     if (!currentState) return;
     const blob = new Blob([JSON.stringify(currentState, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -1544,8 +1527,7 @@ function App() {
         setSaveState("error");
         return;
       }
-      stateRef.current = result.state;
-      setState(result.state);
+      setRenderRevision(domain.getRevision.process());
       setSaveError("");
     } finally {
       if (importInputRef.current) importInputRef.current.value = "";
