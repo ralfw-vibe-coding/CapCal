@@ -112,6 +112,7 @@ import {
 } from "../frontend/body/domain";
 import { createApp } from "../frontend/body/app";
 import type { DayCapacity } from "../frontend/body/domain/rpus/getDayCapacityRpu";
+import type { EventsResult } from "../frontend/body/reactors/externalCalendarReactor";
 
 const app = createApp();
 const domain = app.domain;
@@ -240,16 +241,6 @@ function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
 
   if (lastIndex < text.length) nodes.push(text.slice(lastIndex));
   return nodes;
-}
-
-async function apiErrorMessage(response: Response) {
-  const text = await response.text();
-  try {
-    const payload = JSON.parse(text) as { error?: unknown };
-    return typeof payload.error === "string" ? payload.error : text;
-  } catch {
-    return text;
-  }
 }
 
 function App() {
@@ -452,155 +443,117 @@ function App() {
     applyUserSettingsResult(await reactors.userSettings.rotateApiKey());
   }
 
+  function applyGoogleCalendarResult(result: { kind: "ok"; state: GoogleCalendarState } | { kind: "error"; message: string }) {
+    if (result.kind === "error") {
+      setGoogleCalendarError(result.message);
+      return;
+    }
+    setGoogleCalendar(result.state);
+  }
+
   async function loadGoogleCalendar(refresh = false) {
     setGoogleCalendarError("");
-    try {
-      const response = await fetch(refresh ? "/api/gcal/calendars" : "/api/gcal/status", { credentials: "same-origin" });
-      if (!response.ok) throw new Error(await apiErrorMessage(response));
-      setGoogleCalendar((await response.json()) as GoogleCalendarState);
-    } catch (error) {
-      setGoogleCalendarError(error instanceof Error ? error.message : "Google Calendar konnte nicht geladen werden.");
-    }
+    applyGoogleCalendarResult(await reactors.externalCalendar.loadGoogle(refresh));
   }
 
   async function updateGoogleCalendarSelection(selectedCalendarIds: string[]) {
     setGoogleCalendarError("");
-    try {
-      const response = await fetch("/api/gcal/calendars", {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ selectedCalendarIds })
-      });
-      if (!response.ok) throw new Error(await apiErrorMessage(response));
-      setGoogleCalendar((await response.json()) as GoogleCalendarState);
-    } catch (error) {
-      setGoogleCalendarError(error instanceof Error ? error.message : "Kalenderauswahl konnte nicht gespeichert werden.");
-    }
+    applyGoogleCalendarResult(await reactors.externalCalendar.updateGoogleSelection(selectedCalendarIds));
   }
 
   async function disconnectGoogleCalendar() {
     setGoogleCalendarError("");
-    try {
-      const response = await fetch("/api/gcal/disconnect", {
-        method: "POST",
-        credentials: "same-origin"
-      });
-      if (!response.ok) throw new Error(await apiErrorMessage(response));
-      setGoogleCalendar((await response.json()) as GoogleCalendarState);
-    } catch (error) {
-      setGoogleCalendarError(error instanceof Error ? error.message : "Google Calendar konnte nicht getrennt werden.");
+    applyGoogleCalendarResult(await reactors.externalCalendar.disconnectGoogle());
+  }
+
+  function applyGoogleEventsResult(result: EventsResult) {
+    if (result.kind === "skip") {
+      setGoogleCalendarEvents([]);
+      setGoogleCalendarEventsError("");
+    } else if (result.kind === "ok") {
+      setGoogleCalendarEvents(result.events);
+    } else {
+      setGoogleCalendarEventsError(result.message);
     }
   }
 
   async function loadGoogleCalendarEvents(from: string, to: string, forceRefresh = false) {
-    if (!googleCalendar?.connected || !googleCalendar.calendars.some((calendar) => calendar.selected)) {
-      setGoogleCalendarEvents([]);
-      setGoogleCalendarEventsError("");
-      return;
-    }
     setGoogleCalendarEventsError("");
     if (forceRefresh) setGoogleCalendarEventsLoading(true);
     try {
-      const response = await fetch(
-        `/api/gcal/events?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${forceRefresh ? "&refresh=1" : ""}`,
-        { credentials: "same-origin" }
-      );
-      if (!response.ok) throw new Error(await apiErrorMessage(response));
-      const payload = (await response.json()) as { events?: GoogleCalendarEvent[] };
-      setGoogleCalendarEvents(payload.events ?? []);
-    } catch (error) {
-      setGoogleCalendarEventsError(error instanceof Error ? error.message : "Google Calendar Events konnten nicht geladen werden.");
+      applyGoogleEventsResult(await reactors.externalCalendar.loadGoogleEvents(googleCalendar, from, to, forceRefresh));
     } finally {
       if (forceRefresh) setGoogleCalendarEventsLoading(false);
     }
   }
 
+  function applyICloudCalendarResult(result: { kind: "ok"; state: ICloudCalendarState } | { kind: "error"; message: string }) {
+    if (result.kind === "error") {
+      setICloudCalendarError(result.message);
+      return;
+    }
+    setICloudCalendar(result.state);
+  }
+
   async function loadICloudCalendar(refresh = false) {
     setICloudCalendarError("");
-    try {
-      const response = await fetch(refresh ? "/api/icloud/calendars" : "/api/icloud/status", { credentials: "same-origin" });
-      if (!response.ok) throw new Error(await apiErrorMessage(response));
-      setICloudCalendar((await response.json()) as ICloudCalendarState);
-    } catch (error) {
-      setICloudCalendarError(error instanceof Error ? error.message : "iCloud Kalender konnten nicht geladen werden.");
-    }
+    applyICloudCalendarResult(await reactors.externalCalendar.loadICloud(refresh));
   }
 
   async function connectICloudCalendar(appleId: string, appPassword: string) {
     setICloudCalendarError("");
-    try {
-      const response = await fetch("/api/icloud/connect", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ appleId, appPassword })
-      });
-      if (!response.ok) throw new Error(await apiErrorMessage(response));
-      setICloudCalendar((await response.json()) as ICloudCalendarState);
-    } catch (error) {
-      setICloudCalendarError(error instanceof Error ? error.message : "iCloud konnte nicht verbunden werden.");
-    }
+    applyICloudCalendarResult(await reactors.externalCalendar.connectICloud(appleId, appPassword));
   }
 
   async function updateICloudCalendarSelection(selectedCalendarIds: string[]) {
     setICloudCalendarError("");
-    try {
-      const response = await fetch("/api/icloud/calendars", {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ selectedCalendarIds })
-      });
-      if (!response.ok) throw new Error(await apiErrorMessage(response));
-      setICloudCalendar((await response.json()) as ICloudCalendarState);
-    } catch (error) {
-      setICloudCalendarError(error instanceof Error ? error.message : "iCloud-Kalenderauswahl konnte nicht gespeichert werden.");
-    }
+    applyICloudCalendarResult(await reactors.externalCalendar.updateICloudSelection(selectedCalendarIds));
   }
 
   async function disconnectICloudCalendar() {
     setICloudCalendarError("");
-    try {
-      const response = await fetch("/api/icloud/disconnect", {
-        method: "POST",
-        credentials: "same-origin"
-      });
-      if (!response.ok) throw new Error(await apiErrorMessage(response));
-      setICloudCalendar((await response.json()) as ICloudCalendarState);
-    } catch (error) {
-      setICloudCalendarError(error instanceof Error ? error.message : "iCloud konnte nicht getrennt werden.");
+    applyICloudCalendarResult(await reactors.externalCalendar.disconnectICloud());
+  }
+
+  function applyICloudEventsResult(result: EventsResult) {
+    if (result.kind === "skip") {
+      setICloudCalendarEvents([]);
+      setICloudCalendarEventsError("");
+    } else if (result.kind === "ok") {
+      setICloudCalendarEvents(result.events);
+    } else {
+      setICloudCalendarEventsError(result.message);
     }
   }
 
   async function loadICloudCalendarEvents(from: string, to: string, forceRefresh = false) {
-    if (!iCloudCalendar?.connected || !iCloudCalendar.calendars.some((calendar) => calendar.selected)) {
-      setICloudCalendarEvents([]);
-      setICloudCalendarEventsError("");
-      return;
-    }
     setICloudCalendarEventsError("");
     if (forceRefresh) setICloudCalendarEventsLoading(true);
     try {
-      const response = await fetch(
-        `/api/icloud/events?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${forceRefresh ? "&refresh=1" : ""}`,
-        { credentials: "same-origin" }
-      );
-      if (!response.ok) throw new Error(await apiErrorMessage(response));
-      const payload = (await response.json()) as { events?: GoogleCalendarEvent[] };
-      setICloudCalendarEvents(payload.events ?? []);
-    } catch (error) {
-      setICloudCalendarEventsError(error instanceof Error ? error.message : "iCloud Events konnten nicht geladen werden.");
+      applyICloudEventsResult(await reactors.externalCalendar.loadICloudEvents(iCloudCalendar, from, to, forceRefresh));
     } finally {
       if (forceRefresh) setICloudCalendarEventsLoading(false);
     }
   }
 
   async function refreshExternalCalendarEvents() {
-    await Promise.all([
-      loadGoogleCalendarEvents(visibleRangeStart, visibleRangeEnd, true),
-      loadICloudCalendarEvents(visibleRangeStart, visibleRangeEnd, true)
-    ]);
+    setGoogleCalendarEventsLoading(true);
+    setICloudCalendarEventsLoading(true);
+    setGoogleCalendarEventsError("");
+    setICloudCalendarEventsError("");
+    try {
+      const { google, icloud } = await reactors.externalCalendar.refreshAllEvents(
+        googleCalendar,
+        iCloudCalendar,
+        visibleRangeStart,
+        visibleRangeEnd
+      );
+      applyGoogleEventsResult(google);
+      applyICloudEventsResult(icloud);
+    } finally {
+      setGoogleCalendarEventsLoading(false);
+      setICloudCalendarEventsLoading(false);
+    }
   }
 
   async function logout() {
@@ -1583,7 +1536,7 @@ function App() {
                   googleCalendar={googleCalendar}
                   error={googleCalendarError}
                   onConnect={() => {
-                    window.location.href = "/api/auth/gcal/connect";
+                    window.location.href = reactors.externalCalendar.googleConnectUrl();
                   }}
                   onRefresh={() => void loadGoogleCalendar(true)}
                   onSelectionChange={updateGoogleCalendarSelection}
