@@ -10,6 +10,7 @@ import { TaskspaceStateProvider } from "./providers/taskspaceStateProvider";
 import { CommitTaskspaceRpu } from "./rpus/commitTaskspaceRpu";
 import { GetAvailableTagsRpu } from "./rpus/getAvailableTagsRpu";
 import { GetBookedMinutesByTaskRpu } from "./rpus/getBookedMinutesByTaskRpu";
+import { GetDayCapacityRpu } from "./rpus/getDayCapacityRpu";
 import { GetFilteredTreeTasksRpu } from "./rpus/getFilteredTreeTasksRpu";
 import { GetPrioListRpu } from "./rpus/getPrioListRpu";
 import { GetTaskMetricsRpu } from "./rpus/getTaskMetricsRpu";
@@ -35,6 +36,7 @@ export function createDomain() {
 
     // Query-RPUs (Kapazitaet)
     getBookedMinutesByTask: new GetBookedMinutesByTaskRpu(store),
+    getDayCapacity: new GetDayCapacityRpu(store),
 
     // Query-RPUs (View-Modelle fuer Liste/Board/Hierarchie)
     getTaskMetrics: new GetTaskMetricsRpu(store),

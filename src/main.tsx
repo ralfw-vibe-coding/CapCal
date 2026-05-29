@@ -52,7 +52,6 @@ import {
   addDays,
   addMonths,
   browserUtcOffset,
-  capacityLevelFor,
   createCalendarPeriod,
   createMonthDays,
   createTimeOptions,
@@ -64,7 +63,6 @@ import {
   durationForPlanning,
   endOfMonth,
   estimateToLabel,
-  externalBookedMinutes,
   externalEventDates,
   externalEventTimeLabel,
   externalTimedSegmentForDate,
@@ -125,6 +123,7 @@ import {
   type UserSettingsState
 } from "../frontend/body/domain";
 import { createDomain } from "../frontend/body/domain/domain";
+import type { DayCapacity } from "../frontend/body/domain/rpus/getDayCapacityRpu";
 
 const domain = createDomain();
 
@@ -747,6 +746,8 @@ function App() {
   const visibleBoardStatuses = useMemo(() => domain.getVisibleBoardStatuses.process(), [state]);
   const filteredTreeTasks = useMemo(() => domain.getFilteredTreeTasks.process(), [state]);
   const prioList = useMemo(() => domain.getPrioList.process(), [state]);
+  const getDayCapacity = (date: string, externalEvents: GoogleCalendarEvent[]) =>
+    domain.getDayCapacity.process({ date, externalEvents, calendarStartMinutes, calendarEndMinutes });
   const filteredTaskIds = useMemo(() => new Set(filteredTreeTasks.map((task) => task.id)), [filteredTreeTasks]);
   const currentCalendarPeriod = useMemo(
     () => createCalendarPeriod(dayCalendarStartDate, settings.visibleDayCount, settings.showWeekends),
@@ -2476,10 +2477,7 @@ function App() {
                 showWeekends={settings.showWeekends}
                 bookings={state.bookings}
                 externalEventsByDate={externalEventsByDate}
-                dailyCapacities={state.dailyCapacities ?? {}}
-                defaultCapacity={defaultCapacity}
-                calendarStartMinutes={calendarStartMinutes}
-                calendarEndMinutes={calendarEndMinutes}
+                getDayCapacity={getDayCapacity}
                 onOpenDay={openDayFromMonth}
               />
             ) : (
@@ -2491,6 +2489,7 @@ function App() {
                     bookings={state.bookings.filter((booking) => booking.date === date)}
                     googleEvents={externalEventsByDate.get(date) ?? []}
                     capacity={state.dailyCapacities?.[date] ?? defaultCapacity}
+                    getDayCapacity={getDayCapacity}
                     calendarStartMinutes={calendarStartMinutes}
                     calendarEndMinutes={calendarEndMinutes}
                     timeOptions={timeOptions}
@@ -3587,20 +3586,14 @@ function MonthCalendarView({
   showWeekends,
   bookings,
   externalEventsByDate,
-  dailyCapacities,
-  defaultCapacity,
-  calendarStartMinutes,
-  calendarEndMinutes,
+  getDayCapacity,
   onOpenDay
 }: {
   months: string[];
   showWeekends: boolean;
   bookings: Booking[];
   externalEventsByDate: Map<string, GoogleCalendarEvent[]>;
-  dailyCapacities: Record<string, DailyCapacity>;
-  defaultCapacity: DailyCapacity;
-  calendarStartMinutes: number;
-  calendarEndMinutes: number;
+  getDayCapacity: (date: string, externalEvents: GoogleCalendarEvent[]) => DayCapacity;
   onOpenDay: (date: string) => void;
 }) {
   const bookingsByDate = useMemo(() => {
@@ -3638,16 +3631,11 @@ function MonthCalendarView({
                 <div className="month-empty-cell" key={`blank-${index}`} />
               ))}
               {monthDays.map((date) => {
-                const capacity = dailyCapacities[date] ?? defaultCapacity;
-                const capcalMinutes = (bookingsByDate.get(date) ?? []).reduce((sum, booking) => sum + booking.durationMinutes, 0);
                 const externalEvents = externalEventsByDate.get(date) ?? [];
-                const externalMinutes = externalBookedMinutes(externalEvents, capacity, date, calendarStartMinutes, calendarEndMinutes);
-                const bookedMinutes = capcalMinutes + externalMinutes;
+                const { capacity, bookedMinutes, level, isOverbooked } = getDayCapacity(date, externalEvents);
                 const bookingCount = (bookingsByDate.get(date) ?? []).length + externalEvents.length;
                 const bookedPercent = capacity.dayCapacityMinutes > 0 ? (bookedMinutes / capacity.dayCapacityMinutes) * 100 : 0;
                 const fillPercent = Math.min(100, bookedPercent);
-                const level = capacityLevelFor(bookedMinutes, capacity);
-                const isOverbooked = bookedMinutes > capacity.dayCapacityMinutes;
                 return (
                   <button
                     className={`month-day-tile ${date === today ? "today-month-day" : ""} ${isWeekend(date) ? "weekend" : ""} ${level} ${isOverbooked ? "overbooked" : ""}`}
@@ -3687,6 +3675,7 @@ function DayColumn({
   bookings,
   googleEvents,
   capacity,
+  getDayCapacity,
   calendarStartMinutes,
   calendarEndMinutes,
   timeOptions,
@@ -3709,6 +3698,7 @@ function DayColumn({
   bookings: Booking[];
   googleEvents: GoogleCalendarEvent[];
   capacity: DailyCapacity;
+  getDayCapacity: (date: string, externalEvents: GoogleCalendarEvent[]) => DayCapacity;
   calendarStartMinutes: number;
   calendarEndMinutes: number;
   timeOptions: string[];
@@ -3744,7 +3734,6 @@ function DayColumn({
   const templateMenuRef = useRef<HTMLDivElement | null>(null);
   const allocations = bookings.filter((booking) => !booking.startTime);
   const scheduled = bookings.filter((booking) => booking.startTime).sort((a, b) => a.startTime!.localeCompare(b.startTime!));
-  const googleBlockingMinutes = externalBookedMinutes(googleEvents, capacity, date, calendarStartMinutes, calendarEndMinutes);
   const googleAllocations = googleEvents.filter((event) => event.allDay);
   const googleScheduled = googleEvents
     .filter((event) => !event.allDay)
@@ -3769,11 +3758,12 @@ function DayColumn({
       }];
     })
   ]);
-  const bookedMinutes = bookings.reduce((sum, booking) => sum + booking.durationMinutes, 0) + googleBlockingMinutes;
+  const dayCapacity = getDayCapacity(date, googleEvents);
+  const bookedMinutes = dayCapacity.bookedMinutes;
   const fillPercent = Math.min(100, (bookedMinutes / capacity.dayCapacityMinutes) * 100);
   const planningPercent = Math.min(100, (capacity.planningCapacityMinutes / capacity.dayCapacityMinutes) * 100);
-  const capacityLevel = capacityLevelFor(bookedMinutes, capacity);
-  const isOverflowingDay = bookedMinutes > capacity.dayCapacityMinutes;
+  const capacityLevel = dayCapacity.level;
+  const isOverflowingDay = dayCapacity.isOverbooked;
   const timelineHeight = (calendarEndMinutes - calendarStartMinutes) * minuteHeight;
   const showCurrentTimeLine = date === today && currentMinuteOfDay >= calendarStartMinutes && currentMinuteOfDay <= calendarEndMinutes;
   const currentTimeLineTop = (currentMinuteOfDay - calendarStartMinutes) * minuteHeight;
