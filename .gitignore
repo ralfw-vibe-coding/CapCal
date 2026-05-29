@@ -4,3 +4,4 @@ dist/
 *.tsbuildinfo
 .env
 data/state-history/
+data-smoke/
