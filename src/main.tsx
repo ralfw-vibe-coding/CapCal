@@ -48,165 +48,92 @@ import {
 } from "lucide-react";
 import "./styles.css";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-
-type TaskStatus = "Backlog" | "Ready" | "Started" | "Blocked" | "Done" | "Aborted";
-type TreeViewMode = "list" | "board" | "hierarchy";
-type CalendarViewMode = "days" | "month";
-type AuthUser = { id: number; email: string };
-type UserProfile = { name?: string; initials?: string; timezone?: string };
-type UserSettingsState = {
-  user: AuthUser;
-  profile: UserProfile;
-  apiKeyMasked?: string;
-  apiKeyLastUsedAt?: string;
-  apiKey?: string;
-};
-type GoogleCalendarItem = {
-  id: string;
-  summary: string;
-  color?: string;
-  selected: boolean;
-  syncedAt?: string;
-};
-type GoogleCalendarState = {
-  connected: boolean;
-  googleEmail?: string;
-  calendars: GoogleCalendarItem[];
-  connectedAt?: string;
-  updatedAt?: string;
-};
-type GoogleCalendarEvent = {
-  id: string;
-  provider: "google" | "icloud";
-  calendarId: string;
-  calendarSummary: string;
-  calendarColor?: string;
-  summary: string;
-  startAt: string;
-  endAt: string;
-  allDay: boolean;
-  blocksTime: boolean;
-  htmlLink?: string;
-  location?: string;
-  description?: string;
-  organizer?: string;
-  creator?: string;
-  attendeeSummary?: string;
-};
-type ICloudCalendarItem = GoogleCalendarItem;
-type ICloudCalendarState = {
-  connected: boolean;
-  appleId?: string;
-  calendars: ICloudCalendarItem[];
-  connectedAt?: string;
-  updatedAt?: string;
-};
-
-type Task = {
-  id: string;
-  title: string;
-  description?: string;
-  checklist?: TaskChecklistItem[];
-  tags?: string[];
-  visibleIn?: TaskVisibleIn;
-  dueDate?: string;
-  estimateMinutes?: number;
-  parentId?: string;
-  archived?: boolean;
-  archivedAt?: string;
-  status: TaskStatus;
-  done: boolean;
-  treeOrder: number;
-  listOrder: number;
-  boardOrder: number;
-};
-
-type TaskVisibleIn = {
-  list: boolean;
-  board: boolean;
-  hierarchy: boolean;
-};
-
-type TaskChecklistItem = {
-  id: string;
-  text: string;
-  done: boolean;
-};
-
-type Booking = {
-  id: string;
-  taskId?: string;
-  label?: string;
-  description?: string;
-  date: string;
-  startTime?: string;
-  durationMinutes: number;
-};
-
-type DayTemplateSlot = {
-  label: string;
-  description?: string;
-  startTime?: string;
-  durationMinutes: number;
-};
-
-type DayTemplate = {
-  id: string;
-  name: string;
-  slots: DayTemplateSlot[];
-  createdAt: string;
-};
-
-type DailyCapacity = {
-  dayCapacityMinutes: number;
-  planningCapacityMinutes: number;
-};
-
-type TreeFilterSettings = {
-  query: string;
-  statuses: TaskStatus[];
-  tags: string[];
-  showArchived: boolean;
-};
-
-type AppSettings = {
-  defaultTreeDurationMinutes: number;
-  defaultPrioDurationMinutes: number;
-  defaultTaskStatus: TaskStatus;
-  defaultDayCapacityMinutes: number;
-  defaultPlanningCapacityMinutes: number;
-  calendarStartTime: string;
-  calendarEndTime: string;
-  showWeekends: boolean;
-  visibleDayCount: number;
-  calendarView: CalendarViewMode;
-  taskView: TreeViewMode;
-  hierarchyExpandedTaskIds: string[];
-  treeFilters: TreeFilterSettings;
-  boardHiddenStatuses: TaskStatus[];
-  panelsCollapsed: {
-    tree: boolean;
-    prio: boolean;
-    cal: boolean;
-  };
-};
-
-type AppState = {
-  settings?: AppSettings;
-  dailyCapacities?: Record<string, DailyCapacity>;
-  tasks: Task[];
-  prioTaskIds: string[];
-  prioDurations?: Record<string, number>;
-  bookings: Booking[];
-  dayTemplates?: DayTemplate[];
-};
+import {
+  addDays,
+  addMonths,
+  browserUtcOffset,
+  capacityLevelFor,
+  createCalendarPeriod,
+  createMonthDays,
+  createTimeOptions,
+  dateFromDateTime,
+  datePart,
+  deadlineTone,
+  defaultSettings,
+  defaultTaskVisibleIn,
+  durationForPlanning,
+  endOfMonth,
+  estimateToLabel,
+  externalBookedMinutes,
+  externalEventDates,
+  externalEventTimeLabel,
+  externalTimedSegmentForDate,
+  formatDate,
+  formatMonthTileDay,
+  formatMonthTitle,
+  formatOptionalDate,
+  isMonday,
+  isMultiDayTimedExternalEvent,
+  isWeekend,
+  layoutTimedEntries,
+  maskVisibleApiKey,
+  minutesBetween,
+  minutesToLabel,
+  minutesToTime,
+  minutesToTimeLabel,
+  moveItemToDropTarget,
+  nextVisibleDate,
+  normalizeDayTemplates,
+  normalizeState,
+  normalizeTags,
+  normalizeTaskStatuses,
+  normalizeTaskVisibleIn,
+  normalizeTasks,
+  normalizeTreeFilters,
+  parseDurationInput,
+  plainTextFromHtml,
+  safeMarkdownHref,
+  sortByOrder,
+  sortedBoardTasks,
+  sortedListTasks,
+  sortedTasks,
+  startOfMonth,
+  statusAfterMoveToPrio,
+  statuses,
+  timeFromDateTime,
+  timeToMinutes,
+  today,
+  uid,
+  type AppSettings,
+  type AppState,
+  type AuthUser,
+  type Booking,
+  type CalendarViewMode,
+  type DailyCapacity,
+  type DayTemplate,
+  type DayTemplateSlot,
+  type GoogleCalendarEvent,
+  type GoogleCalendarItem,
+  type GoogleCalendarState,
+  type ICloudCalendarItem,
+  type ICloudCalendarState,
+  type Task,
+  type TaskChecklistItem,
+  type TaskStatus,
+  type TaskVisibleIn,
+  type TimedCalendarEntry,
+  type TimedCalendarLayoutEntry,
+  type TreeFilterSettings,
+  type TreeViewMode,
+  type UserProfile,
+  type UserSettingsState
+} from "../frontend/body/domain";
 
 type DragPayload =
   | { kind: "tree-task"; taskId: string }
   | { kind: "prio-task"; taskId: string }
   | { kind: "booking"; bookingId: string };
 
-const statuses: TaskStatus[] = ["Backlog", "Ready", "Started", "Blocked", "Done", "Aborted"];
 const durationOptions = Array.from({ length: 15 }, (_, index) => 30 + index * 15);
 const estimateOptionGroups = [
   { label: "Klein", options: [30, 60, 90, 120] },
@@ -215,7 +142,6 @@ const estimateOptionGroups = [
 ];
 const estimateOptions = estimateOptionGroups.flatMap((group) => group.options);
 const minuteHeight = 1.1;
-const defaultTaskVisibleIn: TaskVisibleIn = { list: true, board: true, hierarchy: true };
 
 const statusMeta: Record<TaskStatus, { label: string; icon: typeof Circle; className: string }> = {
   Backlog: { label: "Backlog", icon: Circle, className: "status-backlog" },
@@ -226,33 +152,6 @@ const statusMeta: Record<TaskStatus, { label: string; icon: typeof Circle; class
   Aborted: { label: "Aborted", icon: ArchiveX, className: "status-aborted" }
 };
 
-const today = new Date().toISOString().slice(0, 10);
-const defaultSettings: AppSettings = {
-  defaultTreeDurationMinutes: 30,
-  defaultPrioDurationMinutes: 30,
-  defaultTaskStatus: "Backlog",
-  defaultDayCapacityMinutes: 480,
-  defaultPlanningCapacityMinutes: 360,
-  calendarStartTime: "06:00",
-  calendarEndTime: "20:00",
-  showWeekends: false,
-  visibleDayCount: 7,
-  calendarView: "days",
-  taskView: "list",
-  hierarchyExpandedTaskIds: [],
-  treeFilters: {
-    query: "",
-    statuses: [],
-    tags: [],
-    showArchived: false
-  },
-  boardHiddenStatuses: [],
-  panelsCollapsed: {
-    tree: false,
-    prio: false,
-    cal: false
-  }
-};
 const dayCapacityOptions = Array.from({ length: 17 }, (_, index) => 120 + index * 30);
 const planningCapacityOptions = Array.from({ length: 17 }, (_, index) => 120 + index * 30);
 const visibleDayOptions = [7, 14, 21, 31];
@@ -260,242 +159,6 @@ const utcOffsetOptions = Array.from({ length: 27 }, (_, index) => index - 12).ma
   const sign = offset >= 0 ? "+" : "-";
   return `UTC${sign}${Math.abs(offset).toString().padStart(2, "0")}:00`;
 });
-
-function uid(prefix: string) {
-  return `${prefix}-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
-}
-
-function addDays(date: string, count: number) {
-  const next = new Date(`${date}T12:00:00`);
-  next.setDate(next.getDate() + count);
-  return next.toISOString().slice(0, 10);
-}
-
-function startOfMonth(date: string) {
-  return `${date.slice(0, 7)}-01`;
-}
-
-function addMonths(date: string, count: number) {
-  const next = new Date(`${startOfMonth(date)}T12:00:00`);
-  next.setMonth(next.getMonth() + count);
-  return next.toISOString().slice(0, 10);
-}
-
-function endOfMonth(date: string) {
-  return addDays(addMonths(date, 1), -1);
-}
-
-function createMonthDays(monthStart: string, showWeekends: boolean) {
-  const days: string[] = [];
-  let cursor = startOfMonth(monthStart);
-  const monthKey = cursor.slice(0, 7);
-  while (cursor.slice(0, 7) === monthKey) {
-    if (showWeekends || !isWeekend(cursor)) days.push(cursor);
-    cursor = addDays(cursor, 1);
-  }
-  return days;
-}
-
-function formatMonthTitle(monthStart: string) {
-  return new Intl.DateTimeFormat("de-DE", { month: "long", year: "numeric" }).format(new Date(`${monthStart}T12:00:00`));
-}
-
-function formatMonthTileDay(date: string) {
-  return new Intl.DateTimeFormat("de-DE", { day: "2-digit" }).format(new Date(`${date}T12:00:00`));
-}
-
-function formatDate(date: string) {
-  return new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" }).format(
-    new Date(`${date}T12:00:00`)
-  );
-}
-
-function isWeekend(date: string) {
-  const day = new Date(`${date}T12:00:00`).getDay();
-  return day === 0 || day === 6;
-}
-
-function isMonday(date: string) {
-  return new Date(`${date}T12:00:00`).getDay() === 1;
-}
-
-function formatOptionalDate(date?: string) {
-  return date ? formatDate(date) : "Keine Deadline";
-}
-
-function deadlineTone(dueDate?: string) {
-  if (!dueDate) return "";
-  const due = new Date(`${dueDate}T12:00:00`).getTime();
-  const current = new Date(`${today}T12:00:00`).getTime();
-  const daysUntilDue = Math.round((due - current) / 86_400_000);
-  if (daysUntilDue <= 0) return "deadline-due";
-  if (daysUntilDue <= 3) return "deadline-soon";
-  return "";
-}
-
-function dateFromDateTime(value: string) {
-  const date = new Date(value);
-  const year = date.getFullYear();
-  const month = (date.getMonth() + 1).toString().padStart(2, "0");
-  const day = date.getDate().toString().padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function datePart(value: string) {
-  return value.slice(0, 10);
-}
-
-function timeFromDateTime(value: string) {
-  const date = new Date(value);
-  return `${date.getHours().toString().padStart(2, "0")}:${date.getMinutes().toString().padStart(2, "0")}`;
-}
-
-function minutesBetween(startAt: string, endAt: string) {
-  return Math.max(0, Math.round((new Date(endAt).getTime() - new Date(startAt).getTime()) / 60_000));
-}
-
-function externalEventTimeLabel(event: GoogleCalendarEvent) {
-  const startDate = event.allDay ? datePart(event.startAt) : dateFromDateTime(event.startAt);
-  const endDate = event.allDay ? addDays(datePart(event.endAt), -1) : dateFromDateTime(event.endAt);
-  const formattedStartDate = formatDate(startDate);
-  const formattedEndDate = formatDate(endDate);
-  if (event.allDay) {
-    return startDate === endDate ? `${formattedStartDate}, ganztägig` : `${formattedStartDate} bis ${formattedEndDate}, ganztägig`;
-  }
-
-  const startTime = timeFromDateTime(event.startAt);
-  const endTime = timeFromDateTime(event.endAt);
-  return startDate === endDate
-    ? `${formattedStartDate}, ${startTime}-${endTime}`
-    : `${formattedStartDate}, ${startTime} bis ${formattedEndDate}, ${endTime}`;
-}
-
-function externalEventDates(event: GoogleCalendarEvent) {
-  const startDate = event.allDay ? datePart(event.startAt) : dateFromDateTime(event.startAt);
-  const endDate = event.allDay ? addDays(datePart(event.endAt), -1) : dateFromDateTime(event.endAt);
-  const dates: string[] = [];
-  let cursor = startDate;
-  while (cursor <= endDate) {
-    dates.push(cursor);
-    cursor = addDays(cursor, 1);
-  }
-  return dates.length > 0 ? dates : [startDate];
-}
-
-function isMultiDayTimedExternalEvent(event: GoogleCalendarEvent) {
-  return !event.allDay && dateFromDateTime(event.startAt) !== dateFromDateTime(event.endAt);
-}
-
-function externalTimedSegmentForDate(
-  event: GoogleCalendarEvent,
-  date: string,
-  calendarStartMinutes: number,
-  calendarEndMinutes: number
-) {
-  const startDate = dateFromDateTime(event.startAt);
-  const endDate = dateFromDateTime(event.endAt);
-  const rawStartMinutes = date === startDate ? timeToMinutes(timeFromDateTime(event.startAt)) : 0;
-  const rawEndMinutes = date === endDate ? timeToMinutes(timeFromDateTime(event.endAt)) : 24 * 60;
-  const startMinutes = Math.max(calendarStartMinutes, rawStartMinutes);
-  const endMinutes = Math.min(calendarEndMinutes, rawEndMinutes);
-  if (endMinutes <= startMinutes) return null;
-  return { startMinutes, endMinutes };
-}
-
-function externalBookedMinutes(
-  events: GoogleCalendarEvent[],
-  capacity: DailyCapacity,
-  date?: string,
-  calendarStartMinutes?: number,
-  calendarEndMinutes?: number
-) {
-  return events.reduce((sum, event) => {
-    if (!event.blocksTime) return sum;
-    if (event.allDay) return sum + capacity.dayCapacityMinutes;
-    if (isMultiDayTimedExternalEvent(event)) {
-      if (date === undefined || calendarStartMinutes === undefined || calendarEndMinutes === undefined) {
-        return sum + Math.min(capacity.dayCapacityMinutes, minutesBetween(event.startAt, event.endAt));
-      }
-      const segment = externalTimedSegmentForDate(event, date, calendarStartMinutes, calendarEndMinutes);
-      return sum + Math.min(capacity.dayCapacityMinutes, segment ? segment.endMinutes - segment.startMinutes : 0);
-    }
-    return sum + Math.min(capacity.dayCapacityMinutes, minutesBetween(event.startAt, event.endAt));
-  }, 0);
-}
-
-function capacityLevelFor(bookedMinutes: number, capacity: DailyCapacity) {
-  const redCapacityThreshold =
-    capacity.planningCapacityMinutes + (capacity.dayCapacityMinutes - capacity.planningCapacityMinutes) * 0.8;
-  if (bookedMinutes >= redCapacityThreshold) return "over-plan";
-  if (bookedMinutes >= capacity.planningCapacityMinutes * 0.8) return "near-plan";
-  return "under-plan";
-}
-
-function plainTextFromHtml(value?: string) {
-  if (!value) return "";
-  return value
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/p>/gi, "\n")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .trim();
-}
-
-function minutesToTimeLabel(minutes: number) {
-  const h = Math.floor(minutes / 60).toString().padStart(2, "0");
-  const m = (minutes % 60).toString().padStart(2, "0");
-  return `${h}:${m}`;
-}
-
-function parseDurationInput(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  const timeMatch = trimmed.match(/^(\d{1,2}):([0-5]\d)$/);
-  if (timeMatch) return Number(timeMatch[1]) * 60 + Number(timeMatch[2]);
-  const minutesMatch = trimmed.match(/^(\d+)$/);
-  if (minutesMatch) return Number(minutesMatch[1]);
-  const hourMinuteMatch = trimmed.match(/^(\d+(?:[.,]\d+)?)\s*h(?:\s*(\d{1,2})\s*m?)?$/i);
-  if (hourMinuteMatch) {
-    return Math.round(Number(hourMinuteMatch[1].replace(",", ".")) * 60) + Number(hourMinuteMatch[2] ?? 0);
-  }
-  return undefined;
-}
-
-function minutesToLabel(minutes: number) {
-  if (minutes < 60) return `${minutes}m`;
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return m ? `${h}h ${m}m` : `${h}h`;
-}
-
-function estimateToLabel(minutes?: number) {
-  if (!minutes) return "?";
-  const dayMinutes = 8 * 60;
-  const weekMinutes = 5 * dayMinutes;
-  if (minutes >= weekMinutes * 2 && minutes % weekMinutes === 0) return `${minutes / weekMinutes}w`;
-  if (minutes >= dayMinutes * 2 && minutes % dayMinutes === 0) return `${minutes / dayMinutes}d`;
-  return minutesToTimeLabel(minutes);
-}
-
-function statusAfterMoveToPrio(status: TaskStatus) {
-  if (status === "Backlog") return "Ready";
-  if (status === "Blocked") return "Started";
-  return status;
-}
-
-function safeMarkdownHref(href: string) {
-  const trimmed = href.trim();
-  const normalized = trimmed.startsWith("www.") ? `https://${trimmed}` : trimmed;
-  try {
-    const url = new URL(normalized);
-    return ["http:", "https:", "mailto:"].includes(url.protocol) ? normalized : undefined;
-  } catch {
-    return undefined;
-  }
-}
 
 function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
   const nodes: ReactNode[] = [];
@@ -542,272 +205,6 @@ function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
 
   if (lastIndex < text.length) nodes.push(text.slice(lastIndex));
   return nodes;
-}
-
-function sortByOrder<T extends { id: string }>(items: T[], order: (item: T) => number | undefined) {
-  return [...items].sort((a, b) => (order(a) ?? 0) - (order(b) ?? 0) || a.id.localeCompare(b.id));
-}
-
-function sortedTasks(tasks: Task[]) {
-  return sortByOrder(tasks, (task) => task.treeOrder);
-}
-
-function sortedListTasks(tasks: Task[]) {
-  return sortByOrder(tasks, (task) => task.listOrder);
-}
-
-function sortedBoardTasks(tasks: Task[]) {
-  return sortByOrder(tasks, (task) => task.boardOrder);
-}
-
-function normalizeTaskVisibleIn(visibleIn?: Partial<TaskVisibleIn>): TaskVisibleIn {
-  return {
-    list: visibleIn?.list ?? true,
-    board: visibleIn?.board ?? true,
-    hierarchy: visibleIn?.hierarchy ?? true
-  };
-}
-
-function moveItemToDropTarget<T>(items: T[], fromIndex: number, toIndex: number) {
-  if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return items;
-  const next = [...items];
-  const [item] = next.splice(fromIndex, 1);
-  next.splice(toIndex, 0, item);
-  return next;
-}
-
-function timeToMinutes(time: string) {
-  const [hour, minute] = time.split(":").map(Number);
-  return hour * 60 + minute;
-}
-
-function minutesToTime(minutes: number) {
-  const hour = Math.floor(minutes / 60).toString().padStart(2, "0");
-  const minute = (minutes % 60).toString().padStart(2, "0");
-  return `${hour}:${minute}`;
-}
-
-function durationForPlanning(taskDurationMinutes: number | undefined, defaultPrioDurationMinutes: number) {
-  return taskDurationMinutes && taskDurationMinutes <= 120 ? taskDurationMinutes : defaultPrioDurationMinutes;
-}
-
-function normalizeTreeFilters(filters?: Partial<TreeFilterSettings> | null): TreeFilterSettings {
-  return {
-    query: filters?.query ?? "",
-    statuses: (filters?.statuses ?? []).filter((status): status is TaskStatus => statuses.includes(status as TaskStatus)),
-    tags: normalizeTags(filters?.tags),
-    showArchived: filters?.showArchived ?? false
-  };
-}
-
-function normalizeTaskStatuses(rawStatuses?: unknown[] | null): TaskStatus[] {
-  return (rawStatuses ?? []).filter((status): status is TaskStatus => statuses.includes(status as TaskStatus));
-}
-
-function normalizeTags(rawTags?: unknown[] | string | null): string[] {
-  const values = Array.isArray(rawTags) ? rawTags : typeof rawTags === "string" ? rawTags.split(",") : [];
-  return Array.from(
-    new Set(
-      values
-        .map((tag) => String(tag).trim())
-        .filter(Boolean)
-    )
-  );
-}
-
-function normalizeTasks(tasks: Task[]): Task[] {
-  const taskIds = new Set(tasks.map((task) => task.id));
-  const cleanedTasks = tasks.map((task, index) => {
-    const legacyOrder = task.treeOrder ?? index;
-    const rawChecklist = Array.isArray(task.checklist) ? task.checklist : [];
-    return {
-    ...task,
-    parentId: task.parentId && task.parentId !== task.id && taskIds.has(task.parentId) ? task.parentId : undefined,
-    checklist: rawChecklist
-      .map((item, itemIndex): TaskChecklistItem | null => {
-        if (typeof item === "string") return { id: uid("check"), text: item, done: false };
-        if (!item || typeof item !== "object") return null;
-        const rawItem = item as Partial<TaskChecklistItem>;
-        return {
-          id: typeof rawItem.id === "string" ? rawItem.id : uid(`check-${index}-${itemIndex}`),
-          text: typeof rawItem.text === "string" ? rawItem.text : "",
-          done: Boolean(rawItem.done)
-        };
-      })
-      .filter((item): item is TaskChecklistItem => Boolean(item)),
-    visibleIn: normalizeTaskVisibleIn(task.visibleIn),
-    tags: normalizeTags(task.tags),
-    archived: task.archived ?? false,
-    treeOrder: task.treeOrder ?? legacyOrder,
-    listOrder: task.listOrder ?? legacyOrder,
-    boardOrder: task.boardOrder ?? legacyOrder
-  };
-  });
-  const byParent = new Map<string, Task[]>();
-  for (const task of sortedTasks(cleanedTasks)) {
-    const parentKey = task.parentId ?? "";
-    byParent.set(parentKey, [...(byParent.get(parentKey) ?? []), task]);
-  }
-  const byStatus = new Map<TaskStatus, Task[]>();
-  for (const task of sortedBoardTasks(cleanedTasks)) {
-    byStatus.set(task.status, [...(byStatus.get(task.status) ?? []), task]);
-  }
-  const byList = sortedListTasks(cleanedTasks);
-  return cleanedTasks.map((task) => {
-    const siblings = byParent.get(task.parentId ?? "") ?? [];
-    const statusSiblings = byStatus.get(task.status) ?? [];
-    return {
-      ...task,
-      treeOrder: siblings.findIndex((sibling) => sibling.id === task.id),
-      listOrder: byList.findIndex((candidate) => candidate.id === task.id),
-      boardOrder: statusSiblings.findIndex((candidate) => candidate.id === task.id)
-    };
-  });
-}
-
-function normalizeDayTemplates(rawTemplates?: unknown[] | null): DayTemplate[] {
-  return (rawTemplates ?? [])
-    .map((item): DayTemplate | null => {
-      const rawTemplate = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
-      if (typeof rawTemplate.id !== "string" || typeof rawTemplate.name !== "string") return null;
-      const rawSlots = Array.isArray(rawTemplate.slots) ? rawTemplate.slots : [];
-      const slots = rawSlots
-        .map((slot): DayTemplateSlot | null => {
-          const rawSlot = slot && typeof slot === "object" ? (slot as Record<string, unknown>) : {};
-          const durationMinutes = Number(rawSlot.durationMinutes);
-          if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) return null;
-          return {
-            label: typeof rawSlot.label === "string" && rawSlot.label.trim() ? rawSlot.label : "Reservierung",
-            description: typeof rawSlot.description === "string" ? rawSlot.description : "",
-            startTime: typeof rawSlot.startTime === "string" ? rawSlot.startTime : undefined,
-            durationMinutes
-          };
-        })
-        .filter((slot): slot is DayTemplateSlot => Boolean(slot));
-      return {
-        id: rawTemplate.id,
-        name: rawTemplate.name,
-        slots,
-        createdAt: typeof rawTemplate.createdAt === "string" ? rawTemplate.createdAt : new Date().toISOString()
-      };
-    })
-    .filter((template): template is DayTemplate => Boolean(template));
-}
-
-type TimedCalendarEntry =
-  | { kind: "booking"; id: string; startMinutes: number; endMinutes: number; booking: Booking }
-  | { kind: "external"; id: string; startMinutes: number; endMinutes: number; event: GoogleCalendarEvent };
-
-type TimedCalendarLayoutEntry = TimedCalendarEntry & {
-  columnIndex: number;
-  columnCount: number;
-};
-
-function layoutTimedEntries(entries: TimedCalendarEntry[]): TimedCalendarLayoutEntry[] {
-  const sortedEntries = [...entries].sort((a, b) => a.startMinutes - b.startMinutes || b.endMinutes - a.endMinutes);
-  const groups: TimedCalendarEntry[][] = [];
-  let activeGroup: TimedCalendarEntry[] = [];
-  let activeGroupEnd = -1;
-
-  for (const entry of sortedEntries) {
-    if (activeGroup.length === 0 || entry.startMinutes < activeGroupEnd) {
-      activeGroup.push(entry);
-      activeGroupEnd = Math.max(activeGroupEnd, entry.endMinutes);
-    } else {
-      groups.push(activeGroup);
-      activeGroup = [entry];
-      activeGroupEnd = entry.endMinutes;
-    }
-  }
-  if (activeGroup.length > 0) groups.push(activeGroup);
-
-  return groups.flatMap((group) => {
-    const columns: TimedCalendarEntry[][] = [];
-    const placed = group.map((entry) => {
-      let columnIndex = columns.findIndex((column) => {
-        const lastEntry = column[column.length - 1];
-        return lastEntry.endMinutes <= entry.startMinutes;
-      });
-      if (columnIndex === -1) {
-        columnIndex = columns.length;
-        columns.push([]);
-      }
-      columns[columnIndex].push(entry);
-      return { ...entry, columnIndex, columnCount: 1 };
-    });
-    return placed.map((entry) => ({ ...entry, columnCount: columns.length }));
-  });
-}
-
-function normalizeState(rawState: AppState): AppState {
-  const rawTaskView = rawState.settings?.taskView;
-  const rawCalendarView = rawState.settings?.calendarView;
-  return {
-    ...rawState,
-    settings: {
-      ...defaultSettings,
-      ...(rawState.settings ?? {}),
-      defaultTaskStatus: statuses.includes(rawState.settings?.defaultTaskStatus as TaskStatus)
-        ? (rawState.settings?.defaultTaskStatus as TaskStatus)
-        : defaultSettings.defaultTaskStatus,
-      calendarView: rawCalendarView === "month" ? "month" : "days",
-      taskView: rawTaskView === "board" || rawTaskView === "hierarchy" ? rawTaskView : "list",
-      hierarchyExpandedTaskIds: Array.isArray(rawState.settings?.hierarchyExpandedTaskIds)
-        ? rawState.settings.hierarchyExpandedTaskIds.filter((id): id is string => typeof id === "string")
-        : [],
-      treeFilters: normalizeTreeFilters(rawState.settings?.treeFilters),
-      boardHiddenStatuses: normalizeTaskStatuses(rawState.settings?.boardHiddenStatuses),
-      panelsCollapsed: {
-        ...defaultSettings.panelsCollapsed,
-        ...(rawState.settings?.panelsCollapsed ?? {})
-      }
-    },
-    dailyCapacities: rawState.dailyCapacities ?? {},
-    tasks: normalizeTasks(rawState.tasks ?? []),
-    prioTaskIds: rawState.prioTaskIds ?? [],
-    prioDurations: rawState.prioDurations ?? {},
-    dayTemplates: normalizeDayTemplates(rawState.dayTemplates),
-    bookings: (rawState.bookings ?? []).map((booking) => ({
-      ...booking,
-      label: booking.label ?? "",
-      description: booking.description ?? ""
-    }))
-  };
-}
-
-function createTimeOptions(startTime: string, endTime: string) {
-  const startMinutes = timeToMinutes(startTime);
-  const endMinutes = timeToMinutes(endTime);
-  const count = Math.max(1, Math.floor((endMinutes - startMinutes) / 15) + 1);
-  return Array.from({ length: count }, (_, index) => minutesToTime(startMinutes + index * 15));
-}
-
-function createCalendarPeriod(startDate: string, visibleDayCount: number, showWeekends: boolean) {
-  const nextDays: string[] = [];
-  let cursor = startDate;
-  while (nextDays.length < visibleDayCount) {
-    if (showWeekends || !isWeekend(cursor)) nextDays.push(cursor);
-    cursor = addDays(cursor, 1);
-  }
-  return nextDays;
-}
-
-function nextVisibleDate(date: string, showWeekends: boolean) {
-  let cursor = addDays(date, 1);
-  while (!showWeekends && isWeekend(cursor)) cursor = addDays(cursor, 1);
-  return cursor;
-}
-
-function browserUtcOffset() {
-  const offsetMinutes = -new Date().getTimezoneOffset();
-  const sign = offsetMinutes >= 0 ? "+" : "-";
-  const absoluteMinutes = Math.abs(offsetMinutes);
-  const hours = Math.floor(absoluteMinutes / 60).toString().padStart(2, "0");
-  return `UTC${sign}${hours}:00`;
-}
-
-function maskVisibleApiKey(apiKey: string) {
-  return `••••••••••••••••${apiKey.slice(-5)}`;
 }
 
 async function apiErrorMessage(response: Response) {
