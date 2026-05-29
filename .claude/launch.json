@@ -12,6 +12,12 @@
       "runtimeExecutable": "bash",
       "runtimeArgs": ["scripts/smoke.sh"],
       "port": 5199
+    },
+    {
+      "name": "capcal-smoke-auth",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["scripts/smoke-auth.sh"],
+      "port": 5199
     }
   ]
 }

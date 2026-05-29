@@ -1,17 +1,13 @@
 import { createServer } from "node:http";
 import type { ServerResponse } from "node:http";
+import { createBackendApp } from "../backend/body/app";
 import {
+  bearerToken,
   clearSessionCookie,
-  getApiKeyUser,
-  getUserSettings,
   getSessionUser,
   isAuthRequired,
-  requestOtp,
-  rotateApiKey,
-  sessionCookie,
-  updateUserProfile,
-  verifyOtp
-} from "../src/server/auth";
+  sessionCookie
+} from "../backend/body/head/session";
 import {
   disconnectGoogleCalendar,
   googleCalendarCallback,
@@ -30,8 +26,6 @@ import {
   refreshICloudCalendars,
   updateICloudCalendarSelection
 } from "../src/server/icloudCalendar";
-import { createBackendDomain } from "../backend/body/domains/taskspace/domain";
-
 async function readBody(request: AsyncIterable<Uint8Array>) {
   const chunks: Uint8Array[] = [];
   for await (const chunk of request) chunks.push(chunk);
@@ -56,7 +50,7 @@ function redirect(response: ServerResponse, location: string) {
 
 const server = createServer(async (request, response) => {
   try {
-    const backend = createBackendDomain();
+    const app = createBackendApp();
     const url = new URL(request.url ?? "/", "http://127.0.0.1:3001");
 
     if (request.method === "OPTIONS") {
@@ -66,14 +60,14 @@ const server = createServer(async (request, response) => {
 
     if (url.pathname === "/api/auth/request-otp" && request.method === "POST") {
       const body = JSON.parse(await readBody(request));
-      await requestOtp(String(body.email ?? ""));
+      await app.reactors.requestOtp.process(String(body.email ?? ""));
       send(response, 200, { ok: true });
       return;
     }
 
     if (url.pathname === "/api/auth/verify" && request.method === "POST") {
       const body = JSON.parse(await readBody(request));
-      const user = await verifyOtp(String(body.email ?? ""), String(body.otp ?? ""));
+      const user = await app.identity.consumeOtp.process({ email: String(body.email ?? ""), token: String(body.otp ?? "") });
       send(response, 200, { user }, { "set-cookie": sessionCookie(user) });
       return;
     }
@@ -116,7 +110,9 @@ const server = createServer(async (request, response) => {
       return;
     }
 
-    const user = getSessionUser(request.headers.cookie) ?? (await getApiKeyUser(request.headers.authorization));
+    const user =
+      getSessionUser(request.headers.cookie) ??
+      (await app.identity.findUserByApiKey.process({ apiKey: bearerToken(request.headers.authorization) ?? "" }));
     if (isAuthRequired() && !user) {
       send(response, 401, { error: "Unauthorized" });
       return;
@@ -247,7 +243,7 @@ const server = createServer(async (request, response) => {
         send(response, 401, { error: "Unauthorized" });
         return;
       }
-      send(response, 200, await getUserSettings(user));
+      send(response, 200, await app.identity.getUserSettings.process({ userId: user.id }));
       return;
     }
 
@@ -257,7 +253,7 @@ const server = createServer(async (request, response) => {
         return;
       }
       const body = JSON.parse(await readBody(request));
-      send(response, 200, await updateUserProfile(user, body.profile ?? {}));
+      send(response, 200, await app.identity.updateProfile.process({ userId: user.id, profile: body.profile ?? {} }));
       return;
     }
 
@@ -266,18 +262,18 @@ const server = createServer(async (request, response) => {
         send(response, 401, { error: "Unauthorized" });
         return;
       }
-      send(response, 200, await rotateApiKey(user));
+      send(response, 200, await app.identity.rotateApiKey.process({ userId: user.id }));
       return;
     }
 
     if (url.pathname === "/api/state" && request.method === "GET") {
-      send(response, 200, await backend.loadState.process({ userId: user?.id }));
+      send(response, 200, await app.taskspace.loadState.process({ userId: user?.id }));
       return;
     }
 
     if (url.pathname === "/api/state" && request.method === "PUT") {
       const state = JSON.parse(await readBody(request));
-      send(response, 200, await backend.saveState.process({ state, userId: user?.id }));
+      send(response, 200, await app.taskspace.saveState.process({ state, userId: user?.id }));
       return;
     }
 
