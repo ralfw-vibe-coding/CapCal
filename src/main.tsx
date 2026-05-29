@@ -78,9 +78,7 @@ import {
   minutesToTimeLabel,
   nextVisibleDate,
   normalizeTags,
-  normalizeTaskStatuses,
   normalizeTaskVisibleIn,
-  normalizeTreeFilters,
   parseDurationInput,
   plainTextFromHtml,
   safeMarkdownHref,
@@ -414,7 +412,7 @@ function App() {
     setSaveState("saving");
     setSaveError("");
     try {
-      await domain.saveTaskspace.process({ state: currentState, keepalive: options.keepalive });
+      await domain.saveTaskspace.process({ keepalive: options.keepalive });
       if (version === stateVersionRef.current) {
         dirtyRef.current = false;
         cleanLoadedStateRef.current = currentState;
@@ -668,7 +666,7 @@ function App() {
       cleanLoadedStateRef.current = null;
       dirtyRef.current = false;
       hasLoadedRef.current = false;
-      domain.commitTaskspace.process({ state: null });
+      domain.resetTaskspace.process();
       setState(null);
       setAuthUser(null);
       prefetchedUserIdRef.current = null;
@@ -949,65 +947,19 @@ function App() {
     );
   }
 
-  function updateState(mutator: (draft: AppState) => AppState) {
-    const current = domain.getTaskspace.process();
-    if (!current) return;
-    const next = mutator(current);
-    domain.commitTaskspace.process({ state: next });
-    setState(next);
-  }
-
   // Pull: nach einer Command-RPU den Render-Snapshot frisch aus dem Store ziehen.
   function refreshState() {
     setState(domain.getTaskspace.process());
   }
 
   function updateSettings(patch: Partial<AppSettings>) {
-    updateState((draft) => ({
-      ...draft,
-      settings: {
-        ...defaultSettings,
-        ...(draft.settings ?? defaultSettings),
-        ...patch,
-        treeFilters: normalizeTreeFilters({
-          ...(draft.settings?.treeFilters ?? defaultSettings.treeFilters),
-          ...(patch.treeFilters ?? {})
-        }),
-        boardHiddenStatuses: normalizeTaskStatuses(patch.boardHiddenStatuses ?? draft.settings?.boardHiddenStatuses),
-        panelsCollapsed: {
-          ...defaultSettings.panelsCollapsed,
-          ...(draft.settings?.panelsCollapsed ?? defaultSettings.panelsCollapsed),
-          ...(patch.panelsCollapsed ?? {})
-        }
-      }
-    }));
+    domain.updateSettings.process({ patch });
+    refreshState();
   }
 
   function updateCapacityDefaults(patch: Pick<Partial<AppSettings>, "defaultDayCapacityMinutes" | "defaultPlanningCapacityMinutes">) {
-    updateState((draft) => {
-      const currentSettings = { ...defaultSettings, ...(draft.settings ?? {}) };
-      const currentDefaultCapacity = {
-        dayCapacityMinutes: currentSettings.defaultDayCapacityMinutes,
-        planningCapacityMinutes: currentSettings.defaultPlanningCapacityMinutes
-      };
-      const bookedDates = new Set(draft.bookings.map((booking) => booking.date));
-      const dailyCapacities = { ...(draft.dailyCapacities ?? {}) };
-      for (const date of bookedDates) {
-        if (!dailyCapacities[date]) dailyCapacities[date] = currentDefaultCapacity;
-      }
-      const nextSettings = {
-        ...currentSettings,
-        ...patch
-      };
-      if (nextSettings.defaultPlanningCapacityMinutes > nextSettings.defaultDayCapacityMinutes) {
-        nextSettings.defaultPlanningCapacityMinutes = nextSettings.defaultDayCapacityMinutes;
-      }
-      return {
-        ...draft,
-        dailyCapacities,
-        settings: nextSettings
-      };
-    });
+    domain.updateCapacityDefaults.process({ patch });
+    refreshState();
   }
 
   function expandHierarchyTask(taskId: string) {
@@ -1179,23 +1131,8 @@ function App() {
   }
 
   function updateDailyCapacity(date: string, patch: Partial<DailyCapacity>) {
-    updateState((draft) => {
-      const current = draft.dailyCapacities?.[date] ?? defaultCapacity;
-      const nextCapacity = {
-        ...current,
-        ...patch
-      };
-      if (nextCapacity.planningCapacityMinutes > nextCapacity.dayCapacityMinutes) {
-        nextCapacity.planningCapacityMinutes = nextCapacity.dayCapacityMinutes;
-      }
-      return {
-        ...draft,
-        dailyCapacities: {
-          ...(draft.dailyCapacities ?? {}),
-          [date]: nextCapacity
-        }
-      };
-    });
+    domain.updateDailyCapacity.process({ date, patch });
+    refreshState();
   }
 
   function handleDrop(date: string, startTime?: string) {
@@ -2026,15 +1963,10 @@ function App() {
                       className="prio-duration"
                       aria-label="Dauer in Priorisierung"
                       value={prioDuration}
-                      onChange={(event) =>
-                        updateState((draft) => ({
-                          ...draft,
-                          prioDurations: {
-                            ...(draft.prioDurations ?? {}),
-                            [task.id]: Number(event.target.value)
-                          }
-                        }))
-                      }
+                      onChange={(event) => {
+                        domain.setPrioDuration.process({ taskId: task.id, durationMinutes: Number(event.target.value) });
+                        refreshState();
+                      }}
                       onClick={(event) => event.stopPropagation()}
                       onDragStart={(event) => event.preventDefault()}
                     >

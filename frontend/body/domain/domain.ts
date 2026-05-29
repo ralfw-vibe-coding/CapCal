@@ -11,7 +11,6 @@ import { AddLooseBookingRpu } from "./rpus/addLooseBookingRpu";
 import { AddToPrioRpu } from "./rpus/addToPrioRpu";
 import { ApplyDayTemplateRpu } from "./rpus/applyDayTemplateRpu";
 import { BookTaskRpu } from "./rpus/bookTaskRpu";
-import { CommitTaskspaceRpu } from "./rpus/commitTaskspaceRpu";
 import { CreateTaskRpu } from "./rpus/createTaskRpu";
 import { CreateTaskFromBookingRpu } from "./rpus/createTaskFromBookingRpu";
 import { DeleteBookingRpu } from "./rpus/deleteBookingRpu";
@@ -36,10 +35,15 @@ import { MoveTaskInListRpu } from "./rpus/moveTaskInListRpu";
 import { MoveTaskInTreeRpu } from "./rpus/moveTaskInTreeRpu";
 import { MoveTaskToBoardStatusRpu } from "./rpus/moveTaskToBoardStatusRpu";
 import { RemoveFromPrioRpu } from "./rpus/removeFromPrioRpu";
+import { ResetTaskspaceRpu } from "./rpus/resetTaskspaceRpu";
 import { SaveDayAsTemplateRpu } from "./rpus/saveDayAsTemplateRpu";
 import { SaveTaskspaceRpu } from "./rpus/saveTaskspaceRpu";
+import { SetPrioDurationRpu } from "./rpus/setPrioDurationRpu";
 import { ToggleTaskArchivedRpu } from "./rpus/toggleTaskArchivedRpu";
 import { UpdateBookingRpu } from "./rpus/updateBookingRpu";
+import { UpdateCapacityDefaultsRpu } from "./rpus/updateCapacityDefaultsRpu";
+import { UpdateDailyCapacityRpu } from "./rpus/updateDailyCapacityRpu";
+import { UpdateSettingsRpu } from "./rpus/updateSettingsRpu";
 import { UpdateTaskRpu } from "./rpus/updateTaskRpu";
 import { TaskspaceStore } from "./taskspaceStore";
 
@@ -48,12 +52,12 @@ export function createDomain() {
   const stateProvider = new TaskspaceStateProvider();
 
   return {
-    // Taskspace-weite RPUs (Persistenz-Kante / transitional)
+    // Taskspace-weite RPUs (Persistenz-Kante)
     loadTaskspace: new LoadTaskspaceRpu(stateProvider, store),
-    saveTaskspace: new SaveTaskspaceRpu(stateProvider),
+    saveTaskspace: new SaveTaskspaceRpu(stateProvider, store),
     importTaskspace: new ImportTaskspaceRpu(store),
+    resetTaskspace: new ResetTaskspaceRpu(store),
     getTaskspace: new GetTaskspaceRpu(store),
-    commitTaskspace: new CommitTaskspaceRpu(store),
 
     // Query-RPUs (Kapazitaet)
     getBookedMinutesByTask: new GetBookedMinutesByTaskRpu(store),
@@ -96,7 +100,13 @@ export function createDomain() {
     // Command-RPUs (Tagesvorlagen)
     saveDayAsTemplate: new SaveDayAsTemplateRpu(store),
     applyDayTemplate: new ApplyDayTemplateRpu(store),
-    deleteDayTemplate: new DeleteDayTemplateRpu(store)
+    deleteDayTemplate: new DeleteDayTemplateRpu(store),
+
+    // Command-RPUs (Settings / Kapazitaet / Prio-Dauer)
+    updateSettings: new UpdateSettingsRpu(store),
+    updateCapacityDefaults: new UpdateCapacityDefaultsRpu(store),
+    updateDailyCapacity: new UpdateDailyCapacityRpu(store),
+    setPrioDuration: new SetPrioDurationRpu(store)
   };
 }
 
