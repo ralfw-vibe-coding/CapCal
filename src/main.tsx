@@ -84,7 +84,6 @@ import {
   moveItemToDropTarget,
   nextVisibleDate,
   normalizeDayTemplates,
-  normalizeState,
   normalizeTags,
   normalizeTaskStatuses,
   normalizeTaskVisibleIn,
@@ -128,9 +127,9 @@ import {
   type UserProfile,
   type UserSettingsState
 } from "../frontend/body/domain";
-import { TaskspaceStateProvider } from "../frontend/body/domain/providers/taskspaceStateProvider";
+import { createDomain } from "../frontend/body/domain/domain";
 
-const taskspaceStateProvider = new TaskspaceStateProvider();
+const domain = createDomain();
 
 type DragPayload =
   | { kind: "tree-task"; taskId: string }
@@ -299,12 +298,12 @@ function App() {
 
   async function loadState() {
     try {
-      const result = await taskspaceStateProvider.load();
+      const result = await domain.loadTaskspace.process();
       if (result.kind === "unauthorized") {
         setAuthRequired(true);
         return;
       }
-      const normalizedState = normalizeState(result.rawState);
+      const normalizedState = result.state;
       stateRef.current = normalizedState;
       cleanLoadedStateRef.current = normalizedState;
       setState(normalizedState);
@@ -381,7 +380,7 @@ function App() {
     setSaveState("saving");
     setSaveError("");
     try {
-      await taskspaceStateProvider.save(currentState, { keepalive: options.keepalive });
+      await domain.saveTaskspace.process({ state: currentState, keepalive: options.keepalive });
       if (version === stateVersionRef.current) {
         dirtyRef.current = false;
         cleanLoadedStateRef.current = currentState;
@@ -1966,13 +1965,15 @@ function App() {
   async function importTaskspace(file: File | undefined) {
     if (!file) return;
     try {
-      const importedState = normalizeState(JSON.parse(await file.text()) as AppState);
-      stateRef.current = importedState;
-      setState(importedState);
+      const result = domain.importTaskspace.process({ json: await file.text() });
+      if (result.kind === "error") {
+        setSaveError(result.message);
+        setSaveState("error");
+        return;
+      }
+      stateRef.current = result.state;
+      setState(result.state);
       setSaveError("");
-    } catch (error) {
-      setSaveError(error instanceof Error ? error.message : "Import fehlgeschlagen.");
-      setSaveState("error");
     } finally {
       if (importInputRef.current) importInputRef.current.value = "";
     }
