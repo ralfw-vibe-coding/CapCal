@@ -110,10 +110,12 @@ import {
   type UserProfile,
   type UserSettingsState
 } from "../frontend/body/domain";
-import { createDomain } from "../frontend/body/domain/domain";
+import { createApp } from "../frontend/body/app";
 import type { DayCapacity } from "../frontend/body/domain/rpus/getDayCapacityRpu";
 
-const domain = createDomain();
+const app = createApp();
+const domain = app.domain;
+const reactors = app.reactors;
 
 type DragPayload =
   | { kind: "tree-task"; taskId: string }
@@ -315,20 +317,9 @@ function App() {
   const handledTaskHashRef = useRef("");
   const saveCurrentStateRef = useRef<(options?: { keepalive?: boolean }) => Promise<void>>(async () => undefined);
 
-  async function refreshAuthUser() {
-    try {
-      const response = await fetch("/api/auth/me", { credentials: "same-origin" });
-      if (!response.ok) return;
-      const payload = (await response.json()) as { user: AuthUser };
-      setAuthUser(payload.user);
-    } catch {
-      // Auth status is optional for filesystem mode and should not block loading.
-    }
-  }
-
   async function loadState() {
     try {
-      const result = await domain.loadTaskspace.process();
+      const result = await reactors.session.loadSession();
       if (result.kind === "unauthorized") {
         setAuthRequired(true);
         return;
@@ -338,7 +329,7 @@ function App() {
       setRenderRevision(domain.getRevision.process());
       setLoadError("");
       setAuthRequired(false);
-      void refreshAuthUser();
+      setAuthUser(result.user);
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : "State konnte nicht geladen werden.");
       setSaveState("error");
@@ -412,13 +403,9 @@ function App() {
 
   async function requestLoginOtp() {
     setAuthError("");
-    const response = await fetch("/api/auth/request-otp", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: authEmail })
-    });
-    if (!response.ok) {
-      setAuthError(await response.text());
+    const result = await reactors.session.requestOtp(authEmail);
+    if (!result.ok) {
+      setAuthError(result.message);
       return;
     }
     setAuthStep("otp");
@@ -426,21 +413,20 @@ function App() {
 
   async function verifyLoginOtp() {
     setAuthError("");
-    const response = await fetch("/api/auth/verify", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      credentials: "same-origin",
-      body: JSON.stringify({ email: authEmail, otp: authOtp })
-    });
-    if (!response.ok) {
-      setAuthError(await response.text());
+    const result = await reactors.session.verifyOtp(authEmail, authOtp);
+    if (result.kind === "error") {
+      setAuthError(result.message);
       return;
     }
-    const payload = (await response.json()) as { user: AuthUser };
-    setAuthUser(payload.user);
+    setAuthUser(result.user);
     setAuthRequired(false);
     setAuthOtp("");
-    await loadState();
+    if (result.loaded) {
+      lastSavedRevisionRef.current = domain.getRevision.process();
+      setLoaded(true);
+      setRenderRevision(domain.getRevision.process());
+      setLoadError("");
+    }
   }
 
   async function loadUserSettings() {
@@ -636,26 +622,19 @@ function App() {
   }
 
   async function logout() {
-    try {
-      await fetch("/api/auth/logout", {
-        method: "POST",
-        credentials: "same-origin"
-      });
-    } finally {
-      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
-      domain.resetTaskspace.process();
-      lastSavedRevisionRef.current = domain.getRevision.process();
-      setLoaded(false);
-      setRenderRevision(domain.getRevision.process());
-      setAuthUser(null);
-      prefetchedUserIdRef.current = null;
-      setAuthRequired(true);
-      setAuthStep("email");
-      setAuthOtp("");
-      setSaveError("");
-      setLoadError("");
-      setSaveState("idle");
-    }
+    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+    await reactors.session.logout();
+    lastSavedRevisionRef.current = domain.getRevision.process();
+    setLoaded(false);
+    setRenderRevision(domain.getRevision.process());
+    setAuthUser(null);
+    prefetchedUserIdRef.current = null;
+    setAuthRequired(true);
+    setAuthStep("email");
+    setAuthOtp("");
+    setSaveError("");
+    setLoadError("");
+    setSaveState("idle");
   }
 
   useEffect(() => {
