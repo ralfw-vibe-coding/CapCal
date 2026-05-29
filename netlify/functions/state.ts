@@ -1,7 +1,7 @@
 import type { Config } from "@netlify/functions";
 import { getApiKeyUser, getSessionUser, isAuthRequired } from "../../src/server/auth";
-import { createBackendDomain } from "../../backend/body/domain/domain";
-import type { AppState } from "../../backend/body/domain/providers/stateProvider";
+import { createBackendDomain } from "../../backend/body/domains/taskspace/domain";
+import type { AppState } from "../../backend/body/domains/taskspace/providers/stateProvider";
 
 function jsonResponse(payload: unknown, init?: ResponseInit) {
   return new Response(JSON.stringify(payload), {

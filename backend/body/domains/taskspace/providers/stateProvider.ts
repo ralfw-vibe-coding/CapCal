@@ -6,5 +6,5 @@
 // backend/body/domain/providers erfolgt im Aufraeum-Schritt (siehe
 // requirements/refactoring-cleanup.md), wenn auch Auth/Kalender umgezogen sind.
 
-export { createStateProvider } from "../../../../src/server/storage";
-export type { AppState, StateProvider } from "../../../../src/server/storage/types";
+export { createStateProvider } from "../../../../../src/server/storage";
+export type { AppState, StateProvider } from "../../../../../src/server/storage/types";

@@ -30,7 +30,7 @@ import {
   refreshICloudCalendars,
   updateICloudCalendarSelection
 } from "../src/server/icloudCalendar";
-import { createBackendDomain } from "../backend/body/domain/domain";
+import { createBackendDomain } from "../backend/body/domains/taskspace/domain";
 
 async function readBody(request: AsyncIterable<Uint8Array>) {
   const chunks: Uint8Array[] = [];
