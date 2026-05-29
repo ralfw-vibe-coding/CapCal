@@ -8,8 +8,13 @@
 
 import { TaskspaceStateProvider } from "./providers/taskspaceStateProvider";
 import { CommitTaskspaceRpu } from "./rpus/commitTaskspaceRpu";
+import { GetAvailableTagsRpu } from "./rpus/getAvailableTagsRpu";
 import { GetBookedMinutesByTaskRpu } from "./rpus/getBookedMinutesByTaskRpu";
+import { GetFilteredTreeTasksRpu } from "./rpus/getFilteredTreeTasksRpu";
+import { GetTaskMetricsRpu } from "./rpus/getTaskMetricsRpu";
+import { GetTasksByParentRpu } from "./rpus/getTasksByParentRpu";
 import { GetTaskspaceRpu } from "./rpus/getTaskspaceRpu";
+import { GetVisibleBoardStatusesRpu } from "./rpus/getVisibleBoardStatusesRpu";
 import { ImportTaskspaceRpu } from "./rpus/importTaskspaceRpu";
 import { LoadTaskspaceRpu } from "./rpus/loadTaskspaceRpu";
 import { SaveTaskspaceRpu } from "./rpus/saveTaskspaceRpu";
@@ -28,7 +33,14 @@ export function createDomain() {
     commitTaskspace: new CommitTaskspaceRpu(store),
 
     // Query-RPUs (Kapazitaet)
-    getBookedMinutesByTask: new GetBookedMinutesByTaskRpu(store)
+    getBookedMinutesByTask: new GetBookedMinutesByTaskRpu(store),
+
+    // Query-RPUs (View-Modelle fuer Liste/Board/Hierarchie)
+    getTaskMetrics: new GetTaskMetricsRpu(store),
+    getTasksByParent: new GetTasksByParentRpu(store),
+    getFilteredTreeTasks: new GetFilteredTreeTasksRpu(store),
+    getAvailableTags: new GetAvailableTagsRpu(store),
+    getVisibleBoardStatuses: new GetVisibleBoardStatusesRpu(store)
   };
 }
 

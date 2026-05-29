@@ -732,75 +732,20 @@ function App() {
     [settings.calendarEndTime, settings.calendarStartTime]
   );
   const taskById = useMemo(() => new Map(state?.tasks.map((task) => [task.id, task]) ?? []), [state?.tasks]);
-  const bookingCountByTaskId = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const booking of state?.bookings ?? []) {
-      if (booking.taskId) counts.set(booking.taskId, (counts.get(booking.taskId) ?? 0) + 1);
-    }
-    return counts;
-  }, [state?.bookings]);
+  const taskMetrics = useMemo(() => domain.getTaskMetrics.process(), [state]);
+  const bookingCountByTaskId = taskMetrics.bookingCountByTaskId;
   const bookedMinutesByTaskId = useMemo(
     () => domain.getBookedMinutesByTask.process(),
     [state]
   );
-  const childCountByTaskId = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const task of state?.tasks ?? []) {
-      if (task.parentId) counts.set(task.parentId, (counts.get(task.parentId) ?? 0) + 1);
-    }
-    return counts;
-  }, [state?.tasks]);
-  const activeChildCountByTaskId = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const task of state?.tasks ?? []) {
-      if (task.parentId && !task.archived) counts.set(task.parentId, (counts.get(task.parentId) ?? 0) + 1);
-    }
-    return counts;
-  }, [state?.tasks]);
-  const parentTitleByTaskId = useMemo(() => {
-    const parentTitles = new Map<string, string>();
-    for (const task of state?.tasks ?? []) {
-      if (task.parentId) parentTitles.set(task.id, taskById.get(task.parentId)?.title ?? "");
-    }
-    return parentTitles;
-  }, [state?.tasks, taskById]);
-  const tasksByParentId = useMemo(() => {
-    const children = new Map<string, Task[]>();
-    for (const task of state?.tasks ?? []) {
-      const parentKey = task.parentId ?? "";
-      children.set(parentKey, [...(children.get(parentKey) ?? []), task]);
-    }
-    for (const [parentKey, parentTasks] of children.entries()) children.set(parentKey, sortedTasks(parentTasks));
-    return children;
-  }, [state?.tasks]);
+  const childCountByTaskId = taskMetrics.childCountByTaskId;
+  const activeChildCountByTaskId = taskMetrics.activeChildCountByTaskId;
+  const parentTitleByTaskId = taskMetrics.parentTitleByTaskId;
+  const tasksByParentId = useMemo(() => domain.getTasksByParent.process(), [state]);
   const treeFilters = settings.treeFilters;
-  const availableTags = useMemo(
-    () => Array.from(new Set((state?.tasks ?? []).flatMap((task) => task.tags ?? []))).sort((a, b) => a.localeCompare(b, "de")),
-    [state?.tasks]
-  );
-  const visibleBoardStatuses = useMemo(
-    () => statuses.filter((status) => !settings.boardHiddenStatuses.includes(status)),
-    [settings.boardHiddenStatuses]
-  );
-  const filteredTreeTasks = useMemo(() => {
-    const query = treeFilters.query.trim().toLowerCase();
-    return sortedListTasks(state?.tasks ?? []).filter((task) => {
-      const visibleIn = normalizeTaskVisibleIn(task.visibleIn);
-      const hierarchyLockedVisible = Boolean(task.parentId) || (childCountByTaskId.get(task.id) ?? 0) > 0;
-      const matchesView =
-        settings.taskView === "list"
-          ? visibleIn.list
-          : settings.taskView === "board"
-            ? visibleIn.board
-            : hierarchyLockedVisible || visibleIn.hierarchy;
-      const matchesArchive = treeFilters.showArchived ? task.archived : !task.archived;
-      const matchesQuery = !query || task.title.toLowerCase().includes(query);
-      const matchesStatus = treeFilters.statuses.length === 0 || treeFilters.statuses.includes(task.status);
-      const taskTags = task.tags ?? [];
-      const matchesTags = treeFilters.tags.length === 0 || treeFilters.tags.every((tag) => taskTags.includes(tag));
-      return matchesView && matchesArchive && matchesQuery && matchesStatus && matchesTags;
-    });
-  }, [childCountByTaskId, settings.taskView, state?.tasks, treeFilters.query, treeFilters.showArchived, treeFilters.statuses, treeFilters.tags]);
+  const availableTags = useMemo(() => domain.getAvailableTags.process(), [state]);
+  const visibleBoardStatuses = useMemo(() => domain.getVisibleBoardStatuses.process(), [state]);
+  const filteredTreeTasks = useMemo(() => domain.getFilteredTreeTasks.process(), [state]);
   const filteredTaskIds = useMemo(() => new Set(filteredTreeTasks.map((task) => task.id)), [filteredTreeTasks]);
   const currentCalendarPeriod = useMemo(
     () => createCalendarPeriod(dayCalendarStartDate, settings.visibleDayCount, settings.showWeekends),
