@@ -1,13 +1,6 @@
 import type { Config } from "@netlify/functions";
-import { getSessionUser } from "../../src/server/auth";
-import {
-  connectICloudCalendar,
-  disconnectICloudCalendar,
-  iCloudCalendarEvents,
-  iCloudCalendarStatus,
-  refreshICloudCalendars,
-  updateICloudCalendarSelection
-} from "../../src/server/icloudCalendar";
+import { createBackendApp } from "../../backend/body/app";
+import { getSessionUser } from "../../backend/body/head/session";
 
 function jsonResponse(payload: unknown, init?: ResponseInit) {
   return new Response(JSON.stringify(payload), {
@@ -24,30 +17,31 @@ export default async (request: Request) => {
     const user = getSessionUser(request.headers.get("cookie") ?? "");
     if (!user) return jsonResponse({ error: "Unauthorized" }, { status: 401 });
 
+    const app = createBackendApp();
     const url = new URL(request.url);
 
     if (url.pathname === "/api/icloud/status" && request.method === "GET") {
-      return jsonResponse(await iCloudCalendarStatus(user));
+      return jsonResponse(await app.externalCalendar.getICloudStatus.process({ userId: user.id }));
     }
 
     if (url.pathname === "/api/icloud/connect" && request.method === "POST") {
       const body = (await request.json()) as { appleId?: unknown; appPassword?: unknown };
-      return jsonResponse(await connectICloudCalendar(user, body));
+      return jsonResponse(await app.reactors.icloudCalendar.connect(user.id, body.appleId, body.appPassword));
     }
 
     if (url.pathname === "/api/icloud/calendars" && request.method === "GET") {
-      return jsonResponse(await refreshICloudCalendars(user));
+      return jsonResponse(await app.reactors.icloudCalendar.refreshCalendars(user.id));
     }
 
     if (url.pathname === "/api/icloud/calendars" && request.method === "PUT") {
       const body = (await request.json()) as { selectedCalendarIds?: unknown };
-      return jsonResponse(await updateICloudCalendarSelection(user, body.selectedCalendarIds));
+      return jsonResponse(await app.externalCalendar.updateICloudSelection.process({ userId: user.id, selectedCalendarIds: body.selectedCalendarIds }));
     }
 
     if (url.pathname === "/api/icloud/events" && request.method === "GET") {
       return jsonResponse(
-        await iCloudCalendarEvents(
-          user,
+        await app.reactors.icloudCalendar.getEvents(
+          user.id,
           url.searchParams.get("from") ?? "",
           url.searchParams.get("to") ?? "",
           url.searchParams.get("refresh") === "1"
@@ -56,7 +50,7 @@ export default async (request: Request) => {
     }
 
     if (url.pathname === "/api/icloud/disconnect" && request.method === "POST") {
-      return jsonResponse(await disconnectICloudCalendar(user));
+      return jsonResponse(await app.externalCalendar.disconnectICloud.process({ userId: user.id }));
     }
 
     return jsonResponse({ error: "Method not allowed" }, { status: 405 });

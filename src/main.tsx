@@ -48,165 +48,81 @@ import {
 } from "lucide-react";
 import "./styles.css";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  addDays,
+  addMonths,
+  browserUtcOffset,
+  createCalendarPeriod,
+  createMonthDays,
+  createTimeOptions,
+  dateFromDateTime,
+  datePart,
+  deadlineTone,
+  endOfMonth,
+  estimateToLabel,
+  externalEventDates,
+  externalEventTimeLabel,
+  externalTimedSegmentForDate,
+  formatDate,
+  formatMonthTileDay,
+  formatMonthTitle,
+  formatOptionalDate,
+  isMonday,
+  isMultiDayTimedExternalEvent,
+  isWeekend,
+  maskVisibleApiKey,
+  minutesBetween,
+  minutesToLabel,
+  minutesToTime,
+  minutesToTimeLabel,
+  nextVisibleDate,
+  normalizeTags,
+  normalizeTaskVisibleIn,
+  parseDurationInput,
+  plainTextFromHtml,
+  safeMarkdownHref,
+  sortByOrder,
+  sortedBoardTasks,
+  startOfMonth,
+  statuses,
+  timeFromDateTime,
+  timeToMinutes,
+  today,
+  uid,
+  type AppSettings,
+  type AppState,
+  type AuthUser,
+  type Booking,
+  type CalendarViewMode,
+  type DailyCapacity,
+  type DayTemplate,
+  type GoogleCalendarEvent,
+  type GoogleCalendarItem,
+  type GoogleCalendarState,
+  type ICloudCalendarItem,
+  type ICloudCalendarState,
+  type Task,
+  type TaskChecklistItem,
+  type TaskStatus,
+  type TaskVisibleIn,
+  type TreeFilterSettings,
+  type TreeViewMode,
+  type UserProfile,
+  type UserSettingsState
+} from "../frontend/body/domain";
+import { createApp } from "../frontend/body/app";
+import type { DayCapacity } from "../frontend/body/domain/rpus/getDayCapacityRpu";
+import type { EventsResult } from "../frontend/body/reactors/externalCalendarReactor";
 
-type TaskStatus = "Backlog" | "Ready" | "Started" | "Blocked" | "Done" | "Aborted";
-type TreeViewMode = "list" | "board" | "hierarchy";
-type CalendarViewMode = "days" | "month";
-type AuthUser = { id: number; email: string };
-type UserProfile = { name?: string; initials?: string; timezone?: string };
-type UserSettingsState = {
-  user: AuthUser;
-  profile: UserProfile;
-  apiKeyMasked?: string;
-  apiKeyLastUsedAt?: string;
-  apiKey?: string;
-};
-type GoogleCalendarItem = {
-  id: string;
-  summary: string;
-  color?: string;
-  selected: boolean;
-  syncedAt?: string;
-};
-type GoogleCalendarState = {
-  connected: boolean;
-  googleEmail?: string;
-  calendars: GoogleCalendarItem[];
-  connectedAt?: string;
-  updatedAt?: string;
-};
-type GoogleCalendarEvent = {
-  id: string;
-  provider: "google" | "icloud";
-  calendarId: string;
-  calendarSummary: string;
-  calendarColor?: string;
-  summary: string;
-  startAt: string;
-  endAt: string;
-  allDay: boolean;
-  blocksTime: boolean;
-  htmlLink?: string;
-  location?: string;
-  description?: string;
-  organizer?: string;
-  creator?: string;
-  attendeeSummary?: string;
-};
-type ICloudCalendarItem = GoogleCalendarItem;
-type ICloudCalendarState = {
-  connected: boolean;
-  appleId?: string;
-  calendars: ICloudCalendarItem[];
-  connectedAt?: string;
-  updatedAt?: string;
-};
-
-type Task = {
-  id: string;
-  title: string;
-  description?: string;
-  checklist?: TaskChecklistItem[];
-  tags?: string[];
-  visibleIn?: TaskVisibleIn;
-  dueDate?: string;
-  estimateMinutes?: number;
-  parentId?: string;
-  archived?: boolean;
-  archivedAt?: string;
-  status: TaskStatus;
-  done: boolean;
-  treeOrder: number;
-  listOrder: number;
-  boardOrder: number;
-};
-
-type TaskVisibleIn = {
-  list: boolean;
-  board: boolean;
-  hierarchy: boolean;
-};
-
-type TaskChecklistItem = {
-  id: string;
-  text: string;
-  done: boolean;
-};
-
-type Booking = {
-  id: string;
-  taskId?: string;
-  label?: string;
-  description?: string;
-  date: string;
-  startTime?: string;
-  durationMinutes: number;
-};
-
-type DayTemplateSlot = {
-  label: string;
-  description?: string;
-  startTime?: string;
-  durationMinutes: number;
-};
-
-type DayTemplate = {
-  id: string;
-  name: string;
-  slots: DayTemplateSlot[];
-  createdAt: string;
-};
-
-type DailyCapacity = {
-  dayCapacityMinutes: number;
-  planningCapacityMinutes: number;
-};
-
-type TreeFilterSettings = {
-  query: string;
-  statuses: TaskStatus[];
-  tags: string[];
-  showArchived: boolean;
-};
-
-type AppSettings = {
-  defaultTreeDurationMinutes: number;
-  defaultPrioDurationMinutes: number;
-  defaultTaskStatus: TaskStatus;
-  defaultDayCapacityMinutes: number;
-  defaultPlanningCapacityMinutes: number;
-  calendarStartTime: string;
-  calendarEndTime: string;
-  showWeekends: boolean;
-  visibleDayCount: number;
-  calendarView: CalendarViewMode;
-  taskView: TreeViewMode;
-  hierarchyExpandedTaskIds: string[];
-  treeFilters: TreeFilterSettings;
-  boardHiddenStatuses: TaskStatus[];
-  panelsCollapsed: {
-    tree: boolean;
-    prio: boolean;
-    cal: boolean;
-  };
-};
-
-type AppState = {
-  settings?: AppSettings;
-  dailyCapacities?: Record<string, DailyCapacity>;
-  tasks: Task[];
-  prioTaskIds: string[];
-  prioDurations?: Record<string, number>;
-  bookings: Booking[];
-  dayTemplates?: DayTemplate[];
-};
+const app = createApp();
+const domain = app.domain;
+const reactors = app.reactors;
 
 type DragPayload =
   | { kind: "tree-task"; taskId: string }
   | { kind: "prio-task"; taskId: string }
   | { kind: "booking"; bookingId: string };
 
-const statuses: TaskStatus[] = ["Backlog", "Ready", "Started", "Blocked", "Done", "Aborted"];
 const durationOptions = Array.from({ length: 15 }, (_, index) => 30 + index * 15);
 const estimateOptionGroups = [
   { label: "Klein", options: [30, 60, 90, 120] },
@@ -215,7 +131,53 @@ const estimateOptionGroups = [
 ];
 const estimateOptions = estimateOptionGroups.flatMap((group) => group.options);
 const minuteHeight = 1.1;
-const defaultTaskVisibleIn: TaskVisibleIn = { list: true, board: true, hierarchy: true };
+
+// Anzeige-Geometrie: ordnet sich ueberlappende Eintraege in Spalten an, damit
+// sie sich im Kalender nicht verdecken. Reine Portal-Darstellung.
+type TimedCalendarEntry =
+  | { kind: "booking"; id: string; startMinutes: number; endMinutes: number; booking: Booking }
+  | { kind: "external"; id: string; startMinutes: number; endMinutes: number; event: GoogleCalendarEvent };
+
+type TimedCalendarLayoutEntry = TimedCalendarEntry & {
+  columnIndex: number;
+  columnCount: number;
+};
+
+function layoutTimedEntries(entries: TimedCalendarEntry[]): TimedCalendarLayoutEntry[] {
+  const sortedEntries = [...entries].sort((a, b) => a.startMinutes - b.startMinutes || b.endMinutes - a.endMinutes);
+  const groups: TimedCalendarEntry[][] = [];
+  let activeGroup: TimedCalendarEntry[] = [];
+  let activeGroupEnd = -1;
+
+  for (const entry of sortedEntries) {
+    if (activeGroup.length === 0 || entry.startMinutes < activeGroupEnd) {
+      activeGroup.push(entry);
+      activeGroupEnd = Math.max(activeGroupEnd, entry.endMinutes);
+    } else {
+      groups.push(activeGroup);
+      activeGroup = [entry];
+      activeGroupEnd = entry.endMinutes;
+    }
+  }
+  if (activeGroup.length > 0) groups.push(activeGroup);
+
+  return groups.flatMap((group) => {
+    const columns: TimedCalendarEntry[][] = [];
+    const placed = group.map((entry) => {
+      let columnIndex = columns.findIndex((column) => {
+        const lastEntry = column[column.length - 1];
+        return lastEntry.endMinutes <= entry.startMinutes;
+      });
+      if (columnIndex === -1) {
+        columnIndex = columns.length;
+        columns.push([]);
+      }
+      columns[columnIndex].push(entry);
+      return { ...entry, columnIndex, columnCount: 1 };
+    });
+    return placed.map((entry) => ({ ...entry, columnCount: columns.length }));
+  });
+}
 
 const statusMeta: Record<TaskStatus, { label: string; icon: typeof Circle; className: string }> = {
   Backlog: { label: "Backlog", icon: Circle, className: "status-backlog" },
@@ -226,33 +188,6 @@ const statusMeta: Record<TaskStatus, { label: string; icon: typeof Circle; class
   Aborted: { label: "Aborted", icon: ArchiveX, className: "status-aborted" }
 };
 
-const today = new Date().toISOString().slice(0, 10);
-const defaultSettings: AppSettings = {
-  defaultTreeDurationMinutes: 30,
-  defaultPrioDurationMinutes: 30,
-  defaultTaskStatus: "Backlog",
-  defaultDayCapacityMinutes: 480,
-  defaultPlanningCapacityMinutes: 360,
-  calendarStartTime: "06:00",
-  calendarEndTime: "20:00",
-  showWeekends: false,
-  visibleDayCount: 7,
-  calendarView: "days",
-  taskView: "list",
-  hierarchyExpandedTaskIds: [],
-  treeFilters: {
-    query: "",
-    statuses: [],
-    tags: [],
-    showArchived: false
-  },
-  boardHiddenStatuses: [],
-  panelsCollapsed: {
-    tree: false,
-    prio: false,
-    cal: false
-  }
-};
 const dayCapacityOptions = Array.from({ length: 17 }, (_, index) => 120 + index * 30);
 const planningCapacityOptions = Array.from({ length: 17 }, (_, index) => 120 + index * 30);
 const visibleDayOptions = [7, 14, 21, 31];
@@ -260,242 +195,6 @@ const utcOffsetOptions = Array.from({ length: 27 }, (_, index) => index - 12).ma
   const sign = offset >= 0 ? "+" : "-";
   return `UTC${sign}${Math.abs(offset).toString().padStart(2, "0")}:00`;
 });
-
-function uid(prefix: string) {
-  return `${prefix}-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
-}
-
-function addDays(date: string, count: number) {
-  const next = new Date(`${date}T12:00:00`);
-  next.setDate(next.getDate() + count);
-  return next.toISOString().slice(0, 10);
-}
-
-function startOfMonth(date: string) {
-  return `${date.slice(0, 7)}-01`;
-}
-
-function addMonths(date: string, count: number) {
-  const next = new Date(`${startOfMonth(date)}T12:00:00`);
-  next.setMonth(next.getMonth() + count);
-  return next.toISOString().slice(0, 10);
-}
-
-function endOfMonth(date: string) {
-  return addDays(addMonths(date, 1), -1);
-}
-
-function createMonthDays(monthStart: string, showWeekends: boolean) {
-  const days: string[] = [];
-  let cursor = startOfMonth(monthStart);
-  const monthKey = cursor.slice(0, 7);
-  while (cursor.slice(0, 7) === monthKey) {
-    if (showWeekends || !isWeekend(cursor)) days.push(cursor);
-    cursor = addDays(cursor, 1);
-  }
-  return days;
-}
-
-function formatMonthTitle(monthStart: string) {
-  return new Intl.DateTimeFormat("de-DE", { month: "long", year: "numeric" }).format(new Date(`${monthStart}T12:00:00`));
-}
-
-function formatMonthTileDay(date: string) {
-  return new Intl.DateTimeFormat("de-DE", { day: "2-digit" }).format(new Date(`${date}T12:00:00`));
-}
-
-function formatDate(date: string) {
-  return new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" }).format(
-    new Date(`${date}T12:00:00`)
-  );
-}
-
-function isWeekend(date: string) {
-  const day = new Date(`${date}T12:00:00`).getDay();
-  return day === 0 || day === 6;
-}
-
-function isMonday(date: string) {
-  return new Date(`${date}T12:00:00`).getDay() === 1;
-}
-
-function formatOptionalDate(date?: string) {
-  return date ? formatDate(date) : "Keine Deadline";
-}
-
-function deadlineTone(dueDate?: string) {
-  if (!dueDate) return "";
-  const due = new Date(`${dueDate}T12:00:00`).getTime();
-  const current = new Date(`${today}T12:00:00`).getTime();
-  const daysUntilDue = Math.round((due - current) / 86_400_000);
-  if (daysUntilDue <= 0) return "deadline-due";
-  if (daysUntilDue <= 3) return "deadline-soon";
-  return "";
-}
-
-function dateFromDateTime(value: string) {
-  const date = new Date(value);
-  const year = date.getFullYear();
-  const month = (date.getMonth() + 1).toString().padStart(2, "0");
-  const day = date.getDate().toString().padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function datePart(value: string) {
-  return value.slice(0, 10);
-}
-
-function timeFromDateTime(value: string) {
-  const date = new Date(value);
-  return `${date.getHours().toString().padStart(2, "0")}:${date.getMinutes().toString().padStart(2, "0")}`;
-}
-
-function minutesBetween(startAt: string, endAt: string) {
-  return Math.max(0, Math.round((new Date(endAt).getTime() - new Date(startAt).getTime()) / 60_000));
-}
-
-function externalEventTimeLabel(event: GoogleCalendarEvent) {
-  const startDate = event.allDay ? datePart(event.startAt) : dateFromDateTime(event.startAt);
-  const endDate = event.allDay ? addDays(datePart(event.endAt), -1) : dateFromDateTime(event.endAt);
-  const formattedStartDate = formatDate(startDate);
-  const formattedEndDate = formatDate(endDate);
-  if (event.allDay) {
-    return startDate === endDate ? `${formattedStartDate}, ganztägig` : `${formattedStartDate} bis ${formattedEndDate}, ganztägig`;
-  }
-
-  const startTime = timeFromDateTime(event.startAt);
-  const endTime = timeFromDateTime(event.endAt);
-  return startDate === endDate
-    ? `${formattedStartDate}, ${startTime}-${endTime}`
-    : `${formattedStartDate}, ${startTime} bis ${formattedEndDate}, ${endTime}`;
-}
-
-function externalEventDates(event: GoogleCalendarEvent) {
-  const startDate = event.allDay ? datePart(event.startAt) : dateFromDateTime(event.startAt);
-  const endDate = event.allDay ? addDays(datePart(event.endAt), -1) : dateFromDateTime(event.endAt);
-  const dates: string[] = [];
-  let cursor = startDate;
-  while (cursor <= endDate) {
-    dates.push(cursor);
-    cursor = addDays(cursor, 1);
-  }
-  return dates.length > 0 ? dates : [startDate];
-}
-
-function isMultiDayTimedExternalEvent(event: GoogleCalendarEvent) {
-  return !event.allDay && dateFromDateTime(event.startAt) !== dateFromDateTime(event.endAt);
-}
-
-function externalTimedSegmentForDate(
-  event: GoogleCalendarEvent,
-  date: string,
-  calendarStartMinutes: number,
-  calendarEndMinutes: number
-) {
-  const startDate = dateFromDateTime(event.startAt);
-  const endDate = dateFromDateTime(event.endAt);
-  const rawStartMinutes = date === startDate ? timeToMinutes(timeFromDateTime(event.startAt)) : 0;
-  const rawEndMinutes = date === endDate ? timeToMinutes(timeFromDateTime(event.endAt)) : 24 * 60;
-  const startMinutes = Math.max(calendarStartMinutes, rawStartMinutes);
-  const endMinutes = Math.min(calendarEndMinutes, rawEndMinutes);
-  if (endMinutes <= startMinutes) return null;
-  return { startMinutes, endMinutes };
-}
-
-function externalBookedMinutes(
-  events: GoogleCalendarEvent[],
-  capacity: DailyCapacity,
-  date?: string,
-  calendarStartMinutes?: number,
-  calendarEndMinutes?: number
-) {
-  return events.reduce((sum, event) => {
-    if (!event.blocksTime) return sum;
-    if (event.allDay) return sum + capacity.dayCapacityMinutes;
-    if (isMultiDayTimedExternalEvent(event)) {
-      if (date === undefined || calendarStartMinutes === undefined || calendarEndMinutes === undefined) {
-        return sum + Math.min(capacity.dayCapacityMinutes, minutesBetween(event.startAt, event.endAt));
-      }
-      const segment = externalTimedSegmentForDate(event, date, calendarStartMinutes, calendarEndMinutes);
-      return sum + Math.min(capacity.dayCapacityMinutes, segment ? segment.endMinutes - segment.startMinutes : 0);
-    }
-    return sum + Math.min(capacity.dayCapacityMinutes, minutesBetween(event.startAt, event.endAt));
-  }, 0);
-}
-
-function capacityLevelFor(bookedMinutes: number, capacity: DailyCapacity) {
-  const redCapacityThreshold =
-    capacity.planningCapacityMinutes + (capacity.dayCapacityMinutes - capacity.planningCapacityMinutes) * 0.8;
-  if (bookedMinutes >= redCapacityThreshold) return "over-plan";
-  if (bookedMinutes >= capacity.planningCapacityMinutes * 0.8) return "near-plan";
-  return "under-plan";
-}
-
-function plainTextFromHtml(value?: string) {
-  if (!value) return "";
-  return value
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/p>/gi, "\n")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .trim();
-}
-
-function minutesToTimeLabel(minutes: number) {
-  const h = Math.floor(minutes / 60).toString().padStart(2, "0");
-  const m = (minutes % 60).toString().padStart(2, "0");
-  return `${h}:${m}`;
-}
-
-function parseDurationInput(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  const timeMatch = trimmed.match(/^(\d{1,2}):([0-5]\d)$/);
-  if (timeMatch) return Number(timeMatch[1]) * 60 + Number(timeMatch[2]);
-  const minutesMatch = trimmed.match(/^(\d+)$/);
-  if (minutesMatch) return Number(minutesMatch[1]);
-  const hourMinuteMatch = trimmed.match(/^(\d+(?:[.,]\d+)?)\s*h(?:\s*(\d{1,2})\s*m?)?$/i);
-  if (hourMinuteMatch) {
-    return Math.round(Number(hourMinuteMatch[1].replace(",", ".")) * 60) + Number(hourMinuteMatch[2] ?? 0);
-  }
-  return undefined;
-}
-
-function minutesToLabel(minutes: number) {
-  if (minutes < 60) return `${minutes}m`;
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return m ? `${h}h ${m}m` : `${h}h`;
-}
-
-function estimateToLabel(minutes?: number) {
-  if (!minutes) return "?";
-  const dayMinutes = 8 * 60;
-  const weekMinutes = 5 * dayMinutes;
-  if (minutes >= weekMinutes * 2 && minutes % weekMinutes === 0) return `${minutes / weekMinutes}w`;
-  if (minutes >= dayMinutes * 2 && minutes % dayMinutes === 0) return `${minutes / dayMinutes}d`;
-  return minutesToTimeLabel(minutes);
-}
-
-function statusAfterMoveToPrio(status: TaskStatus) {
-  if (status === "Backlog") return "Ready";
-  if (status === "Blocked") return "Started";
-  return status;
-}
-
-function safeMarkdownHref(href: string) {
-  const trimmed = href.trim();
-  const normalized = trimmed.startsWith("www.") ? `https://${trimmed}` : trimmed;
-  try {
-    const url = new URL(normalized);
-    return ["http:", "https:", "mailto:"].includes(url.protocol) ? normalized : undefined;
-  } catch {
-    return undefined;
-  }
-}
 
 function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
   const nodes: ReactNode[] = [];
@@ -544,284 +243,11 @@ function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
   return nodes;
 }
 
-function sortByOrder<T extends { id: string }>(items: T[], order: (item: T) => number | undefined) {
-  return [...items].sort((a, b) => (order(a) ?? 0) - (order(b) ?? 0) || a.id.localeCompare(b.id));
-}
-
-function sortedTasks(tasks: Task[]) {
-  return sortByOrder(tasks, (task) => task.treeOrder);
-}
-
-function sortedListTasks(tasks: Task[]) {
-  return sortByOrder(tasks, (task) => task.listOrder);
-}
-
-function sortedBoardTasks(tasks: Task[]) {
-  return sortByOrder(tasks, (task) => task.boardOrder);
-}
-
-function normalizeTaskVisibleIn(visibleIn?: Partial<TaskVisibleIn>): TaskVisibleIn {
-  return {
-    list: visibleIn?.list ?? true,
-    board: visibleIn?.board ?? true,
-    hierarchy: visibleIn?.hierarchy ?? true
-  };
-}
-
-function moveItemToDropTarget<T>(items: T[], fromIndex: number, toIndex: number) {
-  if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return items;
-  const next = [...items];
-  const [item] = next.splice(fromIndex, 1);
-  next.splice(toIndex, 0, item);
-  return next;
-}
-
-function timeToMinutes(time: string) {
-  const [hour, minute] = time.split(":").map(Number);
-  return hour * 60 + minute;
-}
-
-function minutesToTime(minutes: number) {
-  const hour = Math.floor(minutes / 60).toString().padStart(2, "0");
-  const minute = (minutes % 60).toString().padStart(2, "0");
-  return `${hour}:${minute}`;
-}
-
-function durationForPlanning(taskDurationMinutes: number | undefined, defaultPrioDurationMinutes: number) {
-  return taskDurationMinutes && taskDurationMinutes <= 120 ? taskDurationMinutes : defaultPrioDurationMinutes;
-}
-
-function normalizeTreeFilters(filters?: Partial<TreeFilterSettings> | null): TreeFilterSettings {
-  return {
-    query: filters?.query ?? "",
-    statuses: (filters?.statuses ?? []).filter((status): status is TaskStatus => statuses.includes(status as TaskStatus)),
-    tags: normalizeTags(filters?.tags),
-    showArchived: filters?.showArchived ?? false
-  };
-}
-
-function normalizeTaskStatuses(rawStatuses?: unknown[] | null): TaskStatus[] {
-  return (rawStatuses ?? []).filter((status): status is TaskStatus => statuses.includes(status as TaskStatus));
-}
-
-function normalizeTags(rawTags?: unknown[] | string | null): string[] {
-  const values = Array.isArray(rawTags) ? rawTags : typeof rawTags === "string" ? rawTags.split(",") : [];
-  return Array.from(
-    new Set(
-      values
-        .map((tag) => String(tag).trim())
-        .filter(Boolean)
-    )
-  );
-}
-
-function normalizeTasks(tasks: Task[]): Task[] {
-  const taskIds = new Set(tasks.map((task) => task.id));
-  const cleanedTasks = tasks.map((task, index) => {
-    const legacyOrder = task.treeOrder ?? index;
-    const rawChecklist = Array.isArray(task.checklist) ? task.checklist : [];
-    return {
-    ...task,
-    parentId: task.parentId && task.parentId !== task.id && taskIds.has(task.parentId) ? task.parentId : undefined,
-    checklist: rawChecklist
-      .map((item, itemIndex): TaskChecklistItem | null => {
-        if (typeof item === "string") return { id: uid("check"), text: item, done: false };
-        if (!item || typeof item !== "object") return null;
-        const rawItem = item as Partial<TaskChecklistItem>;
-        return {
-          id: typeof rawItem.id === "string" ? rawItem.id : uid(`check-${index}-${itemIndex}`),
-          text: typeof rawItem.text === "string" ? rawItem.text : "",
-          done: Boolean(rawItem.done)
-        };
-      })
-      .filter((item): item is TaskChecklistItem => Boolean(item)),
-    visibleIn: normalizeTaskVisibleIn(task.visibleIn),
-    tags: normalizeTags(task.tags),
-    archived: task.archived ?? false,
-    treeOrder: task.treeOrder ?? legacyOrder,
-    listOrder: task.listOrder ?? legacyOrder,
-    boardOrder: task.boardOrder ?? legacyOrder
-  };
-  });
-  const byParent = new Map<string, Task[]>();
-  for (const task of sortedTasks(cleanedTasks)) {
-    const parentKey = task.parentId ?? "";
-    byParent.set(parentKey, [...(byParent.get(parentKey) ?? []), task]);
-  }
-  const byStatus = new Map<TaskStatus, Task[]>();
-  for (const task of sortedBoardTasks(cleanedTasks)) {
-    byStatus.set(task.status, [...(byStatus.get(task.status) ?? []), task]);
-  }
-  const byList = sortedListTasks(cleanedTasks);
-  return cleanedTasks.map((task) => {
-    const siblings = byParent.get(task.parentId ?? "") ?? [];
-    const statusSiblings = byStatus.get(task.status) ?? [];
-    return {
-      ...task,
-      treeOrder: siblings.findIndex((sibling) => sibling.id === task.id),
-      listOrder: byList.findIndex((candidate) => candidate.id === task.id),
-      boardOrder: statusSiblings.findIndex((candidate) => candidate.id === task.id)
-    };
-  });
-}
-
-function normalizeDayTemplates(rawTemplates?: unknown[] | null): DayTemplate[] {
-  return (rawTemplates ?? [])
-    .map((item): DayTemplate | null => {
-      const rawTemplate = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
-      if (typeof rawTemplate.id !== "string" || typeof rawTemplate.name !== "string") return null;
-      const rawSlots = Array.isArray(rawTemplate.slots) ? rawTemplate.slots : [];
-      const slots = rawSlots
-        .map((slot): DayTemplateSlot | null => {
-          const rawSlot = slot && typeof slot === "object" ? (slot as Record<string, unknown>) : {};
-          const durationMinutes = Number(rawSlot.durationMinutes);
-          if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) return null;
-          return {
-            label: typeof rawSlot.label === "string" && rawSlot.label.trim() ? rawSlot.label : "Reservierung",
-            description: typeof rawSlot.description === "string" ? rawSlot.description : "",
-            startTime: typeof rawSlot.startTime === "string" ? rawSlot.startTime : undefined,
-            durationMinutes
-          };
-        })
-        .filter((slot): slot is DayTemplateSlot => Boolean(slot));
-      return {
-        id: rawTemplate.id,
-        name: rawTemplate.name,
-        slots,
-        createdAt: typeof rawTemplate.createdAt === "string" ? rawTemplate.createdAt : new Date().toISOString()
-      };
-    })
-    .filter((template): template is DayTemplate => Boolean(template));
-}
-
-type TimedCalendarEntry =
-  | { kind: "booking"; id: string; startMinutes: number; endMinutes: number; booking: Booking }
-  | { kind: "external"; id: string; startMinutes: number; endMinutes: number; event: GoogleCalendarEvent };
-
-type TimedCalendarLayoutEntry = TimedCalendarEntry & {
-  columnIndex: number;
-  columnCount: number;
-};
-
-function layoutTimedEntries(entries: TimedCalendarEntry[]): TimedCalendarLayoutEntry[] {
-  const sortedEntries = [...entries].sort((a, b) => a.startMinutes - b.startMinutes || b.endMinutes - a.endMinutes);
-  const groups: TimedCalendarEntry[][] = [];
-  let activeGroup: TimedCalendarEntry[] = [];
-  let activeGroupEnd = -1;
-
-  for (const entry of sortedEntries) {
-    if (activeGroup.length === 0 || entry.startMinutes < activeGroupEnd) {
-      activeGroup.push(entry);
-      activeGroupEnd = Math.max(activeGroupEnd, entry.endMinutes);
-    } else {
-      groups.push(activeGroup);
-      activeGroup = [entry];
-      activeGroupEnd = entry.endMinutes;
-    }
-  }
-  if (activeGroup.length > 0) groups.push(activeGroup);
-
-  return groups.flatMap((group) => {
-    const columns: TimedCalendarEntry[][] = [];
-    const placed = group.map((entry) => {
-      let columnIndex = columns.findIndex((column) => {
-        const lastEntry = column[column.length - 1];
-        return lastEntry.endMinutes <= entry.startMinutes;
-      });
-      if (columnIndex === -1) {
-        columnIndex = columns.length;
-        columns.push([]);
-      }
-      columns[columnIndex].push(entry);
-      return { ...entry, columnIndex, columnCount: 1 };
-    });
-    return placed.map((entry) => ({ ...entry, columnCount: columns.length }));
-  });
-}
-
-function normalizeState(rawState: AppState): AppState {
-  const rawTaskView = rawState.settings?.taskView;
-  const rawCalendarView = rawState.settings?.calendarView;
-  return {
-    ...rawState,
-    settings: {
-      ...defaultSettings,
-      ...(rawState.settings ?? {}),
-      defaultTaskStatus: statuses.includes(rawState.settings?.defaultTaskStatus as TaskStatus)
-        ? (rawState.settings?.defaultTaskStatus as TaskStatus)
-        : defaultSettings.defaultTaskStatus,
-      calendarView: rawCalendarView === "month" ? "month" : "days",
-      taskView: rawTaskView === "board" || rawTaskView === "hierarchy" ? rawTaskView : "list",
-      hierarchyExpandedTaskIds: Array.isArray(rawState.settings?.hierarchyExpandedTaskIds)
-        ? rawState.settings.hierarchyExpandedTaskIds.filter((id): id is string => typeof id === "string")
-        : [],
-      treeFilters: normalizeTreeFilters(rawState.settings?.treeFilters),
-      boardHiddenStatuses: normalizeTaskStatuses(rawState.settings?.boardHiddenStatuses),
-      panelsCollapsed: {
-        ...defaultSettings.panelsCollapsed,
-        ...(rawState.settings?.panelsCollapsed ?? {})
-      }
-    },
-    dailyCapacities: rawState.dailyCapacities ?? {},
-    tasks: normalizeTasks(rawState.tasks ?? []),
-    prioTaskIds: rawState.prioTaskIds ?? [],
-    prioDurations: rawState.prioDurations ?? {},
-    dayTemplates: normalizeDayTemplates(rawState.dayTemplates),
-    bookings: (rawState.bookings ?? []).map((booking) => ({
-      ...booking,
-      label: booking.label ?? "",
-      description: booking.description ?? ""
-    }))
-  };
-}
-
-function createTimeOptions(startTime: string, endTime: string) {
-  const startMinutes = timeToMinutes(startTime);
-  const endMinutes = timeToMinutes(endTime);
-  const count = Math.max(1, Math.floor((endMinutes - startMinutes) / 15) + 1);
-  return Array.from({ length: count }, (_, index) => minutesToTime(startMinutes + index * 15));
-}
-
-function createCalendarPeriod(startDate: string, visibleDayCount: number, showWeekends: boolean) {
-  const nextDays: string[] = [];
-  let cursor = startDate;
-  while (nextDays.length < visibleDayCount) {
-    if (showWeekends || !isWeekend(cursor)) nextDays.push(cursor);
-    cursor = addDays(cursor, 1);
-  }
-  return nextDays;
-}
-
-function nextVisibleDate(date: string, showWeekends: boolean) {
-  let cursor = addDays(date, 1);
-  while (!showWeekends && isWeekend(cursor)) cursor = addDays(cursor, 1);
-  return cursor;
-}
-
-function browserUtcOffset() {
-  const offsetMinutes = -new Date().getTimezoneOffset();
-  const sign = offsetMinutes >= 0 ? "+" : "-";
-  const absoluteMinutes = Math.abs(offsetMinutes);
-  const hours = Math.floor(absoluteMinutes / 60).toString().padStart(2, "0");
-  return `UTC${sign}${hours}:00`;
-}
-
-function maskVisibleApiKey(apiKey: string) {
-  return `••••••••••••••••${apiKey.slice(-5)}`;
-}
-
-async function apiErrorMessage(response: Response) {
-  const text = await response.text();
-  try {
-    const payload = JSON.parse(text) as { error?: unknown };
-    return typeof payload.error === "string" ? payload.error : text;
-  } catch {
-    return text;
-  }
-}
-
 function App() {
-  const [state, setState] = useState<AppState | null>(null);
+  // renderRevision: Render-Trigger, gespiegelt aus der Store-Revision (Pull).
+  // loaded: ob ein Taskspace im Store liegt. Das Portal haelt keinen AppState.
+  const [renderRevision, setRenderRevision] = useState(0);
+  const [loaded, setLoaded] = useState(false);
   const [authRequired, setAuthRequired] = useState(false);
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [authEmail, setAuthEmail] = useState("");
@@ -876,42 +302,25 @@ function App() {
   const settingsMenuRef = useRef<HTMLDivElement | null>(null);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
-  const stateRef = useRef<AppState | null>(null);
-  const cleanLoadedStateRef = useRef<AppState | null>(null);
-  const dirtyRef = useRef(false);
-  const hasLoadedRef = useRef(false);
+  const lastSavedRevisionRef = useRef(0);
   const saveTimerRef = useRef<number | null>(null);
-  const stateVersionRef = useRef(0);
   const prefetchedUserIdRef = useRef<number | null>(null);
   const handledTaskHashRef = useRef("");
   const saveCurrentStateRef = useRef<(options?: { keepalive?: boolean }) => Promise<void>>(async () => undefined);
 
-  async function refreshAuthUser() {
-    try {
-      const response = await fetch("/api/auth/me", { credentials: "same-origin" });
-      if (!response.ok) return;
-      const payload = (await response.json()) as { user: AuthUser };
-      setAuthUser(payload.user);
-    } catch {
-      // Auth status is optional for filesystem mode and should not block loading.
-    }
-  }
-
   async function loadState() {
     try {
-      const response = await fetch("/api/state", { credentials: "same-origin" });
-      if (response.status === 401) {
+      const result = await reactors.session.loadSession();
+      if (result.kind === "unauthorized") {
         setAuthRequired(true);
         return;
       }
-      if (!response.ok) throw new Error(await response.text());
-      const normalizedState = normalizeState(await response.json());
-      stateRef.current = normalizedState;
-      cleanLoadedStateRef.current = normalizedState;
-      setState(normalizedState);
+      lastSavedRevisionRef.current = domain.getRevision.process();
+      setLoaded(true);
+      setRenderRevision(domain.getRevision.process());
       setLoadError("");
       setAuthRequired(false);
-      void refreshAuthUser();
+      setAuthUser(result.user);
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : "State konnte nicht geladen werden.");
       setSaveState("error");
@@ -934,22 +343,12 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!state) return;
-    stateRef.current = state;
-    if (state === cleanLoadedStateRef.current) {
-      hasLoadedRef.current = true;
-      dirtyRef.current = false;
-      setSaveState("saved");
-      return;
-    }
-    if (!hasLoadedRef.current) {
-      hasLoadedRef.current = true;
+    if (!loaded) return;
+    if (renderRevision === lastSavedRevisionRef.current) {
       setSaveState("saved");
       return;
     }
 
-    stateVersionRef.current += 1;
-    dirtyRef.current = true;
     setSaveState("dirty");
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
     saveTimerRef.current = window.setTimeout(() => {
@@ -959,7 +358,7 @@ function App() {
     return () => {
       if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
     };
-  }, [state]);
+  }, [renderRevision, loaded]);
 
   useEffect(() => {
     if (saveState === "saved") setChangedTaskId(null);
@@ -974,31 +373,18 @@ function App() {
   }, [authUser]);
 
   async function saveCurrentState(options: { keepalive?: boolean } = {}) {
-    const currentState = stateRef.current;
-    if (!currentState || !dirtyRef.current) return;
+    const revisionToSave = domain.getRevision.process();
+    if (revisionToSave === lastSavedRevisionRef.current) return;
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
 
-    const version = stateVersionRef.current;
     setSaveState("saving");
     setSaveError("");
     try {
-      const response = await fetch("/api/state", {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(currentState),
-        credentials: "same-origin",
-        keepalive: options.keepalive
-      });
-      if (!response.ok) throw new Error(await response.text());
-      if (version === stateVersionRef.current) {
-        dirtyRef.current = false;
-        cleanLoadedStateRef.current = currentState;
-        setSaveState("saved");
-      } else {
-        setSaveState("dirty");
-      }
+      await domain.saveTaskspace.process({ keepalive: options.keepalive });
+      lastSavedRevisionRef.current = revisionToSave;
+      // Waehrend des Speicherns kann sich der Store geaendert haben.
+      setSaveState(domain.getRevision.process() === revisionToSave ? "saved" : "dirty");
     } catch (error) {
-      dirtyRef.current = true;
       setSaveError(error instanceof Error ? error.message : "Speichern fehlgeschlagen.");
       setSaveState("error");
     }
@@ -1008,13 +394,9 @@ function App() {
 
   async function requestLoginOtp() {
     setAuthError("");
-    const response = await fetch("/api/auth/request-otp", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: authEmail })
-    });
-    if (!response.ok) {
-      setAuthError(await response.text());
+    const result = await reactors.session.requestOtp(authEmail);
+    if (!result.ok) {
+      setAuthError(result.message);
       return;
     }
     setAuthStep("otp");
@@ -1022,237 +404,172 @@ function App() {
 
   async function verifyLoginOtp() {
     setAuthError("");
-    const response = await fetch("/api/auth/verify", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      credentials: "same-origin",
-      body: JSON.stringify({ email: authEmail, otp: authOtp })
-    });
-    if (!response.ok) {
-      setAuthError(await response.text());
+    const result = await reactors.session.verifyOtp(authEmail, authOtp);
+    if (result.kind === "error") {
+      setAuthError(result.message);
       return;
     }
-    const payload = (await response.json()) as { user: AuthUser };
-    setAuthUser(payload.user);
+    setAuthUser(result.user);
     setAuthRequired(false);
     setAuthOtp("");
-    await loadState();
+    if (result.loaded) {
+      lastSavedRevisionRef.current = domain.getRevision.process();
+      setLoaded(true);
+      setRenderRevision(domain.getRevision.process());
+      setLoadError("");
+    }
+  }
+
+  function applyUserSettingsResult(result: { kind: "ok"; settings: UserSettingsState } | { kind: "error"; message: string }) {
+    if (result.kind === "error") {
+      setUserSettingsError(result.message);
+      return;
+    }
+    setUserSettings(result.settings);
   }
 
   async function loadUserSettings() {
     setUserSettingsError("");
-    try {
-      const response = await fetch("/api/user-settings", { credentials: "same-origin" });
-      if (!response.ok) throw new Error(await apiErrorMessage(response));
-      setUserSettings((await response.json()) as UserSettingsState);
-    } catch (error) {
-      setUserSettingsError(error instanceof Error ? error.message : "User Settings konnten nicht geladen werden.");
-    }
+    applyUserSettingsResult(await reactors.userSettings.load());
   }
 
   async function saveUserProfile(profile: UserProfile) {
     setUserSettingsError("");
-    try {
-      const response = await fetch("/api/user-settings", {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ profile })
-      });
-      if (!response.ok) throw new Error(await apiErrorMessage(response));
-      setUserSettings((await response.json()) as UserSettingsState);
-    } catch (error) {
-      setUserSettingsError(error instanceof Error ? error.message : "Profil konnte nicht gespeichert werden.");
-    }
+    applyUserSettingsResult(await reactors.userSettings.saveProfile(profile));
   }
 
   async function rotateUserApiKey() {
     setUserSettingsError("");
-    try {
-      const response = await fetch("/api/user-settings/api-key", {
-        method: "POST",
-        credentials: "same-origin"
-      });
-      if (!response.ok) throw new Error(await apiErrorMessage(response));
-      setUserSettings((await response.json()) as UserSettingsState);
-    } catch (error) {
-      setUserSettingsError(error instanceof Error ? error.message : "API-Key konnte nicht erneuert werden.");
+    applyUserSettingsResult(await reactors.userSettings.rotateApiKey());
+  }
+
+  function applyGoogleCalendarResult(result: { kind: "ok"; state: GoogleCalendarState } | { kind: "error"; message: string }) {
+    if (result.kind === "error") {
+      setGoogleCalendarError(result.message);
+      return;
     }
+    setGoogleCalendar(result.state);
   }
 
   async function loadGoogleCalendar(refresh = false) {
     setGoogleCalendarError("");
-    try {
-      const response = await fetch(refresh ? "/api/gcal/calendars" : "/api/gcal/status", { credentials: "same-origin" });
-      if (!response.ok) throw new Error(await apiErrorMessage(response));
-      setGoogleCalendar((await response.json()) as GoogleCalendarState);
-    } catch (error) {
-      setGoogleCalendarError(error instanceof Error ? error.message : "Google Calendar konnte nicht geladen werden.");
-    }
+    applyGoogleCalendarResult(await reactors.externalCalendar.loadGoogle(refresh));
   }
 
   async function updateGoogleCalendarSelection(selectedCalendarIds: string[]) {
     setGoogleCalendarError("");
-    try {
-      const response = await fetch("/api/gcal/calendars", {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ selectedCalendarIds })
-      });
-      if (!response.ok) throw new Error(await apiErrorMessage(response));
-      setGoogleCalendar((await response.json()) as GoogleCalendarState);
-    } catch (error) {
-      setGoogleCalendarError(error instanceof Error ? error.message : "Kalenderauswahl konnte nicht gespeichert werden.");
-    }
+    applyGoogleCalendarResult(await reactors.externalCalendar.updateGoogleSelection(selectedCalendarIds));
   }
 
   async function disconnectGoogleCalendar() {
     setGoogleCalendarError("");
-    try {
-      const response = await fetch("/api/gcal/disconnect", {
-        method: "POST",
-        credentials: "same-origin"
-      });
-      if (!response.ok) throw new Error(await apiErrorMessage(response));
-      setGoogleCalendar((await response.json()) as GoogleCalendarState);
-    } catch (error) {
-      setGoogleCalendarError(error instanceof Error ? error.message : "Google Calendar konnte nicht getrennt werden.");
+    applyGoogleCalendarResult(await reactors.externalCalendar.disconnectGoogle());
+  }
+
+  function applyGoogleEventsResult(result: EventsResult) {
+    if (result.kind === "skip") {
+      setGoogleCalendarEvents([]);
+      setGoogleCalendarEventsError("");
+    } else if (result.kind === "ok") {
+      setGoogleCalendarEvents(result.events);
+    } else {
+      setGoogleCalendarEventsError(result.message);
     }
   }
 
   async function loadGoogleCalendarEvents(from: string, to: string, forceRefresh = false) {
-    if (!googleCalendar?.connected || !googleCalendar.calendars.some((calendar) => calendar.selected)) {
-      setGoogleCalendarEvents([]);
-      setGoogleCalendarEventsError("");
-      return;
-    }
     setGoogleCalendarEventsError("");
     if (forceRefresh) setGoogleCalendarEventsLoading(true);
     try {
-      const response = await fetch(
-        `/api/gcal/events?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${forceRefresh ? "&refresh=1" : ""}`,
-        { credentials: "same-origin" }
-      );
-      if (!response.ok) throw new Error(await apiErrorMessage(response));
-      const payload = (await response.json()) as { events?: GoogleCalendarEvent[] };
-      setGoogleCalendarEvents(payload.events ?? []);
-    } catch (error) {
-      setGoogleCalendarEventsError(error instanceof Error ? error.message : "Google Calendar Events konnten nicht geladen werden.");
+      applyGoogleEventsResult(await reactors.externalCalendar.loadGoogleEvents(googleCalendar, from, to, forceRefresh));
     } finally {
       if (forceRefresh) setGoogleCalendarEventsLoading(false);
     }
   }
 
+  function applyICloudCalendarResult(result: { kind: "ok"; state: ICloudCalendarState } | { kind: "error"; message: string }) {
+    if (result.kind === "error") {
+      setICloudCalendarError(result.message);
+      return;
+    }
+    setICloudCalendar(result.state);
+  }
+
   async function loadICloudCalendar(refresh = false) {
     setICloudCalendarError("");
-    try {
-      const response = await fetch(refresh ? "/api/icloud/calendars" : "/api/icloud/status", { credentials: "same-origin" });
-      if (!response.ok) throw new Error(await apiErrorMessage(response));
-      setICloudCalendar((await response.json()) as ICloudCalendarState);
-    } catch (error) {
-      setICloudCalendarError(error instanceof Error ? error.message : "iCloud Kalender konnten nicht geladen werden.");
-    }
+    applyICloudCalendarResult(await reactors.externalCalendar.loadICloud(refresh));
   }
 
   async function connectICloudCalendar(appleId: string, appPassword: string) {
     setICloudCalendarError("");
-    try {
-      const response = await fetch("/api/icloud/connect", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ appleId, appPassword })
-      });
-      if (!response.ok) throw new Error(await apiErrorMessage(response));
-      setICloudCalendar((await response.json()) as ICloudCalendarState);
-    } catch (error) {
-      setICloudCalendarError(error instanceof Error ? error.message : "iCloud konnte nicht verbunden werden.");
-    }
+    applyICloudCalendarResult(await reactors.externalCalendar.connectICloud(appleId, appPassword));
   }
 
   async function updateICloudCalendarSelection(selectedCalendarIds: string[]) {
     setICloudCalendarError("");
-    try {
-      const response = await fetch("/api/icloud/calendars", {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ selectedCalendarIds })
-      });
-      if (!response.ok) throw new Error(await apiErrorMessage(response));
-      setICloudCalendar((await response.json()) as ICloudCalendarState);
-    } catch (error) {
-      setICloudCalendarError(error instanceof Error ? error.message : "iCloud-Kalenderauswahl konnte nicht gespeichert werden.");
-    }
+    applyICloudCalendarResult(await reactors.externalCalendar.updateICloudSelection(selectedCalendarIds));
   }
 
   async function disconnectICloudCalendar() {
     setICloudCalendarError("");
-    try {
-      const response = await fetch("/api/icloud/disconnect", {
-        method: "POST",
-        credentials: "same-origin"
-      });
-      if (!response.ok) throw new Error(await apiErrorMessage(response));
-      setICloudCalendar((await response.json()) as ICloudCalendarState);
-    } catch (error) {
-      setICloudCalendarError(error instanceof Error ? error.message : "iCloud konnte nicht getrennt werden.");
+    applyICloudCalendarResult(await reactors.externalCalendar.disconnectICloud());
+  }
+
+  function applyICloudEventsResult(result: EventsResult) {
+    if (result.kind === "skip") {
+      setICloudCalendarEvents([]);
+      setICloudCalendarEventsError("");
+    } else if (result.kind === "ok") {
+      setICloudCalendarEvents(result.events);
+    } else {
+      setICloudCalendarEventsError(result.message);
     }
   }
 
   async function loadICloudCalendarEvents(from: string, to: string, forceRefresh = false) {
-    if (!iCloudCalendar?.connected || !iCloudCalendar.calendars.some((calendar) => calendar.selected)) {
-      setICloudCalendarEvents([]);
-      setICloudCalendarEventsError("");
-      return;
-    }
     setICloudCalendarEventsError("");
     if (forceRefresh) setICloudCalendarEventsLoading(true);
     try {
-      const response = await fetch(
-        `/api/icloud/events?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${forceRefresh ? "&refresh=1" : ""}`,
-        { credentials: "same-origin" }
-      );
-      if (!response.ok) throw new Error(await apiErrorMessage(response));
-      const payload = (await response.json()) as { events?: GoogleCalendarEvent[] };
-      setICloudCalendarEvents(payload.events ?? []);
-    } catch (error) {
-      setICloudCalendarEventsError(error instanceof Error ? error.message : "iCloud Events konnten nicht geladen werden.");
+      applyICloudEventsResult(await reactors.externalCalendar.loadICloudEvents(iCloudCalendar, from, to, forceRefresh));
     } finally {
       if (forceRefresh) setICloudCalendarEventsLoading(false);
     }
   }
 
   async function refreshExternalCalendarEvents() {
-    await Promise.all([
-      loadGoogleCalendarEvents(visibleRangeStart, visibleRangeEnd, true),
-      loadICloudCalendarEvents(visibleRangeStart, visibleRangeEnd, true)
-    ]);
+    setGoogleCalendarEventsLoading(true);
+    setICloudCalendarEventsLoading(true);
+    setGoogleCalendarEventsError("");
+    setICloudCalendarEventsError("");
+    try {
+      const { google, icloud } = await reactors.externalCalendar.refreshAllEvents(
+        googleCalendar,
+        iCloudCalendar,
+        visibleRangeStart,
+        visibleRangeEnd
+      );
+      applyGoogleEventsResult(google);
+      applyICloudEventsResult(icloud);
+    } finally {
+      setGoogleCalendarEventsLoading(false);
+      setICloudCalendarEventsLoading(false);
+    }
   }
 
   async function logout() {
-    try {
-      await fetch("/api/auth/logout", {
-        method: "POST",
-        credentials: "same-origin"
-      });
-    } finally {
-      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
-      stateRef.current = null;
-      cleanLoadedStateRef.current = null;
-      dirtyRef.current = false;
-      hasLoadedRef.current = false;
-      setState(null);
-      setAuthUser(null);
-      prefetchedUserIdRef.current = null;
-      setAuthRequired(true);
-      setAuthStep("email");
-      setAuthOtp("");
-      setSaveError("");
-      setLoadError("");
-      setSaveState("idle");
-    }
+    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+    await reactors.session.logout();
+    lastSavedRevisionRef.current = domain.getRevision.process();
+    setLoaded(false);
+    setRenderRevision(domain.getRevision.process());
+    setAuthUser(null);
+    prefetchedUserIdRef.current = null;
+    setAuthRequired(true);
+    setAuthStep("email");
+    setAuthOtp("");
+    setSaveError("");
+    setLoadError("");
+    setSaveState("idle");
   }
 
   useEffect(() => {
@@ -1263,7 +580,7 @@ function App() {
       if (document.visibilityState === "hidden") flush();
     };
     const retryOnOnline = () => {
-      if (dirtyRef.current) void saveCurrentStateRef.current();
+      if (domain.getRevision.process() !== lastSavedRevisionRef.current) void saveCurrentStateRef.current();
     };
 
     window.addEventListener("beforeunload", flush);
@@ -1280,102 +597,35 @@ function App() {
     };
   }, []);
 
-  const settings = state?.settings ?? defaultSettings;
+  const settings = useMemo(() => domain.getSettings.process(), [renderRevision]);
   const hierarchyExpandedTaskIds = useMemo(
     () => Array.from(new Set([...(settings.hierarchyExpandedTaskIds ?? []), ...forcedHierarchyExpandedIds])),
     [forcedHierarchyExpandedIds, settings.hierarchyExpandedTaskIds]
   );
-  const defaultCapacity: DailyCapacity = {
-    dayCapacityMinutes: settings.defaultDayCapacityMinutes,
-    planningCapacityMinutes: settings.defaultPlanningCapacityMinutes
-  };
   const calendarStartMinutes = timeToMinutes(settings.calendarStartTime);
   const calendarEndMinutes = timeToMinutes(settings.calendarEndTime);
   const timeOptions = useMemo(
     () => createTimeOptions(settings.calendarStartTime, settings.calendarEndTime),
     [settings.calendarEndTime, settings.calendarStartTime]
   );
-  const taskById = useMemo(() => new Map(state?.tasks.map((task) => [task.id, task]) ?? []), [state?.tasks]);
-  const bookingCountByTaskId = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const booking of state?.bookings ?? []) {
-      if (booking.taskId) counts.set(booking.taskId, (counts.get(booking.taskId) ?? 0) + 1);
-    }
-    return counts;
-  }, [state?.bookings]);
-  const bookedMinutesByTaskId = useMemo(() => {
-    const minutes = new Map<string, number>();
-    for (const booking of state?.bookings ?? []) {
-      let taskId = booking.taskId;
-      const visitedTaskIds = new Set<string>();
-      while (taskId && !visitedTaskIds.has(taskId)) {
-        const task = taskById.get(taskId);
-        if (!task) break;
-        visitedTaskIds.add(taskId);
-        minutes.set(taskId, (minutes.get(taskId) ?? 0) + booking.durationMinutes);
-        taskId = task.parentId;
-      }
-    }
-    return minutes;
-  }, [state?.bookings, taskById]);
-  const childCountByTaskId = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const task of state?.tasks ?? []) {
-      if (task.parentId) counts.set(task.parentId, (counts.get(task.parentId) ?? 0) + 1);
-    }
-    return counts;
-  }, [state?.tasks]);
-  const activeChildCountByTaskId = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const task of state?.tasks ?? []) {
-      if (task.parentId && !task.archived) counts.set(task.parentId, (counts.get(task.parentId) ?? 0) + 1);
-    }
-    return counts;
-  }, [state?.tasks]);
-  const parentTitleByTaskId = useMemo(() => {
-    const parentTitles = new Map<string, string>();
-    for (const task of state?.tasks ?? []) {
-      if (task.parentId) parentTitles.set(task.id, taskById.get(task.parentId)?.title ?? "");
-    }
-    return parentTitles;
-  }, [state?.tasks, taskById]);
-  const tasksByParentId = useMemo(() => {
-    const children = new Map<string, Task[]>();
-    for (const task of state?.tasks ?? []) {
-      const parentKey = task.parentId ?? "";
-      children.set(parentKey, [...(children.get(parentKey) ?? []), task]);
-    }
-    for (const [parentKey, parentTasks] of children.entries()) children.set(parentKey, sortedTasks(parentTasks));
-    return children;
-  }, [state?.tasks]);
+  const taskById = useMemo(() => domain.getTaskById.process(), [renderRevision]);
+  const taskMetrics = useMemo(() => domain.getTaskMetrics.process(), [renderRevision]);
+  const bookingCountByTaskId = taskMetrics.bookingCountByTaskId;
+  const bookedMinutesByTaskId = useMemo(
+    () => domain.getBookedMinutesByTask.process(),
+    [renderRevision]
+  );
+  const childCountByTaskId = taskMetrics.childCountByTaskId;
+  const activeChildCountByTaskId = taskMetrics.activeChildCountByTaskId;
+  const parentTitleByTaskId = taskMetrics.parentTitleByTaskId;
+  const tasksByParentId = useMemo(() => domain.getTasksByParent.process(), [renderRevision]);
   const treeFilters = settings.treeFilters;
-  const availableTags = useMemo(
-    () => Array.from(new Set((state?.tasks ?? []).flatMap((task) => task.tags ?? []))).sort((a, b) => a.localeCompare(b, "de")),
-    [state?.tasks]
-  );
-  const visibleBoardStatuses = useMemo(
-    () => statuses.filter((status) => !settings.boardHiddenStatuses.includes(status)),
-    [settings.boardHiddenStatuses]
-  );
-  const filteredTreeTasks = useMemo(() => {
-    const query = treeFilters.query.trim().toLowerCase();
-    return sortedListTasks(state?.tasks ?? []).filter((task) => {
-      const visibleIn = normalizeTaskVisibleIn(task.visibleIn);
-      const hierarchyLockedVisible = Boolean(task.parentId) || (childCountByTaskId.get(task.id) ?? 0) > 0;
-      const matchesView =
-        settings.taskView === "list"
-          ? visibleIn.list
-          : settings.taskView === "board"
-            ? visibleIn.board
-            : hierarchyLockedVisible || visibleIn.hierarchy;
-      const matchesArchive = treeFilters.showArchived ? task.archived : !task.archived;
-      const matchesQuery = !query || task.title.toLowerCase().includes(query);
-      const matchesStatus = treeFilters.statuses.length === 0 || treeFilters.statuses.includes(task.status);
-      const taskTags = task.tags ?? [];
-      const matchesTags = treeFilters.tags.length === 0 || treeFilters.tags.every((tag) => taskTags.includes(tag));
-      return matchesView && matchesArchive && matchesQuery && matchesStatus && matchesTags;
-    });
-  }, [childCountByTaskId, settings.taskView, state?.tasks, treeFilters.query, treeFilters.showArchived, treeFilters.statuses, treeFilters.tags]);
+  const availableTags = useMemo(() => domain.getAvailableTags.process(), [renderRevision]);
+  const visibleBoardStatuses = useMemo(() => domain.getVisibleBoardStatuses.process(), [renderRevision]);
+  const filteredTreeTasks = useMemo(() => domain.getFilteredTreeTasks.process(), [renderRevision]);
+  const prioList = useMemo(() => domain.getPrioList.process(), [renderRevision]);
+  const getDayCapacity = (date: string, externalEvents: GoogleCalendarEvent[]) =>
+    domain.getDayCapacity.process({ date, externalEvents, calendarStartMinutes, calendarEndMinutes });
   const filteredTaskIds = useMemo(() => new Set(filteredTreeTasks.map((task) => task.id)), [filteredTreeTasks]);
   const currentCalendarPeriod = useMemo(
     () => createCalendarPeriod(dayCalendarStartDate, settings.visibleDayCount, settings.showWeekends),
@@ -1493,7 +743,7 @@ function App() {
   }, [highlightTaskId]);
 
   useEffect(() => {
-    if (!state) return;
+    if (!loaded) return;
 
     function openTaskHash(force = false) {
       const hash = window.location.hash.replace(/^#/, "");
@@ -1513,7 +763,7 @@ function App() {
 
     window.addEventListener("hashchange", handleHashChange);
     return () => window.removeEventListener("hashchange", handleHashChange);
-  }, [state?.tasks, taskById]);
+  }, [taskById]);
 
   if (authRequired) {
     return (
@@ -1565,7 +815,7 @@ function App() {
     );
   }
 
-  if (!state) {
+  if (!loaded) {
     return (
       <main className={`loading ${loadError ? "load-error" : ""}`}>
         {loadError ? (
@@ -1586,56 +836,21 @@ function App() {
     );
   }
 
-  function updateState(mutator: (draft: AppState) => AppState) {
-    setState((current) => (current ? mutator(current) : current));
+  // Pull: nach einer Command-RPU neu rendern, indem die Store-Revision
+  // in den Render-Trigger gespiegelt wird. Das Portal liest danach die
+  // betroffenen View-Modelle frisch ueber die Query-RPUs.
+  function refreshState() {
+    setRenderRevision(domain.getRevision.process());
   }
 
   function updateSettings(patch: Partial<AppSettings>) {
-    updateState((draft) => ({
-      ...draft,
-      settings: {
-        ...defaultSettings,
-        ...(draft.settings ?? defaultSettings),
-        ...patch,
-        treeFilters: normalizeTreeFilters({
-          ...(draft.settings?.treeFilters ?? defaultSettings.treeFilters),
-          ...(patch.treeFilters ?? {})
-        }),
-        boardHiddenStatuses: normalizeTaskStatuses(patch.boardHiddenStatuses ?? draft.settings?.boardHiddenStatuses),
-        panelsCollapsed: {
-          ...defaultSettings.panelsCollapsed,
-          ...(draft.settings?.panelsCollapsed ?? defaultSettings.panelsCollapsed),
-          ...(patch.panelsCollapsed ?? {})
-        }
-      }
-    }));
+    domain.updateSettings.process({ patch });
+    refreshState();
   }
 
   function updateCapacityDefaults(patch: Pick<Partial<AppSettings>, "defaultDayCapacityMinutes" | "defaultPlanningCapacityMinutes">) {
-    updateState((draft) => {
-      const currentSettings = { ...defaultSettings, ...(draft.settings ?? {}) };
-      const currentDefaultCapacity = {
-        dayCapacityMinutes: currentSettings.defaultDayCapacityMinutes,
-        planningCapacityMinutes: currentSettings.defaultPlanningCapacityMinutes
-      };
-      const bookedDates = new Set(draft.bookings.map((booking) => booking.date));
-      const dailyCapacities = { ...(draft.dailyCapacities ?? {}) };
-      for (const date of bookedDates) {
-        if (!dailyCapacities[date]) dailyCapacities[date] = currentDefaultCapacity;
-      }
-      const nextSettings = {
-        ...currentSettings,
-        ...patch
-      };
-      if (nextSettings.defaultPlanningCapacityMinutes > nextSettings.defaultDayCapacityMinutes) {
-        nextSettings.defaultPlanningCapacityMinutes = nextSettings.defaultDayCapacityMinutes;
-      }
-      return {
-        ...draft,
-        dailyCapacities,
-        settings: nextSettings
-      };
-    });
+    domain.updateCapacityDefaults.process({ patch });
+    refreshState();
   }
 
   function expandHierarchyTask(taskId: string) {
@@ -1659,73 +874,20 @@ function App() {
   }
 
   function ancestorTaskIds(taskId: string) {
+    const byId = domain.getTaskById.process();
     const ids: string[] = [];
-    let current = stateRef.current?.tasks.find((task) => task.id === taskId);
+    let current = byId.get(taskId);
     while (current?.parentId) {
       ids.push(current.parentId);
-      current = stateRef.current?.tasks.find((task) => task.id === current?.parentId);
+      current = byId.get(current.parentId);
     }
     return ids;
   }
 
   function upsertTask(title: string, target?: "prio" | "cal", date = today, initialStatus?: TaskStatus, parentId?: string): Task | null {
-    const trimmed = title.trim();
-    if (!trimmed) return null;
-    const estimateMinutes = settings.defaultTreeDurationMinutes;
-    const planningDurationMinutes = durationForPlanning(estimateMinutes, settings.defaultPrioDurationMinutes);
-    const status = initialStatus ?? (target === "cal" ? "Started" : settings.defaultTaskStatus);
-    const task: Task = {
-      id: uid("task"),
-      title: trimmed,
-      description: "",
-      checklist: [],
-      tags: [],
-      visibleIn: { ...defaultTaskVisibleIn },
-      dueDate: target === "cal" ? date : undefined,
-      estimateMinutes,
-      parentId,
-      archived: false,
-      status,
-      done: status === "Done" || status === "Aborted",
-      treeOrder: 0,
-      listOrder: 0,
-      boardOrder: 0
-    };
-
-    updateState((draft) => {
-      const siblingKey = parentId ?? "";
-      const statusKey = task.status;
-      const tasks = normalizeTasks([
-        { ...task, treeOrder: 0, listOrder: 0, boardOrder: 0 },
-        ...draft.tasks.map((existingTask) =>
-          ({
-            ...existingTask,
-            treeOrder: (existingTask.parentId ?? "") === siblingKey ? existingTask.treeOrder + 1 : existingTask.treeOrder,
-            listOrder: existingTask.listOrder + 1,
-            boardOrder: existingTask.status === statusKey ? existingTask.boardOrder + 1 : existingTask.boardOrder
-          })
-        )
-      ]);
-      const next: AppState = {
-        ...draft,
-        tasks,
-        prioTaskIds: [...draft.prioTaskIds],
-        prioDurations: { ...(draft.prioDurations ?? {}) },
-        bookings: [...draft.bookings]
-      };
-      if (target === "prio") {
-        next.prioTaskIds.push(task.id);
-        next.prioDurations = {
-          ...(next.prioDurations ?? {}),
-          [task.id]: planningDurationMinutes
-        };
-      }
-      if (target === "cal") {
-        next.bookings.push({ id: uid("booking"), taskId: task.id, date, durationMinutes: planningDurationMinutes });
-      }
-      return next;
-    });
-    return task;
+    const created = domain.createTask.process({ title, target, date, initialStatus, parentId });
+    refreshState();
+    return created;
   }
 
   function addTreeTask() {
@@ -1754,25 +916,14 @@ function App() {
   }
 
   function detachTaskFromParent(taskId: string) {
-    updateState((draft) => {
-      const maxRootTreeOrder = Math.max(-1, ...draft.tasks.filter((task) => !task.parentId).map((task) => task.treeOrder));
-      return {
-        ...draft,
-        tasks: normalizeTasks(
-          draft.tasks.map((task) =>
-            task.id === taskId ? { ...task, parentId: undefined, treeOrder: maxRootTreeOrder + 1 } : task
-          )
-        )
-      };
-    });
+    domain.detachTaskFromParent.process({ taskId });
+    refreshState();
   }
 
   function updateTask(taskId: string, patch: Partial<Task>) {
     setChangedTaskId(taskId);
-    updateState((draft) => ({
-      ...draft,
-      tasks: normalizeTasks(draft.tasks.map((task) => (task.id === taskId ? { ...task, ...patch } : task)))
-    }));
+    domain.updateTask.process({ taskId, patch });
+    refreshState();
   }
 
   function setTaskDone(taskId: string, done: boolean) {
@@ -1780,212 +931,54 @@ function App() {
   }
 
   function moveTaskBeforeInList(sourceTaskId: string, targetTaskId: string) {
-    updateState((draft) => {
-      if (draft.tasks.find((task) => task.id === sourceTaskId)?.archived) return draft;
-      const tasks = sortedListTasks(draft.tasks);
-      const sourceIndex = tasks.findIndex((task) => task.id === sourceTaskId);
-      const targetIndex = tasks.findIndex((task) => task.id === targetTaskId);
-      return {
-        ...draft,
-        tasks: moveItemToDropTarget(tasks, sourceIndex, targetIndex).map((task, listOrder) => ({ ...task, listOrder }))
-      };
-    });
+    domain.moveTaskInList.process({ sourceTaskId, targetTaskId });
+    refreshState();
   }
 
   function moveTaskBeforeInTree(sourceTaskId: string, targetTaskId: string) {
-    updateState((draft) => {
-      const sourceTask = draft.tasks.find((task) => task.id === sourceTaskId);
-      const targetTask = draft.tasks.find((task) => task.id === targetTaskId);
-      if (sourceTask?.archived) return draft;
-      if (!sourceTask || !targetTask || sourceTask.id === targetTask.id) return draft;
-      const parentId = targetTask.parentId;
-      const movedTasks = draft.tasks.map((task) => (task.id === sourceTaskId ? { ...task, parentId } : task));
-      const siblings = sortedTasks(movedTasks.filter((task) => (task.parentId ?? "") === (parentId ?? "") && task.id !== sourceTaskId));
-      const targetIndex = siblings.findIndex((task) => task.id === targetTaskId);
-      const orderedSiblingIds = [
-        ...siblings.slice(0, targetIndex).map((task) => task.id),
-        sourceTaskId,
-        ...siblings.slice(targetIndex).map((task) => task.id)
-      ];
-      return {
-        ...draft,
-        tasks: normalizeTasks(
-          movedTasks.map((task) =>
-            orderedSiblingIds.includes(task.id) ? { ...task, treeOrder: orderedSiblingIds.indexOf(task.id) } : task
-          )
-        )
-      };
-    });
-  }
-
-  function isDescendant(tasks: Task[], taskId: string, possibleAncestorId: string): boolean {
-    let current = tasks.find((task) => task.id === taskId);
-    while (current?.parentId) {
-      if (current.parentId === possibleAncestorId) return true;
-      current = tasks.find((task) => task.id === current?.parentId);
-    }
-    return false;
+    domain.moveTaskInTree.process({ sourceTaskId, targetTaskId });
+    refreshState();
   }
 
   function moveTaskAsChild(sourceTaskId: string, parentId: string) {
-    updateState((draft) => {
-      if (draft.tasks.find((task) => task.id === sourceTaskId)?.archived) return draft;
-      if (sourceTaskId === parentId || isDescendant(draft.tasks, parentId, sourceTaskId)) return draft;
-      const nextTasks = normalizeTasks(
-        draft.tasks.map((task) => (task.id === sourceTaskId ? { ...task, parentId, treeOrder: Number.MAX_SAFE_INTEGER } : task))
-      );
-      return { ...draft, tasks: nextTasks };
-    });
+    domain.moveTaskAsChild.process({ sourceTaskId, parentId });
+    refreshState();
     expandHierarchyTask(parentId);
   }
 
   function addToPrio(taskId: string) {
-    updateState((draft) => {
-      if (draft.prioTaskIds.includes(taskId)) return draft;
-      const task = draft.tasks.find((candidate) => candidate.id === taskId);
-      if (!task || task.archived) return draft;
-      return {
-        ...draft,
-        tasks: normalizeTasks(
-          draft.tasks.map((candidate) =>
-            candidate.id === taskId
-              ? {
-                  ...candidate,
-                  status: statusAfterMoveToPrio(candidate.status),
-                  done: statusAfterMoveToPrio(candidate.status) === "Done" || statusAfterMoveToPrio(candidate.status) === "Aborted"
-                }
-              : candidate
-          )
-        ),
-        prioTaskIds: [...draft.prioTaskIds, taskId],
-        prioDurations: {
-          ...(draft.prioDurations ?? {}),
-          [taskId]: durationForPlanning(task?.estimateMinutes, settings.defaultPrioDurationMinutes)
-        }
-      };
-    });
+    domain.addToPrio.process({ taskId });
+    refreshState();
   }
 
   function removeFromPrio(taskId: string) {
-    updateState((draft) => {
-      const { [taskId]: _removed, ...prioDurations } = draft.prioDurations ?? {};
-      return { ...draft, prioTaskIds: draft.prioTaskIds.filter((id) => id !== taskId), prioDurations };
-    });
+    domain.removeFromPrio.process({ taskId });
+    refreshState();
   }
 
   function moveBeforeInPrio(sourceTaskId: string, targetTaskId: string) {
-    updateState((draft) => {
-      const sourceWasNew = !draft.prioTaskIds.includes(sourceTaskId);
-      const sourceTask = draft.tasks.find((task) => task.id === sourceTaskId);
-      if (!sourceTask || sourceTask.archived) return draft;
-      const prioTaskIds = draft.prioTaskIds.includes(sourceTaskId) ? [...draft.prioTaskIds] : [...draft.prioTaskIds, sourceTaskId];
-      const sourceIndex = prioTaskIds.indexOf(sourceTaskId);
-      const targetIndex = prioTaskIds.indexOf(targetTaskId);
-      return {
-        ...draft,
-        tasks: sourceWasNew
-          ? normalizeTasks(
-              draft.tasks.map((task) =>
-                task.id === sourceTaskId
-                  ? {
-                      ...task,
-                      status: statusAfterMoveToPrio(task.status),
-                      done: statusAfterMoveToPrio(task.status) === "Done" || statusAfterMoveToPrio(task.status) === "Aborted"
-                    }
-                  : task
-              )
-            )
-          : draft.tasks,
-        prioDurations: sourceWasNew
-          ? {
-              ...(draft.prioDurations ?? {}),
-              [sourceTaskId]: durationForPlanning(sourceTask?.estimateMinutes, settings.defaultPrioDurationMinutes)
-            }
-          : draft.prioDurations,
-        prioTaskIds: moveItemToDropTarget(prioTaskIds, sourceIndex, targetIndex)
-      };
-    });
+    domain.moveInPrio.process({ sourceTaskId, targetTaskId });
+    refreshState();
   }
 
   function deleteTask(taskId: string) {
-    updateState((draft) => {
-      if (draft.tasks.some((task) => task.parentId === taskId)) return draft;
-      return {
-        ...draft,
-        tasks: normalizeTasks(draft.tasks.filter((task) => task.id !== taskId)),
-        prioTaskIds: draft.prioTaskIds.filter((id) => id !== taskId),
-        prioDurations: Object.fromEntries(Object.entries(draft.prioDurations ?? {}).filter(([id]) => id !== taskId)),
-        bookings: draft.bookings.filter((booking) => booking.taskId !== taskId)
-      };
-    });
+    domain.deleteTask.process({ taskId });
+    refreshState();
   }
 
   function toggleTaskArchived(taskId: string) {
-    updateState((draft) => {
-      const task = draft.tasks.find((candidate) => candidate.id === taskId);
-      if (!task) return draft;
-      const hasActiveChildren = draft.tasks.some((candidate) => candidate.parentId === taskId && !candidate.archived);
-      if (!task.archived && hasActiveChildren) return draft;
-      const { [taskId]: _removed, ...prioDurations } = draft.prioDurations ?? {};
-      return {
-        ...draft,
-        tasks: normalizeTasks(
-          draft.tasks.map((candidate) =>
-            candidate.id === taskId
-              ? {
-                  ...candidate,
-                  archived: !candidate.archived,
-                  archivedAt: candidate.archived ? undefined : new Date().toISOString()
-                }
-              : candidate
-          )
-        ),
-        prioTaskIds: draft.prioTaskIds.filter((id) => id !== taskId),
-        prioDurations
-      };
-    });
+    domain.toggleTaskArchived.process({ taskId });
+    refreshState();
   }
 
   function bookTask(taskId: string, date: string, startTime?: string, source: "tree" | "prio" = "tree") {
-    updateState((draft) => {
-      const task = draft.tasks.find((candidate) => candidate.id === taskId);
-      if (!task || task.archived) return draft;
-      const durationMinutes =
-        source === "prio"
-          ? (draft.prioDurations?.[taskId] ?? durationForPlanning(task?.estimateMinutes, settings.defaultPrioDurationMinutes))
-          : durationForPlanning(task?.estimateMinutes, settings.defaultPrioDurationMinutes);
-      const { [taskId]: _removed, ...prioDurations } = draft.prioDurations ?? {};
-      return {
-        ...draft,
-        prioTaskIds: draft.prioTaskIds.filter((id) => id !== taskId),
-        prioDurations,
-        tasks: normalizeTasks(
-          draft.tasks.map((candidate) =>
-            candidate.id === taskId && candidate.status !== "Done" ? { ...candidate, status: "Started" } : candidate
-          )
-        ),
-        bookings: [...draft.bookings, { id: uid("booking"), taskId, date, startTime, durationMinutes }]
-      };
-    });
+    domain.bookTask.process({ taskId, date, startTime, source });
+    refreshState();
   }
 
   function addLooseBooking(label: string, date = today, startTime?: string) {
-    const trimmed = label.trim();
-    if (!trimmed) return;
-    updateState((draft) => ({
-      ...draft,
-      bookings: [
-        ...draft.bookings,
-        {
-          id: uid("booking"),
-          label: trimmed,
-          description: "",
-          date,
-          startTime,
-          durationMinutes: settings.defaultPrioDurationMinutes
-        }
-      ]
-    }));
+    domain.addLooseBooking.process({ label, date, startTime });
+    refreshState();
   }
 
   function addDefaultLooseBooking(date: string) {
@@ -1993,156 +986,45 @@ function App() {
   }
 
   function saveDayAsTemplate(date: string, name: string) {
-    const trimmedName = name.trim();
-    if (!trimmedName) return { saved: false, count: 0 };
-    let slotCount = 0;
-    updateState((draft) => {
-      const slots = draft.bookings
-        .filter((booking) => booking.date === date && !booking.taskId)
-        .sort((a, b) => (a.startTime ?? "").localeCompare(b.startTime ?? ""))
-        .map((booking): DayTemplateSlot => ({
-          label: booking.label?.trim() || "Reservierung",
-          description: booking.description ?? "",
-          startTime: booking.startTime,
-          durationMinutes: booking.durationMinutes
-        }));
-      slotCount = slots.length;
-      if (slots.length === 0) return draft;
-      return {
-        ...draft,
-        dayTemplates: [
-          ...(draft.dayTemplates ?? []),
-          {
-            id: uid("template"),
-            name: trimmedName,
-            slots,
-            createdAt: new Date().toISOString()
-          }
-        ]
-      };
-    });
-    return { saved: slotCount > 0, count: slotCount };
+    const result = domain.saveDayAsTemplate.process({ date, name });
+    refreshState();
+    return result;
   }
 
   function applyDayTemplate(templateId: string, date: string) {
-    const template = stateRef.current?.dayTemplates?.find((candidate) => candidate.id === templateId);
-    if (!template) return 0;
-    updateState((draft) => ({
-      ...draft,
-      bookings: [
-        ...draft.bookings,
-        ...template.slots.map((slot) => ({
-          id: uid("booking"),
-          label: slot.label,
-          description: slot.description ?? "",
-          date,
-          startTime: slot.startTime,
-          durationMinutes: slot.durationMinutes
-        }))
-      ]
-    }));
-    return template.slots.length;
+    const count = domain.applyDayTemplate.process({ templateId, date });
+    refreshState();
+    return count;
   }
 
   function deleteDayTemplate(templateId: string) {
-    updateState((draft) => ({
-      ...draft,
-      dayTemplates: (draft.dayTemplates ?? []).filter((template) => template.id !== templateId)
-    }));
+    domain.deleteDayTemplate.process({ templateId });
+    refreshState();
   }
 
   function linkBookingToTask(bookingId: string, taskId: string) {
-    updateState((draft) => ({
-      ...draft,
-      tasks: normalizeTasks(
-        draft.tasks.map((task) =>
-          task.id === taskId && task.status !== "Done" ? { ...task, status: "Started" } : task
-        )
-      ),
-      bookings: draft.bookings.map((booking) =>
-        booking.id === bookingId ? { ...booking, taskId, label: "" } : booking
-      )
-    }));
+    domain.linkBookingToTask.process({ bookingId, taskId });
+    refreshState();
   }
 
   function createTaskFromBookingBefore(bookingId: string, targetTaskId: string, mode: "list" | "hierarchy" | "board" = "list") {
-    updateState((draft) => {
-      const booking = draft.bookings.find((candidate) => candidate.id === bookingId);
-      const targetTask = draft.tasks.find((candidate) => candidate.id === targetTaskId);
-      if (!booking || !targetTask) return draft;
-      const title = (booking.label || "Neue Aufgabe").trim();
-      const targetStatus = mode === "board" ? targetTask.status : "Started";
-      const maxRootTreeOrder = Math.max(-1, ...draft.tasks.filter((task) => !task.parentId).map((task) => task.treeOrder));
-      const maxListOrder = Math.max(-1, ...draft.tasks.map((task) => task.listOrder));
-      const task: Task = {
-        id: uid("task"),
-        title,
-        description: booking.description ?? "",
-        checklist: [],
-        tags: [],
-        visibleIn: { ...defaultTaskVisibleIn },
-        dueDate: undefined,
-        estimateMinutes: undefined,
-        parentId: mode === "hierarchy" ? targetTask.parentId : undefined,
-        archived: false,
-        status: targetStatus,
-        done: false,
-        treeOrder: mode === "hierarchy" ? targetTask.treeOrder : 0,
-        listOrder: mode === "list" ? targetTask.listOrder : 0,
-        boardOrder: mode === "board" ? targetTask.boardOrder : 0
-      };
-      const tasks = draft.tasks.map((existingTask) => ({
-        ...existingTask,
-        treeOrder:
-          (existingTask.parentId ?? "") === (task.parentId ?? "") &&
-          existingTask.treeOrder >= (mode === "hierarchy" ? targetTask.treeOrder : 0)
-            ? existingTask.treeOrder + 1
-            : existingTask.treeOrder,
-        listOrder: existingTask.listOrder >= (mode === "list" ? targetTask.listOrder : 0) ? existingTask.listOrder + 1 : existingTask.listOrder,
-        boardOrder:
-          existingTask.status === targetStatus && existingTask.boardOrder >= (mode === "board" ? targetTask.boardOrder : 0)
-            ? existingTask.boardOrder + 1
-            : existingTask.boardOrder
-      }));
-      return {
-        ...draft,
-        tasks: normalizeTasks([task, ...tasks]),
-        bookings: draft.bookings.map((candidate) =>
-          candidate.id === bookingId ? { ...candidate, taskId: task.id, label: "" } : candidate
-        )
-      };
-    });
+    domain.createTaskFromBooking.process({ bookingId, targetTaskId, mode });
+    refreshState();
   }
 
   function updateBooking(bookingId: string, patch: Partial<Booking>) {
-    updateState((draft) => ({
-      ...draft,
-      bookings: draft.bookings.map((booking) => (booking.id === bookingId ? { ...booking, ...patch } : booking))
-    }));
+    domain.updateBooking.process({ bookingId, patch });
+    refreshState();
   }
 
   function deleteBooking(bookingId: string) {
-    updateState((draft) => ({ ...draft, bookings: draft.bookings.filter((booking) => booking.id !== bookingId) }));
+    domain.deleteBooking.process({ bookingId });
+    refreshState();
   }
 
   function updateDailyCapacity(date: string, patch: Partial<DailyCapacity>) {
-    updateState((draft) => {
-      const current = draft.dailyCapacities?.[date] ?? defaultCapacity;
-      const nextCapacity = {
-        ...current,
-        ...patch
-      };
-      if (nextCapacity.planningCapacityMinutes > nextCapacity.dayCapacityMinutes) {
-        nextCapacity.planningCapacityMinutes = nextCapacity.dayCapacityMinutes;
-      }
-      return {
-        ...draft,
-        dailyCapacities: {
-          ...(draft.dailyCapacities ?? {}),
-          [date]: nextCapacity
-        }
-      };
-    });
+    domain.updateDailyCapacity.process({ date, patch });
+    refreshState();
   }
 
   function handleDrop(date: string, startTime?: string) {
@@ -2215,29 +1097,8 @@ function App() {
   }
 
   function moveTaskToBoardStatus(taskId: string, status: TaskStatus, targetTaskId?: string) {
-    updateState((draft) => {
-      if (draft.tasks.find((task) => task.id === taskId)?.archived) return draft;
-      const statusTasks = sortedBoardTasks(
-        draft.tasks
-          .map((task) => (task.id === taskId ? { ...task, status, done: status === "Done" || status === "Aborted" } : task))
-          .filter((task) => task.status === status)
-      );
-      const orderedIds = statusTasks.map((task) => task.id);
-      if (!orderedIds.includes(taskId)) orderedIds.push(taskId);
-      const sourceIndex = orderedIds.indexOf(taskId);
-      const targetIndex = targetTaskId ? orderedIds.indexOf(targetTaskId) : orderedIds.length - 1;
-      const nextIds = targetIndex >= 0 ? moveItemToDropTarget(orderedIds, sourceIndex, targetIndex) : orderedIds;
-      return {
-        ...draft,
-        tasks: normalizeTasks(
-          draft.tasks.map((task) => {
-            if (task.id === taskId) return { ...task, status, done: status === "Done" || status === "Aborted", boardOrder: nextIds.indexOf(task.id) };
-            if (nextIds.includes(task.id)) return { ...task, boardOrder: nextIds.indexOf(task.id) };
-            return task;
-          })
-        )
-      };
-    });
+    domain.moveTaskToBoardStatus.process({ taskId, status, targetTaskId });
+    refreshState();
   }
 
   function scrollToTask(taskId: string, options: { expandDetails?: boolean } = {}) {
@@ -2470,7 +1331,7 @@ function App() {
   }
 
   function exportTaskspace() {
-    const currentState = stateRef.current;
+    const currentState = domain.getTaskspace.process();
     if (!currentState) return;
     const blob = new Blob([JSON.stringify(currentState, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -2574,20 +1435,20 @@ function App() {
   async function importTaskspace(file: File | undefined) {
     if (!file) return;
     try {
-      const importedState = normalizeState(JSON.parse(await file.text()) as AppState);
-      stateRef.current = importedState;
-      setState(importedState);
+      const result = domain.importTaskspace.process({ json: await file.text() });
+      if (result.kind === "error") {
+        setSaveError(result.message);
+        setSaveState("error");
+        return;
+      }
+      setRenderRevision(domain.getRevision.process());
       setSaveError("");
-    } catch (error) {
-      setSaveError(error instanceof Error ? error.message : "Import fehlgeschlagen.");
-      setSaveState("error");
     } finally {
       if (importInputRef.current) importInputRef.current.value = "";
     }
   }
 
-  const startedCount = state.tasks.filter((task) => task.status === "Started").length;
-  const blockedCount = state.tasks.filter((task) => task.status === "Blocked").length;
+  const { started: startedCount, blocked: blockedCount } = domain.getStatusCounts.process();
 
   return (
     <main className="app-shell">
@@ -2675,7 +1536,7 @@ function App() {
                   googleCalendar={googleCalendar}
                   error={googleCalendarError}
                   onConnect={() => {
-                    window.location.href = "/api/auth/gcal/connect";
+                    window.location.href = reactors.externalCalendar.googleConnectUrl();
                   }}
                   onRefresh={() => void loadGoogleCalendar(true)}
                   onSelectionChange={updateGoogleCalendarSelection}
@@ -2958,11 +1819,7 @@ function App() {
           </div>
           <div className="drop-hint">Aufgaben aus dem Tree hierher ziehen. In der Liste per Drag & Drop sortieren.</div>
           <div className="list prio-list">
-            {state.prioTaskIds.map((taskId) => {
-              const task = taskById.get(taskId);
-              if (!task || task.archived) return null;
-              const prioDuration =
-                state.prioDurations?.[task.id] ?? durationForPlanning(task.estimateMinutes, settings.defaultPrioDurationMinutes);
+            {prioList.map(({ task, durationMinutes: prioDuration }) => {
               const showStatusPresentation = normalizeTaskVisibleIn(task.visibleIn).board;
               return (
                 <div
@@ -2996,15 +1853,10 @@ function App() {
                       className="prio-duration"
                       aria-label="Dauer in Priorisierung"
                       value={prioDuration}
-                      onChange={(event) =>
-                        updateState((draft) => ({
-                          ...draft,
-                          prioDurations: {
-                            ...(draft.prioDurations ?? {}),
-                            [task.id]: Number(event.target.value)
-                          }
-                        }))
-                      }
+                      onChange={(event) => {
+                        domain.setPrioDuration.process({ taskId: task.id, durationMinutes: Number(event.target.value) });
+                        refreshState();
+                      }}
                       onClick={(event) => event.stopPropagation()}
                       onDragStart={(event) => event.preventDefault()}
                     >
@@ -3101,12 +1953,9 @@ function App() {
               <MonthCalendarView
                 months={calendarMonths}
                 showWeekends={settings.showWeekends}
-                bookings={state.bookings}
+                getBookingsForDate={(date) => domain.getBookingsForDate.process({ date })}
                 externalEventsByDate={externalEventsByDate}
-                dailyCapacities={state.dailyCapacities ?? {}}
-                defaultCapacity={defaultCapacity}
-                calendarStartMinutes={calendarStartMinutes}
-                calendarEndMinutes={calendarEndMinutes}
+                getDayCapacity={getDayCapacity}
                 onOpenDay={openDayFromMonth}
               />
             ) : (
@@ -3115,9 +1964,9 @@ function App() {
                   <DayColumn
                     key={date}
                     date={date}
-                    bookings={state.bookings.filter((booking) => booking.date === date)}
+                    bookings={domain.getBookingsForDate.process({ date })}
                     googleEvents={externalEventsByDate.get(date) ?? []}
-                    capacity={state.dailyCapacities?.[date] ?? defaultCapacity}
+                    getDayCapacity={getDayCapacity}
                     calendarStartMinutes={calendarStartMinutes}
                     calendarEndMinutes={calendarEndMinutes}
                     timeOptions={timeOptions}
@@ -3131,7 +1980,7 @@ function App() {
                     onOpenTask={(taskId) => scrollToTask(taskId, { expandDetails: false })}
                     onCapacityChange={(patch) => updateDailyCapacity(date, patch)}
                     onAddLooseBooking={addDefaultLooseBooking}
-                    dayTemplates={state.dayTemplates ?? []}
+                    dayTemplates={domain.getDayTemplates.process()}
                     onSaveTemplate={saveDayAsTemplate}
                     onApplyTemplate={applyDayTemplate}
                     onDeleteTemplate={deleteDayTemplate}
@@ -4212,29 +3061,18 @@ function TaskTagPicker({ allTags, task, onTags }: { allTags: string[]; task: Tas
 function MonthCalendarView({
   months,
   showWeekends,
-  bookings,
+  getBookingsForDate,
   externalEventsByDate,
-  dailyCapacities,
-  defaultCapacity,
-  calendarStartMinutes,
-  calendarEndMinutes,
+  getDayCapacity,
   onOpenDay
 }: {
   months: string[];
   showWeekends: boolean;
-  bookings: Booking[];
+  getBookingsForDate: (date: string) => Booking[];
   externalEventsByDate: Map<string, GoogleCalendarEvent[]>;
-  dailyCapacities: Record<string, DailyCapacity>;
-  defaultCapacity: DailyCapacity;
-  calendarStartMinutes: number;
-  calendarEndMinutes: number;
+  getDayCapacity: (date: string, externalEvents: GoogleCalendarEvent[]) => DayCapacity;
   onOpenDay: (date: string) => void;
 }) {
-  const bookingsByDate = useMemo(() => {
-    const byDate = new Map<string, Booking[]>();
-    for (const booking of bookings) byDate.set(booking.date, [...(byDate.get(booking.date) ?? []), booking]);
-    return byDate;
-  }, [bookings]);
   const weekdayLabels = showWeekends ? ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"] : ["Mo", "Di", "Mi", "Do", "Fr"];
 
   function leadingCells(firstVisibleDay: string) {
@@ -4265,16 +3103,11 @@ function MonthCalendarView({
                 <div className="month-empty-cell" key={`blank-${index}`} />
               ))}
               {monthDays.map((date) => {
-                const capacity = dailyCapacities[date] ?? defaultCapacity;
-                const capcalMinutes = (bookingsByDate.get(date) ?? []).reduce((sum, booking) => sum + booking.durationMinutes, 0);
                 const externalEvents = externalEventsByDate.get(date) ?? [];
-                const externalMinutes = externalBookedMinutes(externalEvents, capacity, date, calendarStartMinutes, calendarEndMinutes);
-                const bookedMinutes = capcalMinutes + externalMinutes;
-                const bookingCount = (bookingsByDate.get(date) ?? []).length + externalEvents.length;
+                const { capacity, bookedMinutes, level, isOverbooked } = getDayCapacity(date, externalEvents);
+                const bookingCount = getBookingsForDate(date).length + externalEvents.length;
                 const bookedPercent = capacity.dayCapacityMinutes > 0 ? (bookedMinutes / capacity.dayCapacityMinutes) * 100 : 0;
                 const fillPercent = Math.min(100, bookedPercent);
-                const level = capacityLevelFor(bookedMinutes, capacity);
-                const isOverbooked = bookedMinutes > capacity.dayCapacityMinutes;
                 return (
                   <button
                     className={`month-day-tile ${date === today ? "today-month-day" : ""} ${isWeekend(date) ? "weekend" : ""} ${level} ${isOverbooked ? "overbooked" : ""}`}
@@ -4313,7 +3146,7 @@ function DayColumn({
   date,
   bookings,
   googleEvents,
-  capacity,
+  getDayCapacity,
   calendarStartMinutes,
   calendarEndMinutes,
   timeOptions,
@@ -4335,7 +3168,7 @@ function DayColumn({
   date: string;
   bookings: Booking[];
   googleEvents: GoogleCalendarEvent[];
-  capacity: DailyCapacity;
+  getDayCapacity: (date: string, externalEvents: GoogleCalendarEvent[]) => DayCapacity;
   calendarStartMinutes: number;
   calendarEndMinutes: number;
   timeOptions: string[];
@@ -4371,7 +3204,6 @@ function DayColumn({
   const templateMenuRef = useRef<HTMLDivElement | null>(null);
   const allocations = bookings.filter((booking) => !booking.startTime);
   const scheduled = bookings.filter((booking) => booking.startTime).sort((a, b) => a.startTime!.localeCompare(b.startTime!));
-  const googleBlockingMinutes = externalBookedMinutes(googleEvents, capacity, date, calendarStartMinutes, calendarEndMinutes);
   const googleAllocations = googleEvents.filter((event) => event.allDay);
   const googleScheduled = googleEvents
     .filter((event) => !event.allDay)
@@ -4396,11 +3228,13 @@ function DayColumn({
       }];
     })
   ]);
-  const bookedMinutes = bookings.reduce((sum, booking) => sum + booking.durationMinutes, 0) + googleBlockingMinutes;
+  const dayCapacity = getDayCapacity(date, googleEvents);
+  const capacity = dayCapacity.capacity;
+  const bookedMinutes = dayCapacity.bookedMinutes;
   const fillPercent = Math.min(100, (bookedMinutes / capacity.dayCapacityMinutes) * 100);
   const planningPercent = Math.min(100, (capacity.planningCapacityMinutes / capacity.dayCapacityMinutes) * 100);
-  const capacityLevel = capacityLevelFor(bookedMinutes, capacity);
-  const isOverflowingDay = bookedMinutes > capacity.dayCapacityMinutes;
+  const capacityLevel = dayCapacity.level;
+  const isOverflowingDay = dayCapacity.isOverbooked;
   const timelineHeight = (calendarEndMinutes - calendarStartMinutes) * minuteHeight;
   const showCurrentTimeLine = date === today && currentMinuteOfDay >= calendarStartMinutes && currentMinuteOfDay <= calendarEndMinutes;
   const currentTimeLineTop = (currentMinuteOfDay - calendarStartMinutes) * minuteHeight;

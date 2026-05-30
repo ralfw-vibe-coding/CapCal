@@ -1,6 +1,6 @@
 import type { Config } from "@netlify/functions";
-import { clearSessionCookie, getSessionUser, requestOtp, sessionCookie, verifyOtp } from "../../src/server/auth";
-import { googleCalendarCallback, googleCalendarConnectUrl, googleCalendarErrorRedirect } from "../../src/server/googleCalendar";
+import { createBackendApp } from "../../backend/body/app";
+import { clearSessionCookie, getSessionUser, sessionCookie } from "../../backend/body/head/session";
 
 type AuthBody = {
   email?: unknown;
@@ -19,17 +19,18 @@ function jsonResponse(payload: unknown, init?: ResponseInit) {
 
 export default async (request: Request) => {
   try {
+    const app = createBackendApp();
     const url = new URL(request.url);
 
     if (url.pathname === "/api/auth/request-otp" && request.method === "POST") {
       const body = (await request.json()) as AuthBody;
-      await requestOtp(String(body.email ?? ""));
+      await app.reactors.requestOtp.process(String(body.email ?? ""));
       return jsonResponse({ ok: true });
     }
 
     if (url.pathname === "/api/auth/verify" && request.method === "POST") {
       const body = (await request.json()) as AuthBody;
-      const user = await verifyOtp(String(body.email ?? ""), String(body.otp ?? ""));
+      const user = await app.identity.consumeOtp.process({ email: String(body.email ?? ""), token: String(body.otp ?? "") });
       return jsonResponse(
         { user },
         {
@@ -53,7 +54,7 @@ export default async (request: Request) => {
     if (url.pathname === "/api/auth/gcal/connect" && request.method === "GET") {
       const user = getSessionUser(request.headers.get("cookie") ?? "");
       if (!user) return jsonResponse({ error: "Unauthorized" }, { status: 401 });
-      return Response.redirect(googleCalendarConnectUrl(user), 302);
+      return Response.redirect(app.reactors.googleCalendar.connectUrl(user.id), 302);
     }
 
     if (url.pathname === "/api/auth/gcal/callback" && request.method === "GET") {
@@ -61,10 +62,10 @@ export default async (request: Request) => {
         const code = url.searchParams.get("code");
         const state = url.searchParams.get("state");
         if (!code || !state) throw new Error("Google callback is missing code or state");
-        return Response.redirect(await googleCalendarCallback(code, state), 302);
+        return Response.redirect(await app.reactors.googleCalendar.handleCallback(code, state), 302);
       } catch (error) {
         console.error("[CapCal] Google Calendar callback failed:", error);
-        return Response.redirect(googleCalendarErrorRedirect(error), 302);
+        return Response.redirect(app.reactors.googleCalendar.errorRedirect(error), 302);
       }
     }
 

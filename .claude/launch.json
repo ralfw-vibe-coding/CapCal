@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "capcal-client",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 5173
+    },
+    {
+      "name": "capcal-smoke",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["scripts/smoke.sh"],
+      "port": 5199
+    },
+    {
+      "name": "capcal-smoke-auth",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["scripts/smoke-auth.sh"],
+      "port": 5199
+    }
+  ]
+}

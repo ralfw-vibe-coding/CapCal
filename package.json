@@ -8,6 +8,8 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 127.0.0.1",
     "server": "tsx server/index.ts",
+    "test": "tsx --test \"frontend/body/**/*.test.ts\" \"backend/body/**/*.test.ts\"",
+    "test:coverage": "tsx --test --experimental-test-coverage --test-coverage-exclude=\"**/*.test.ts\" --test-coverage-lines=80 --test-coverage-branches=80 --test-coverage-functions=80 \"frontend/body/**/*.test.ts\" \"backend/body/**/*.test.ts\"",
     "api:smoke": "node scripts/capcal-api-smoke.mjs"
   },
   "dependencies": {
