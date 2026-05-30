@@ -1,5 +1,4 @@
-// Seam auf die bestehende Event-Cache-Implementierung unter src/server.
-// Isoliert den Cross-Tree-Import; physischer Umzug in 9e.
+// Re-Export der Event-Cache-Persistenz fuer die uebrigen Domaenen-Module.
 
 export {
   sql,
@@ -10,10 +9,10 @@ export {
   deleteExternalEvent,
   rememberCacheWindow,
   readExternalEvents
-} from "../../../../../src/server/externalCalendarCache";
+} from "./externalCalendarCache";
 export type {
   ExternalCalendarProvider,
   ExternalCalendarItem,
   ExternalCalendarEvent,
   CacheableExternalEvent
-} from "../../../../../src/server/externalCalendarCache";
+} from "./externalCalendarCache";

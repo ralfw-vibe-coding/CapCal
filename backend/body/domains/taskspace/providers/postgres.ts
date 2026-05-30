@@ -1,5 +1,5 @@
 import { neon } from "@neondatabase/serverless";
-import { getEnv, getSnapshotIntervalMinutes } from "./env";
+import { getEnv, getSnapshotIntervalMinutes } from "../../../env";
 import { emptyState, type AppState, type StateProvider } from "./types";
 
 export class PostgresStateProvider implements StateProvider {

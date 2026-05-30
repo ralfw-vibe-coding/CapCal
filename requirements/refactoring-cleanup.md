@@ -50,29 +50,26 @@ Sammlung dessen, was später sauberer gemacht werden sollte.
 
 ## Backend Phase 9 – Stand & Handoff
 
-Erledigt und getestet:
-- **9a**: Persistenz-Domäne `backend/body/domains/taskspace` (LoadState/SaveState-RPUs);
-  `/api/state` (lokal + Netlify) laeuft darueber. Provider-Seam auf
-  `src/server/storage` (noch nicht physisch verschoben).
-- **9b**: Identity-Domäne `backend/body/domains/identity` (IdentityStore + 6 RPUs:
-  StartOtp, ConsumeOtp, FindUserByApiKey, GetUserSettings, UpdateProfile,
-  RotateApiKey). `external_providers/emailProvider` (Resend). `reactors/requestOtpReactor`.
-  `head/session` (Cookie-Krypto, Bearer, isAuthRequired). `backend/body/app.ts`
-  als Composition Root. Smoke gegen Postgres-Test-Branch erfolgreich.
-- `src/server/auth.ts` ist ein **Shim** auf die neue Struktur (haelt Netlify-
-  Functions + Kalender-Module am Leben).
+Phase 9 vollstaendig erledigt und getestet:
+- **9a**: Persistenz-Domäne `backend/body/domains/taskspace` (LoadState/SaveState-RPUs).
+- **9b**: Identity-Domäne `backend/body/domains/identity` (IdentityStore + 6 RPUs),
+  `external_providers/emailProvider`, `reactors/requestOtpReactor`,
+  `head/session`, `backend/body/app.ts` als Composition Root.
+- **9c**: Kalender — `GoogleCalendarApiProvider` + `ICloudCalDavProvider`
+  (external), External-Calendar-Domäne (`CalendarStore` mit Settings-Persistenz +
+  Token-Verschluesselung, Cache, Connection-/Cache-RPUs),
+  `GoogleCalendarReactor` + `ICloudCalendarReactor`.
+- **9d**: `server/index.ts` und alle Netlify-Functions rufen direkt
+  `createBackendApp()` + `head/session`.
+- **9e**: `src/server` vollstaendig aufgeloest — Storage, env und
+  externalCalendarCache physisch nach `backend/body` gezogen; Shims entfernt.
+  `src/` enthaelt nur noch das Frontend-Portal (`main.tsx`, `styles.css`).
 
-Offen:
-- **9c – Kalender**: `src/server/googleCalendar.ts` (426 Z.), `icloudCalendar.ts`
-  (489 Z.), `externalCalendarCache.ts` (272 Z.) zerlegen in:
-  External Provider (Google-API/OAuth-HTTP bzw. iCloud-CalDAV), Persistenz
-  (Verbindungs-Settings als `google_calendar`/`icloud_calendar` JSONB auf users +
-  Event-Cache-Tabellen), Reactors (Connect/Callback, Events-mit-Cache, Refresh),
-  Head (OAuth-Connect-URL/Callback + state-Krypto, Token-Verschluesselung).
-  Aufrufer: `server/index.ts` (gcal/icloud-Endpunkte) + Netlify `gcal.ts`/`icloud.ts`.
-- **9d**: Netlify-Functions als duenne Head-Portale; `src/server/auth`-Shim entfernen.
-- **9e**: `src/server/storage` (+ `env`) physisch nach `backend/body` ziehen,
-  `src/server` aufloesen, Seams (stateProvider, env) auf echte Pfade umstellen.
+Verbleibende Hygiene:
+- `ensureAuthSchema` wird vom Event-Cache via `IdentityStore` aufgerufen
+  (Cross-Domain wegen FK auf `users`) — bewusst so; ggf. spaeter entkoppeln.
+- OAuth-Callback (Google) und echter Event-Fetch (Google/iCloud) sind verbatim
+  portiert, aber nicht automatisiert getestet (brauchen echtes Google/Apple).
 
 Test-Setup: `scripts/smoke.sh` (filesystem, kein Login) und
 `scripts/smoke-auth.sh` (postgres + RESEND leer -> OTP im Log) via

@@ -1,6 +1,12 @@
 import { neon } from "@neondatabase/serverless";
-import { ensureAuthSchema } from "./auth";
-import { getEnv } from "./storage/env";
+import { getEnv } from "../../../env";
+import { IdentityStore } from "../../identity/providers/identityStore";
+
+// Stellt die users-Tabelle sicher (FK-Ziel des Event-Caches). Cross-Domain-
+// Abhaengigkeit, weil der Cache per Fremdschluessel an users haengt.
+async function ensureAuthSchema() {
+  await new IdentityStore().ensureSchema();
+}
 
 export type ExternalCalendarProvider = "google" | "icloud";
 

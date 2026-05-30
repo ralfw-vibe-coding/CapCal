@@ -1,6 +1,6 @@
 import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { getDatabaseDirectory, getSnapshotIntervalMinutes } from "./env";
+import { getDatabaseDirectory, getSnapshotIntervalMinutes } from "../../../env";
 import { emptyState, type AppState, type StateProvider } from "./types";
 
 export class FilesystemStateProvider implements StateProvider {
