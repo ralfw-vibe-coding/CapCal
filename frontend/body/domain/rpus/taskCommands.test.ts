@@ -41,6 +41,26 @@ test("DeleteTaskRpu refuses to delete a task that still has children", () => {
   assert.equal(store.revision(), revBefore, "no-op did not write");
 });
 
+test("DeleteTaskRpu removes a leaf task and its prio/booking traces", () => {
+  const store = freshStore();
+  const a = new CreateTaskRpu(store).process({ title: "A" })!;
+  const b = new CreateTaskRpu(store).process({ title: "B" })!;
+  const state = store.read()!;
+  store.write({
+    ...state,
+    prioTaskIds: [a.id],
+    prioDurations: { [a.id]: 30 },
+    bookings: [{ id: "bk", taskId: a.id, date: "2026-05-30", durationMinutes: 30 }]
+  });
+
+  new DeleteTaskRpu(store).process({ taskId: a.id });
+  const after = store.read()!;
+  assert.ok(!after.tasks.some((t) => t.id === a.id), "task removed");
+  assert.deepEqual(after.prioTaskIds, [], "prio entry removed");
+  assert.equal(after.bookings.length, 0, "bookings of the task removed");
+  assert.ok(after.tasks.some((t) => t.id === b.id), "other task kept");
+});
+
 test("GetBookedMinutesByTaskRpu rolls booked minutes up the parent chain", () => {
   const store = freshStore();
   const parent = new CreateTaskRpu(store).process({ title: "Parent" })!;

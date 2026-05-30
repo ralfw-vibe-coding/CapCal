@@ -47,14 +47,19 @@ Sammlung dessen, was später sauberer gemacht werden sollte.
 - Test-Runner: `node:test` via `tsx` (kein zusaetzlicher Dependency),
   `npm test` (Glob `frontend/body/**` + `backend/body/**`, co-lozierte
   `*.test.ts`). Test-Dateien werden nicht gebundelt.
-- Vorhanden (Frontend, 31 Tests): pure Domaenenlogik (dateTime, tasks,
-  calendar/Kapazitaet, normalizeState), Query-RPUs (FilteredTreeTasks,
-  PrioList, DayCapacity, BookedMinutesByTask), Command-RPUs (CreateTask,
-  DeleteTask-Guard, AddToPrio, BookTask, MoveTaskToBoardStatus) und ein
-  Reactor (SessionReactor mit gemocktem AuthProvider + echten RPUs).
-- Noch offen: restliche Frontend-Command-RPUs, restliche Reactors
-  (UserSettings, ExternalCalendar), Backend-RPUs (Identity/Persistenz —
-  brauchen einen gemockten/lokalen DB-Layer). Muster steht, nur fortsetzen.
+- 85 Tests ueber Frontend- und Backend-Body: pure Domaenenlogik, alle
+  Query- und Command-RPUs (ueber den Store bzw. gemockte Stores/Provider),
+  Reactors (Session, UserSettings, ExternalCalendar, RequestOtp, Google-,
+  iCloud-Calendar mit Fakes — inkl. OAuth-State-Roundtrip), `head/session`.
+- Coverage-Gate: `npm run test:coverage` (Schwelle 80% lines/branches/funcs,
+  Quelldateien). Aktuell ~96% lines / ~83% branches / ~96% funcs.
+- **Bewusst nicht im Unit-Coverage-Ziel** (reine I/O-Adapter, ueber den
+  Postgres-Smoke-Test abgedeckt): `taskspaceStateProvider` + Frontend-
+  `external_providers/*` (fetch), Backend `storage`/`identityStore`/
+  `calendarStore`/`externalCalendarCache` (DB), `googleCalendarApiProvider`/
+  `icloudCalDavProvider`/`emailProvider` (fetch/CalDAV), `cacheRpus` (DB).
+  Diese werden vom Coverage-Lauf nicht geladen und zaehlen daher nicht in
+  den Nenner.
 
 ## Backend Phase 9 – Stand & Handoff
 
