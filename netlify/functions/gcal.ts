@@ -1,12 +1,6 @@
 import type { Config } from "@netlify/functions";
-import { getSessionUser } from "../../src/server/auth";
-import {
-  disconnectGoogleCalendar,
-  googleCalendarEvents,
-  googleCalendarStatus,
-  refreshGoogleCalendars,
-  updateGoogleCalendarSelection
-} from "../../src/server/googleCalendar";
+import { createBackendApp } from "../../backend/body/app";
+import { getSessionUser } from "../../backend/body/head/session";
 
 function jsonResponse(payload: unknown, init?: ResponseInit) {
   return new Response(JSON.stringify(payload), {
@@ -23,25 +17,26 @@ export default async (request: Request) => {
     const user = getSessionUser(request.headers.get("cookie") ?? "");
     if (!user) return jsonResponse({ error: "Unauthorized" }, { status: 401 });
 
+    const app = createBackendApp();
     const url = new URL(request.url);
 
     if (url.pathname === "/api/gcal/status" && request.method === "GET") {
-      return jsonResponse(await googleCalendarStatus(user));
+      return jsonResponse(await app.externalCalendar.getGoogleStatus.process({ userId: user.id }));
     }
 
     if (url.pathname === "/api/gcal/calendars" && request.method === "GET") {
-      return jsonResponse(await refreshGoogleCalendars(user));
+      return jsonResponse(await app.reactors.googleCalendar.refreshCalendars(user.id));
     }
 
     if (url.pathname === "/api/gcal/calendars" && request.method === "PUT") {
       const body = (await request.json()) as { selectedCalendarIds?: unknown };
-      return jsonResponse(await updateGoogleCalendarSelection(user, body.selectedCalendarIds));
+      return jsonResponse(await app.externalCalendar.updateGoogleSelection.process({ userId: user.id, selectedCalendarIds: body.selectedCalendarIds }));
     }
 
     if (url.pathname === "/api/gcal/events" && request.method === "GET") {
       return jsonResponse(
-        await googleCalendarEvents(
-          user,
+        await app.reactors.googleCalendar.getEvents(
+          user.id,
           url.searchParams.get("from") ?? "",
           url.searchParams.get("to") ?? "",
           url.searchParams.get("refresh") === "1"
@@ -50,7 +45,7 @@ export default async (request: Request) => {
     }
 
     if (url.pathname === "/api/gcal/disconnect" && request.method === "POST") {
-      return jsonResponse(await disconnectGoogleCalendar(user));
+      return jsonResponse(await app.externalCalendar.disconnectGoogle.process({ userId: user.id }));
     }
 
     return jsonResponse({ error: "Method not allowed" }, { status: 405 });

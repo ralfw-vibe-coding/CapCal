@@ -8,24 +8,7 @@ import {
   isAuthRequired,
   sessionCookie
 } from "../backend/body/head/session";
-import {
-  disconnectGoogleCalendar,
-  googleCalendarCallback,
-  googleCalendarConnectUrl,
-  googleCalendarErrorRedirect,
-  googleCalendarEvents,
-  googleCalendarStatus,
-  refreshGoogleCalendars,
-  updateGoogleCalendarSelection
-} from "../src/server/googleCalendar";
-import {
-  connectICloudCalendar,
-  disconnectICloudCalendar,
-  iCloudCalendarEvents,
-  iCloudCalendarStatus,
-  refreshICloudCalendars,
-  updateICloudCalendarSelection
-} from "../src/server/icloudCalendar";
+
 async function readBody(request: AsyncIterable<Uint8Array>) {
   const chunks: Uint8Array[] = [];
   for await (const chunk of request) chunks.push(chunk);
@@ -93,7 +76,7 @@ const server = createServer(async (request, response) => {
         send(response, 401, { error: "Unauthorized" });
         return;
       }
-      redirect(response, googleCalendarConnectUrl(user));
+      redirect(response, app.reactors.googleCalendar.connectUrl(user.id));
       return;
     }
 
@@ -102,10 +85,10 @@ const server = createServer(async (request, response) => {
         const code = url.searchParams.get("code");
         const state = url.searchParams.get("state");
         if (!code || !state) throw new Error("Google callback is missing code or state");
-        redirect(response, await googleCalendarCallback(code, state));
+        redirect(response, await app.reactors.googleCalendar.handleCallback(code, state));
       } catch (error) {
         console.error("[CapCal] Google Calendar callback failed:", error);
-        redirect(response, googleCalendarErrorRedirect(error));
+        redirect(response, app.reactors.googleCalendar.errorRedirect(error));
       }
       return;
     }
@@ -123,7 +106,7 @@ const server = createServer(async (request, response) => {
         send(response, 401, { error: "Unauthorized" });
         return;
       }
-      send(response, 200, await googleCalendarStatus(user));
+      send(response, 200, await app.externalCalendar.getGoogleStatus.process({ userId: user.id }));
       return;
     }
 
@@ -132,7 +115,7 @@ const server = createServer(async (request, response) => {
         send(response, 401, { error: "Unauthorized" });
         return;
       }
-      send(response, 200, await refreshGoogleCalendars(user));
+      send(response, 200, await app.reactors.googleCalendar.refreshCalendars(user.id));
       return;
     }
 
@@ -142,7 +125,7 @@ const server = createServer(async (request, response) => {
         return;
       }
       const body = JSON.parse(await readBody(request));
-      send(response, 200, await updateGoogleCalendarSelection(user, body.selectedCalendarIds));
+      send(response, 200, await app.externalCalendar.updateGoogleSelection.process({ userId: user.id, selectedCalendarIds: body.selectedCalendarIds }));
       return;
     }
 
@@ -154,8 +137,8 @@ const server = createServer(async (request, response) => {
       send(
         response,
         200,
-        await googleCalendarEvents(
-          user,
+        await app.reactors.googleCalendar.getEvents(
+          user.id,
           url.searchParams.get("from") ?? "",
           url.searchParams.get("to") ?? "",
           url.searchParams.get("refresh") === "1"
@@ -169,7 +152,7 @@ const server = createServer(async (request, response) => {
         send(response, 401, { error: "Unauthorized" });
         return;
       }
-      send(response, 200, await disconnectGoogleCalendar(user));
+      send(response, 200, await app.externalCalendar.disconnectGoogle.process({ userId: user.id }));
       return;
     }
 
@@ -178,7 +161,7 @@ const server = createServer(async (request, response) => {
         send(response, 401, { error: "Unauthorized" });
         return;
       }
-      send(response, 200, await iCloudCalendarStatus(user));
+      send(response, 200, await app.externalCalendar.getICloudStatus.process({ userId: user.id }));
       return;
     }
 
@@ -188,7 +171,7 @@ const server = createServer(async (request, response) => {
         return;
       }
       const body = JSON.parse(await readBody(request));
-      send(response, 200, await connectICloudCalendar(user, body));
+      send(response, 200, await app.reactors.icloudCalendar.connect(user.id, body.appleId, body.appPassword));
       return;
     }
 
@@ -197,7 +180,7 @@ const server = createServer(async (request, response) => {
         send(response, 401, { error: "Unauthorized" });
         return;
       }
-      send(response, 200, await refreshICloudCalendars(user));
+      send(response, 200, await app.reactors.icloudCalendar.refreshCalendars(user.id));
       return;
     }
 
@@ -207,7 +190,7 @@ const server = createServer(async (request, response) => {
         return;
       }
       const body = JSON.parse(await readBody(request));
-      send(response, 200, await updateICloudCalendarSelection(user, body.selectedCalendarIds));
+      send(response, 200, await app.externalCalendar.updateICloudSelection.process({ userId: user.id, selectedCalendarIds: body.selectedCalendarIds }));
       return;
     }
 
@@ -219,8 +202,8 @@ const server = createServer(async (request, response) => {
       send(
         response,
         200,
-        await iCloudCalendarEvents(
-          user,
+        await app.reactors.icloudCalendar.getEvents(
+          user.id,
           url.searchParams.get("from") ?? "",
           url.searchParams.get("to") ?? "",
           url.searchParams.get("refresh") === "1"
@@ -234,7 +217,7 @@ const server = createServer(async (request, response) => {
         send(response, 401, { error: "Unauthorized" });
         return;
       }
-      send(response, 200, await disconnectICloudCalendar(user));
+      send(response, 200, await app.externalCalendar.disconnectICloud.process({ userId: user.id }));
       return;
     }
 
