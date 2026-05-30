@@ -44,9 +44,17 @@ Sammlung dessen, was später sauberer gemacht werden sollte.
 
 ## Tests
 
-- Ursprüngliches Ziel war Testbarkeit. Domäne (RPUs, `normalizeState`,
-  Kapazitäts-/View-Logik) und Reactors sind jetzt isoliert testbar
-  (Provider/Store mockbar). Unit-Tests fehlen noch komplett – nachziehen.
+- Test-Runner: `node:test` via `tsx` (kein zusaetzlicher Dependency),
+  `npm test` (Glob `frontend/body/**` + `backend/body/**`, co-lozierte
+  `*.test.ts`). Test-Dateien werden nicht gebundelt.
+- Vorhanden (Frontend, 31 Tests): pure Domaenenlogik (dateTime, tasks,
+  calendar/Kapazitaet, normalizeState), Query-RPUs (FilteredTreeTasks,
+  PrioList, DayCapacity, BookedMinutesByTask), Command-RPUs (CreateTask,
+  DeleteTask-Guard, AddToPrio, BookTask, MoveTaskToBoardStatus) und ein
+  Reactor (SessionReactor mit gemocktem AuthProvider + echten RPUs).
+- Noch offen: restliche Frontend-Command-RPUs, restliche Reactors
+  (UserSettings, ExternalCalendar), Backend-RPUs (Identity/Persistenz —
+  brauchen einen gemockten/lokalen DB-Layer). Muster steht, nur fortsetzen.
 
 ## Backend Phase 9 – Stand & Handoff
 
