@@ -11,7 +11,9 @@ import { createExternalCalendarDomain } from "./domains/externalCalendar/domain"
 import { createIdentityDomain } from "./domains/identity/domain";
 import { EmailProvider } from "./external_providers/emailProvider";
 import { GoogleCalendarApiProvider } from "./external_providers/googleCalendarApiProvider";
+import { ICloudCalDavProvider } from "./external_providers/icloudCalDavProvider";
 import { GoogleCalendarReactor } from "./reactors/googleCalendarReactor";
+import { ICloudCalendarReactor } from "./reactors/icloudCalendarReactor";
 import { RequestOtpReactor } from "./reactors/requestOtpReactor";
 
 export function createBackendApp() {
@@ -21,10 +23,12 @@ export function createBackendApp() {
 
   const emailProvider = new EmailProvider();
   const googleApi = new GoogleCalendarApiProvider();
+  const icloudCalDav = new ICloudCalDavProvider();
 
   const reactors = {
     requestOtp: new RequestOtpReactor(identity.startOtp, emailProvider),
-    googleCalendar: new GoogleCalendarReactor(googleApi, externalCalendar)
+    googleCalendar: new GoogleCalendarReactor(googleApi, externalCalendar),
+    icloudCalendar: new ICloudCalendarReactor(icloudCalDav, externalCalendar)
   };
 
   return { taskspace, identity, externalCalendar, reactors };

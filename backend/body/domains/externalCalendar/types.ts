@@ -14,6 +14,16 @@ export type GoogleConnection = {
   updatedAt?: string;
 };
 
+// Interne iCloud-Verbindung inkl. entschluesseltem App-Passwort (nur Reactors).
+export type ICloudConnection = {
+  connected: boolean;
+  appleId?: string;
+  appPassword?: string;
+  calendars: ExternalCalendarItem[];
+  connectedAt?: string;
+  updatedAt?: string;
+};
+
 // Oeffentliche Sicht (ohne Token), wie sie das Frontend erhaelt.
 export type PublicCalendarStatus = {
   connected: boolean;
