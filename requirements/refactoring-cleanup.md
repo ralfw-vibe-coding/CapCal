@@ -47,19 +47,20 @@ Sammlung dessen, was später sauberer gemacht werden sollte.
 - Test-Runner: `node:test` via `tsx` (kein zusaetzlicher Dependency),
   `npm test` (Glob `frontend/body/**` + `backend/body/**`, co-lozierte
   `*.test.ts`). Test-Dateien werden nicht gebundelt.
-- 85 Tests ueber Frontend- und Backend-Body: pure Domaenenlogik, alle
-  Query- und Command-RPUs (ueber den Store bzw. gemockte Stores/Provider),
-  Reactors (Session, UserSettings, ExternalCalendar, RequestOtp, Google-,
-  iCloud-Calendar mit Fakes — inkl. OAuth-State-Roundtrip), `head/session`.
+- 120 Tests ueber Frontend- und Backend-Body: pure Domaenenlogik, alle
+  Query- und Command-RPUs (ueber den Store bzw. gemockte Stores), Reactors
+  (Session, UserSettings, ExternalCalendar, RequestOtp, Google-, iCloud-
+  Calendar mit Fakes — inkl. OAuth-State-Roundtrip), `head/session` und die
+  External Provider per Mock (fetch-Fake fuer alle HTTP-Provider inkl.
+  Google-API und iCloud-CalDAV mit gecrafteten XML/ICS-Antworten;
+  Filesystem-Storage gegen ein Temp-Verzeichnis).
 - Coverage-Gate: `npm run test:coverage` (Schwelle 80% lines/branches/funcs,
-  Quelldateien). Aktuell ~96% lines / ~83% branches / ~96% funcs.
-- **Bewusst nicht im Unit-Coverage-Ziel** (reine I/O-Adapter, ueber den
-  Postgres-Smoke-Test abgedeckt): `taskspaceStateProvider` + Frontend-
-  `external_providers/*` (fetch), Backend `storage`/`identityStore`/
-  `calendarStore`/`externalCalendarCache` (DB), `googleCalendarApiProvider`/
-  `icloudCalDavProvider`/`emailProvider` (fetch/CalDAV), `cacheRpus` (DB).
-  Diese werden vom Coverage-Lauf nicht geladen und zaehlen daher nicht in
-  den Nenner.
+  Quelldateien; bricht ab wenn unterschritten). Aktuell ~96% lines /
+  ~81% branches / ~96% funcs.
+- **Nur noch der reine Neon/DB-Query-Layer** ist nicht unit-getestet
+  (`storage/postgres`, `identityStore`, `calendarStore`,
+  `externalCalendarCache`, `cacheRpus`); er wird vom Postgres-Smoke-Test
+  abgedeckt. Unit-Tests dafuer braeuchten Modul-Mocking von `neon`.
 
 ## Backend Phase 9 – Stand & Handoff
 
