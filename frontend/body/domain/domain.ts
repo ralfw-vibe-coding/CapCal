@@ -11,6 +11,7 @@ import { AddLooseBookingRpu } from "./rpus/addLooseBookingRpu";
 import { AddToPrioRpu } from "./rpus/addToPrioRpu";
 import { ApplyDayTemplateRpu } from "./rpus/applyDayTemplateRpu";
 import { BookTaskRpu } from "./rpus/bookTaskRpu";
+import { ConvertChecklistItemToTaskRpu } from "./rpus/convertChecklistItemToTaskRpu";
 import { CreateTaskRpu } from "./rpus/createTaskRpu";
 import { CreateTaskFromBookingRpu } from "./rpus/createTaskFromBookingRpu";
 import { DeleteBookingRpu } from "./rpus/deleteBookingRpu";
@@ -89,6 +90,7 @@ export function createDomain() {
     deleteTask: new DeleteTaskRpu(store),
     toggleTaskArchived: new ToggleTaskArchivedRpu(store),
     detachTaskFromParent: new DetachTaskFromParentRpu(store),
+    convertChecklistItemToTask: new ConvertChecklistItemToTaskRpu(store),
 
     // Command-RPUs (Reihenfolge / Hierarchie)
     moveTaskInList: new MoveTaskInListRpu(store),

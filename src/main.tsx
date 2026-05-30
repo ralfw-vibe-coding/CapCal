@@ -920,6 +920,11 @@ function App() {
     refreshState();
   }
 
+  function convertChecklistItemToTask(parentTaskId: string, checklistItemId: string) {
+    domain.convertChecklistItemToTask.process({ parentTaskId, checklistItemId });
+    refreshState();
+  }
+
   function updateTask(taskId: string, patch: Partial<Task>) {
     setChangedTaskId(taskId);
     domain.updateTask.process({ taskId, patch });
@@ -1210,6 +1215,7 @@ function App() {
         onDescription={(description) => updateTask(task.id, { description })}
         onTags={(tags) => updateTask(task.id, { tags: normalizeTags(tags) })}
         onChecklist={(checklist) => updateTask(task.id, { checklist })}
+        onConvertChecklistItem={(checklistItemId) => convertChecklistItemToTask(task.id, checklistItemId)}
         onVisibility={(visibleIn) => updateTask(task.id, { visibleIn })}
         onGoToHierarchy={() => scrollToTask(task.id)}
         onCopyPermalink={() => copyTaskPermalink(task.id)}
@@ -1289,6 +1295,7 @@ function App() {
               onDescription={(description) => updateTask(task.id, { description })}
               onTags={(tags) => updateTask(task.id, { tags: normalizeTags(tags) })}
               onChecklist={(checklist) => updateTask(task.id, { checklist })}
+        onConvertChecklistItem={(checklistItemId) => convertChecklistItemToTask(task.id, checklistItemId)}
               onVisibility={(visibleIn) => updateTask(task.id, { visibleIn })}
               onGoToHierarchy={() => scrollToTask(task.id)}
               onCopyPermalink={() => copyTaskPermalink(task.id)}
@@ -2581,6 +2588,7 @@ function TaskCard({
   onDescription,
   onTags,
   onChecklist,
+  onConvertChecklistItem,
   onVisibility,
   onGoToHierarchy,
   onCopyPermalink,
@@ -2618,6 +2626,7 @@ function TaskCard({
   onDescription: (description: string) => void;
   onTags: (tags: string[]) => void;
   onChecklist: (checklist: TaskChecklistItem[]) => void;
+  onConvertChecklistItem: (checklistItemId: string) => void;
   onVisibility: (visibleIn: TaskVisibleIn) => void;
   onGoToHierarchy: () => void;
   onCopyPermalink: () => Promise<void>;
@@ -2855,7 +2864,7 @@ function TaskCard({
             </label>
           </div>
           <TaskTagPicker allTags={allTags} task={task} onTags={onTags} />
-          <TaskChecklistEditor checklist={task.checklist ?? []} onChecklist={onChecklist} />
+          <TaskChecklistEditor checklist={task.checklist ?? []} onChecklist={onChecklist} onConvertItem={onConvertChecklistItem} />
           <div className="child-task-form">
             <input
               placeholder="Neue Unteraufgabe"
@@ -2938,10 +2947,12 @@ function TaskVisibilityToggles({
 
 function TaskChecklistEditor({
   checklist,
-  onChecklist
+  onChecklist,
+  onConvertItem
 }: {
   checklist: TaskChecklistItem[];
   onChecklist: (checklist: TaskChecklistItem[]) => void;
+  onConvertItem: (checklistItemId: string) => void;
 }) {
   const [newItemText, setNewItemText] = useState("");
 
@@ -2979,6 +2990,14 @@ function TaskChecklistEditor({
                 }
                 onBlur={() => onChecklist(checklist.filter((candidate) => candidate.text.trim()))}
               />
+              <button
+                className="icon-button ghost"
+                title="Als Unteraufgabe anlegen"
+                disabled={!item.text.trim()}
+                onClick={() => onConvertItem(item.id)}
+              >
+                <ListTree size={13} />
+              </button>
               <button className="icon-button ghost danger" title="Checklisteneintrag löschen" onClick={() => onChecklist(checklist.filter((candidate) => candidate.id !== item.id))}>
                 <Trash2 size={13} />
               </button>
