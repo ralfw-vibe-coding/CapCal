@@ -23,6 +23,17 @@ test("accessTokenFromRefreshToken returns the token, throws when missing", async
   }
 });
 
+test("accessTokenFromRefreshToken explains expired or revoked Google refresh tokens", async () => {
+  const restore = installFetch({ error: "invalid_grant", error_description: "Token has been expired or revoked." }, 400);
+  try {
+    await assert.rejects(
+      () => new GoogleCalendarApiProvider().accessTokenFromRefreshToken("rt"),
+      /Google Calendar: OAuth-Token abgelaufen oder widerrufen/
+    );
+  } finally {
+    restore();
+  }
+});
 test("fetchEvents handles all-day events (date instead of dateTime)", async () => {
   const restore = installFetch({
     items: [

@@ -80,7 +80,13 @@ export class GoogleCalendarApiProvider {
     });
     const payload = (await response.json()) as Record<string, unknown>;
     if (!response.ok) {
-      throw new Error(typeof payload.error_description === "string" ? payload.error_description : "Google token request failed");
+      const errorCode = typeof payload.error === "string" ? payload.error : undefined;
+      const errorDescription = typeof payload.error_description === "string" ? payload.error_description : undefined;
+      if (errorCode === "invalid_grant" && errorDescription && /expired or revoked/i.test(errorDescription)) {
+        throw new Error("Google Calendar: OAuth-Token abgelaufen oder widerrufen. Bitte Google Kalender neu verbinden.");
+      }
+      if (errorDescription) throw new Error(`Google Calendar token request failed (${errorCode ?? "unknown"}): ${errorDescription}`);
+      throw new Error("Google Calendar token request failed");
     }
     return payload;
   }

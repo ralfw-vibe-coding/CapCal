@@ -30,6 +30,7 @@ async function status<S>(action: () => Promise<S>, fallback: string): Promise<St
 }
 
 async function events(
+  source: "Google Calendar" | "iCloud Kalender",
   enabled: boolean,
   action: () => Promise<GoogleCalendarEvent[]>,
   fallback: string
@@ -38,7 +39,9 @@ async function events(
   try {
     return { kind: "ok", events: await action() };
   } catch (error) {
-    return { kind: "error", message: error instanceof Error ? error.message : fallback };
+    const rawMessage = error instanceof Error ? error.message : fallback;
+    const message = rawMessage.startsWith(`${source}:`) ? rawMessage : `${source}: ${rawMessage}`;
+    return { kind: "error", message };
   }
 }
 
@@ -66,6 +69,7 @@ export class ExternalCalendarReactor {
 
   loadGoogleEvents(state: GoogleCalendarState | null, from: string, to: string, forceRefresh: boolean): Promise<EventsResult> {
     return events(
+      "Google Calendar",
       hasActiveSelection(state),
       () => this.google.loadEvents(from, to, forceRefresh),
       "Google Calendar Events konnten nicht geladen werden."
@@ -90,6 +94,7 @@ export class ExternalCalendarReactor {
 
   loadICloudEvents(state: ICloudCalendarState | null, from: string, to: string, forceRefresh: boolean): Promise<EventsResult> {
     return events(
+      "iCloud Kalender",
       hasActiveSelection(state),
       () => this.icloud.loadEvents(from, to, forceRefresh),
       "iCloud Events konnten nicht geladen werden."
