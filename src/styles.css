@@ -1453,7 +1453,10 @@ button:disabled {
   align-items: center;
   display: grid;
   gap: 6px;
-  grid-template-columns: 28px minmax(0, 1fr) 32px;
+}
+
+.task-checklist-item {
+  grid-template-columns: 28px minmax(0, 1fr) 30px 30px;
 }
 
 .task-checklist-add {

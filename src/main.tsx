@@ -923,6 +923,7 @@ function App() {
   function convertChecklistItemToTask(parentTaskId: string, checklistItemId: string) {
     domain.convertChecklistItemToTask.process({ parentTaskId, checklistItemId });
     refreshState();
+    expandHierarchyTask(parentTaskId);
   }
 
   function updateTask(taskId: string, patch: Partial<Task>) {
